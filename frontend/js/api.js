@@ -63,3 +63,39 @@ export async function apiRequest(
     );
   
   }
+
+  export function getShiftNotes(
+    shiftDate
+) {
+
+    return apiRequest(
+        `/api/shifts/${shiftDate}/notes`
+    );
+
+}
+
+export function getInvestigations(
+  shiftDate
+) {
+
+  return apiRequest(
+      `/api/shifts/${shiftDate}/investigations`
+  );
+
+}
+
+
+export function getInvestigation(
+  shiftDate,
+  investigationName
+) {
+
+  return apiRequest(
+      `/api/shifts/${shiftDate}/investigations/${
+          encodeURIComponent(
+              investigationName
+          )
+      }`
+  );
+
+}

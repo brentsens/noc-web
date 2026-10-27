@@ -129,7 +129,7 @@
 
                     <div class="page-controls">
 
-                        <input class="date-control" type="date" value="2026-10-26">
+                        <input id="investigation-date" class="date-control" type="date">
 
                         <button id="new-investigation" class="button primary" type="button">
                             + New Investigation
@@ -155,45 +155,13 @@
                             </h2>
 
                             <span id="investigation-count" class="count-badge">
-                                1 investigation
+                                0 investigation
                             </span>
 
                         </div>
 
 
-                        <!-- STATIC TEST CARD -->
-
                         <div id="investigation-list" class="investigation-list">
-
-                            <button id="ir16-card" class="investigation-card" type="button">
-
-                                <div class="investigation-card-top">
-
-                                    <div>
-
-                                        <div class="investigation-card-title">
-                                            Export Memory Working Set High - IR-16
-                                        </div>
-
-                                        <div class="investigation-card-name">
-                                            Export-memory-working-set-high-IR-16
-                                        </div>
-
-                                    </div>
-
-
-                                    <span class="ready-outline">
-                                        READY
-                                    </span>
-
-                                </div>
-
-
-                                <div class="investigation-card-meta">
-                                    Reviewed Notebook Summary
-                                </div>
-
-                            </button>
 
                         </div>
 
@@ -232,13 +200,9 @@
 
                                 <div>
 
-                                    <div class="detail-ticket-id">
-                                        Export-memory-working-set-high-IR-16
-                                    </div>
+                                    <div id="investigation-name" class="detail-ticket-id"></div>
 
-                                    <h2>
-                                        Export Memory Working Set High - IR-16
-                                    </h2>
+                                    <h2 id="investigation-title"></h2>
 
                                 </div>
 
@@ -253,12 +217,12 @@
 
                                 <div>
                                     <label>Source</label>
-                                    <span>Final Datadog Notebook</span>
+                                    <span id="investigation-source"></span>
                                 </div>
 
                                 <div>
                                     <label>Capture</label>
-                                    <span>Datadog MCP</span>
+                                    <span id="investigation-capture"></span>
                                 </div>
 
                             </div>
@@ -268,10 +232,7 @@
 
                                 <h3>Summary</h3>
 
-                                <p>
-                                    Export memory was above the critical threshold
-                                    in prod and USPRI in the reviewed Notebook snapshot.
-                                </p>
+                                <p id="investigation-summary"></p>
 
                             </section>
 
@@ -280,13 +241,7 @@
 
                                 <h3>Confirmed Findings</h3>
 
-                                <p>
-                                    The validated investigation identified sustained
-                                    Export memory growth, with USPRI higher and alerting
-                                    longer. RabbitMQ was documented as healthy in both
-                                    clusters.
-                                </p>
-
+                                <div id="investigation-findings"></div>
                             </section>
 
 
@@ -294,12 +249,7 @@
 
                                 <h3>Current Status</h3>
 
-                                <p>
-                                    The investigation remains open for operational
-                                    follow-up. The controlled Export restart has not
-                                    been documented as completed.
-                                </p>
-
+                                <p id="investigation-status"></p>
                             </section>
 
 
@@ -307,14 +257,7 @@
 
                                 <h3>Next Actions</h3>
 
-                                <p>
-                                    Coordinate a controlled restart with DevOps,
-                                    USPRI first, during a low-volume window.
-
-                                    Verify memory recovery, monitor recovery,
-                                    consumer totals, and normal queue drain afterward.
-                                </p>
-
+                                <div id="investigation-actions"></div>
                             </section>
 
 
@@ -322,12 +265,7 @@
 
                                 <h3>Handover Summary</h3>
 
-                                <p>
-                                    Continue follow-up on Export memory growth and
-                                    coordinate the recommended controlled restart
-                                    with DevOps.
-                                </p>
-
+                                <p id="investigation-handover"></p>
                             </section>
 
                         </div>
@@ -416,11 +354,19 @@
 
     </div>
 
-    <script>
+    <script type="module">
 
-        const card =
+        import {
+            getInvestigation,
+            getInvestigations
+        } from "./js/api.js";
+
+        let investigations = [];
+
+
+        const investigationDate =
             document.querySelector(
-                "#ir16-card"
+                "#investigation-date"
             );
 
         const emptyState =
@@ -483,10 +429,6 @@
                 "#notebook-url"
             );
 
-        const actionButtons =
-            document.querySelectorAll(
-                ".ai-action-card"
-            );
 
         function showInvestigationModal() {
 
@@ -509,10 +451,178 @@
 
         }
 
+        function getLocalDateString() {
 
-        card.addEventListener(
-            "click",
-            () => {
+            const now =
+                new Date();
+
+            const year =
+                now.getFullYear();
+
+            const month =
+                String(
+                    now.getMonth() + 1
+                ).padStart(2, "0");
+
+            const day =
+                String(
+                    now.getDate()
+                ).padStart(2, "0");
+
+            return `${year}-${month}-${day}`;
+        }
+
+        function renderInvestigations() {
+
+            const query =
+                search.value
+                    .trim()
+                    .toLowerCase();
+
+
+            investigationList.innerHTML = "";
+
+
+            const filtered =
+                investigations.filter(
+                    investigation => {
+
+                        const searchable =
+                            `
+                ${investigation.name}
+                ${investigation.title}
+                ${investigation.status}
+                ${investigation.summary}
+                `
+                                .toLowerCase();
+
+
+                        return searchable.includes(
+                            query
+                        );
+
+                    }
+                );
+
+
+            investigationCount.textContent =
+                `${filtered.length} investigation${filtered.length === 1
+                    ? ""
+                    : "s"
+                }`;
+
+
+            if (filtered.length === 0) {
+
+                investigationList.innerHTML = `
+        <div class="notes-empty">
+            No investigations found.
+        </div>
+    `;
+
+                return;
+
+            }
+
+
+            for (
+                const investigation
+                of filtered
+            ) {
+
+                const card =
+                    document.createElement(
+                        "button"
+                    );
+
+                card.type =
+                    "button";
+
+                card.className =
+                    "investigation-card";
+
+
+                card.innerHTML = `
+        <div class="investigation-card-top">
+
+            <div>
+
+                <div class="investigation-card-title">
+                    ${investigation.title}
+                </div>
+
+                <div class="investigation-card-name">
+                    ${investigation.name}
+                </div>
+
+            </div>
+
+            <span class="ready-outline">
+                READY
+            </span>
+
+        </div>
+
+        <div class="investigation-card-meta">
+            ${investigation.status}
+        </div>
+    `;
+
+
+                card.addEventListener(
+                    "click",
+                    () => {
+
+                        loadInvestigationDetails(
+                            investigation.name,
+                            card
+                        );
+
+                    }
+                );
+
+
+                investigationList.appendChild(
+                    card
+                );
+
+            }
+
+        }
+
+        async function loadInvestigationDetails(
+            investigationName,
+            card
+        ) {
+
+            try {
+
+                const investigation =
+                    await getInvestigation(
+                        investigationDate.value,
+                        investigationName
+                    );
+
+
+                document
+                    .querySelectorAll(
+                        ".investigation-card"
+                    )
+                    .forEach(
+                        item => {
+
+                            item.classList.remove(
+                                "selected-investigation"
+                            );
+
+                        }
+                    );
+
+
+                card.classList.add(
+                    "selected-investigation"
+                );
+
 
                 emptyState.classList.add(
                     "hidden"
@@ -522,61 +632,138 @@
                     "hidden"
                 );
 
-                card.classList.add(
-                    "selected-investigation"
+
+                document.querySelector(
+                    "#investigation-name"
+                ).textContent =
+                    investigation.name;
+
+
+                document.querySelector(
+                    "#investigation-title"
+                ).textContent =
+                    investigation.title;
+
+
+                document.querySelector(
+                    "#investigation-source"
+                ).textContent =
+                    investigation.source ||
+                    "Not recorded";
+
+
+                document.querySelector(
+                    "#investigation-capture"
+                ).textContent =
+                    investigation.captureMethod ||
+                    "Not recorded";
+
+
+                document.querySelector(
+                    "#investigation-summary"
+                ).textContent =
+                    investigation.summary;
+
+
+                document.querySelector(
+                    "#investigation-findings"
+                ).textContent =
+                    investigation.confirmedFindings;
+
+
+                document.querySelector(
+                    "#investigation-status"
+                ).textContent =
+                    investigation.currentStatus;
+
+
+                document.querySelector(
+                    "#investigation-actions"
+                ).textContent =
+                    investigation.nextActions;
+
+
+                document.querySelector(
+                    "#investigation-handover"
+                ).textContent =
+                    investigation.handoverSummary;
+
+            } catch (error) {
+
+                console.error(
+                    "Investigation detail load failed:",
+                    error
                 );
 
             }
-        );
+
+        }
+
+        async function loadInvestigations() {
+
+            try {
+
+                const response =
+                    await getInvestigations(
+                        investigationDate.value
+                    );
+
+
+                investigations =
+                    response.investigations;
+
+
+                emptyState.classList.remove(
+                    "hidden"
+                );
+
+                detailContent.classList.add(
+                    "hidden"
+                );
+
+
+                renderInvestigations();
+
+            } catch (error) {
+
+                console.error(
+                    "Investigations load failed:",
+                    error
+                );
+
+
+                investigations = [];
+
+
+                investigationCount.textContent =
+                    "Unavailable";
+
+
+                investigationList.innerHTML = `
+        <div class="notes-empty">
+            Investigation data unavailable.
+        </div>
+    `;
+
+            }
+
+        }
 
         search.addEventListener(
             "input",
-            () => {
-
-                const query =
-                    search.value
-                        .trim()
-                        .toLowerCase();
-
-                const searchable =
-                    card.textContent
-                        .toLowerCase();
-
-                const matches =
-                    query === "" ||
-                    searchable.includes(query);
-
-
-                if (matches) {
-
-                    card.style.display = "";
-
-                    investigationCount.textContent =
-                        "1 investigation";
-
-                } else {
-
-                    card.style.display = "none";
-
-                    investigationCount.textContent =
-                        "0 investigations";
-
-                    emptyState.classList.remove(
-                        "hidden"
-                    );
-
-                    detailContent.classList.add(
-                        "hidden"
-                    );
-
-                    card.classList.remove(
-                        "selected-investigation"
-                    );
-
-                }
-
-            }
+            renderInvestigations
         );
+
+
+        investigationDate.addEventListener(
+            "change",
+            loadInvestigations
+        );
+
+
+        investigationDate.value =
+            getLocalDateString();
+
 
         newInvestigationButton.addEventListener(
             "click",
@@ -644,22 +831,15 @@
                         .trim();
 
 
-                const notebookUrl =
-                    document
-                        .querySelector(
-                            "#notebook-url"
-                        )
-                        .value
-                        .trim();
+                const notebookUrlValue =
+                    notebookUrl.value.trim();
 
 
                 if (
                     !name ||
-                    !notebookUrl
+                    !notebookUrlValue
                 ) {
-
                     return;
-
                 }
 
 
@@ -673,75 +853,7 @@
             }
         );
 
-        actionButtons.forEach(
-            button => {
-
-                button.addEventListener(
-                    "click",
-                    () => {
-
-                        const state =
-                            button.querySelector(
-                                ".ai-action-state"
-                            );
-
-
-                        if (
-                            button.classList.contains(
-                                "is-running"
-                            )
-                        ) {
-                            return;
-                        }
-
-
-                        button.classList.remove(
-                            "is-complete"
-                        );
-
-
-                        button.classList.add(
-                            "is-running"
-                        );
-
-
-                        state.textContent =
-                            "Running...";
-
-
-                        button.disabled =
-                            true;
-
-
-                        setTimeout(
-                            () => {
-
-                                button.classList.remove(
-                                    "is-running"
-                                );
-
-
-                                button.classList.add(
-                                    "is-complete"
-                                );
-
-
-                                state.textContent =
-                                    "Completed";
-
-
-                                button.disabled =
-                                    false;
-
-                            },
-                            1500
-                        );
-
-                    }
-                );
-
-            }
-        );
+        loadInvestigations();
 
     </script>
 

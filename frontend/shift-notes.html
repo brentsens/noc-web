@@ -76,7 +76,7 @@
 
                     <div class="page-controls">
 
-                        <input id="shift-date" class="date-control" type="date" value="2026-10-26">
+                        <input id="shift-date" class="date-control" type="date">
 
                         <button id="open-add-note" class="button primary" type="button">
                             + Add Note
@@ -101,7 +101,7 @@
 
                     <div class="notes-summary-item">
                         <span class="summary-label">Last Update</span>
-                        <strong>15:10</strong>
+                        <strong id="last-update">-</strong>
                     </div>
 
                 </section>
@@ -155,7 +155,8 @@
                 </label>
 
                 <textarea id="note-text" class="form-control note-textarea" placeholder="Enter the operational note..."
-                    rows="6"></textarea>
+                    rows="6">
+                </textarea>
 
 
                 <div class="modal-actions">
@@ -177,68 +178,13 @@
     </div>
 
 
-    <script>
+    <script type="module">
 
-        const notes = [
-            {
-                category: "Open Tickets",
-                entries: [
-                    {
-                        time: "14:22",
-                        text: "NOC-545 pending test from Josh Keogh."
-                    },
-                    {
-                        time: "13:47",
-                        text: "Contacted Chris Shelton regarding NOC-555."
-                    }
-                ]
-            },
+        import {
+            getShiftNotes
+        } from "./js/api.js";
 
-            {
-                category: "Active Alerts / Investigations",
-                entries: [
-                    {
-                        time: "13:05",
-                        text: "Export memory investigation IR-16 reviewed."
-                    }
-                ]
-            },
-
-            {
-                category: "Salesforce Tickets",
-                entries: [
-                    {
-                        time: "12:48",
-                        text: "SF 00459666 instructions provided to Brinks."
-                    }
-                ]
-            },
-
-            {
-                category: "Escalations",
-                entries: []
-            },
-
-            {
-                category: "Changes / Monitor Updates",
-                entries: [
-                    {
-                        time: "14:12",
-                        text: "Added alerting tags to Platform Services monitor."
-                    }
-                ]
-            },
-
-            {
-                category: "Notes for Handover",
-                entries: [
-                    {
-                        time: "15:10",
-                        text: "Follow up on Dev investigation for NOC-575."
-                    }
-                ]
-            }
-        ];
+        let notes = [];
 
 
         const container =
@@ -271,6 +217,42 @@
         const noteCount =
             document.querySelector("#note-count");
 
+        const lastUpdate =
+            document.querySelector(
+                "#last-update"
+            );
+
+        const shiftDate =
+            document.querySelector(
+                "#shift-date"
+            );
+
+        function getLocalDateString() {
+
+            const now =
+                new Date();
+
+            const year =
+                now.getFullYear();
+
+            const month =
+                String(
+                    now.getMonth() + 1
+                ).padStart(2, "0");
+
+            const day =
+                String(
+                    now.getDate()
+                ).padStart(2, "0");
+
+            return `${year}-${month}-${day}`;
+
+        }
+
+
+        shiftDate.value =
+            getLocalDateString();
+
 
         function totalEntries() {
             return notes.reduce(
@@ -284,7 +266,10 @@
         function renderNotes() {
 
             const query =
-                search.value.trim().toLowerCase();
+                search.value
+                    .trim()
+                    .toLowerCase();
+
 
             container.innerHTML = "";
 
@@ -292,10 +277,21 @@
             for (const section of notes) {
 
                 const matchingEntries =
-                    section.entries.filter(entry =>
-                        entry.text
-                            .toLowerCase()
-                            .includes(query)
+                    section.entries.filter(
+                        entry => {
+
+                            const searchable =
+                                `
+                    ${section.name}
+                    ${entry.text}
+                    `
+                                    .toLowerCase();
+
+                            return searchable.includes(
+                                query
+                            );
+
+                        }
                     );
 
 
@@ -308,29 +304,35 @@
 
 
                 const card =
-                    document.createElement("article");
+                    document.createElement(
+                        "article"
+                    );
 
                 card.className =
                     "panel note-section";
 
 
                 const heading =
-                    document.createElement("div");
+                    document.createElement(
+                        "div"
+                    );
 
                 heading.className =
                     "note-section-header";
 
 
                 heading.innerHTML = `
-      <h2>${section.category}</h2>
+        <h2>${section.name}</h2>
 
-      <span class="count-badge">
-        ${section.entries.length}
-      </span>
+        <span class="count-badge">
+            ${section.entries.length}
+        </span>
     `;
 
 
-                card.appendChild(heading);
+                card.appendChild(
+                    heading
+                );
 
 
                 const entries =
@@ -342,7 +344,9 @@
                 if (entries.length === 0) {
 
                     const empty =
-                        document.createElement("div");
+                        document.createElement(
+                            "div"
+                        );
 
                     empty.className =
                         "notes-empty";
@@ -350,41 +354,72 @@
                     empty.textContent =
                         "No entries recorded.";
 
-                    card.appendChild(empty);
+                    card.appendChild(
+                        empty
+                    );
 
                 } else {
 
                     for (const entry of entries) {
 
                         const row =
-                            document.createElement("div");
+                            document.createElement(
+                                "div"
+                            );
 
                         row.className =
                             "note-entry";
 
 
                         row.innerHTML = `
-          <div class="note-time">
-            ${entry.time}
-          </div>
+                <div class="note-time">
+                    ${entry.time || "—"}
+                </div>
 
-          <div class="note-body">
-            ${entry.text}
-          </div>
-        `;
+                <div class="note-body">
+                    ${entry.text}
+                </div>
+            `;
 
 
-                        card.appendChild(row);
+                        card.appendChild(
+                            row
+                        );
+
                     }
+
                 }
 
 
-                container.appendChild(card);
+                container.appendChild(
+                    card
+                );
+
             }
 
 
             noteCount.textContent =
                 totalEntries();
+
+            const timedEntries =
+                notes
+                    .flatMap(
+                        section =>
+                            section.entries
+                    )
+                    .filter(
+                        entry =>
+                            entry.time
+                    );
+
+
+            lastUpdate.textContent =
+                timedEntries.length > 0
+                    ? timedEntries[
+                        timedEntries.length - 1
+                    ].time
+                    : "—";
+
         }
 
 
@@ -397,6 +432,47 @@
         function hideModal() {
             modal.classList.add("hidden");
             noteInput.value = "";
+        }
+
+        async function loadShiftNotes() {
+
+            try {
+
+                const response =
+                    await getShiftNotes(
+                        shiftDate.value
+                    );
+
+
+                notes =
+                    response.sections;
+
+
+                renderNotes();
+
+            } catch (error) {
+
+                console.error(
+                    "Shift Notes load failed:",
+                    error
+                );
+
+
+                notes = [];
+
+
+                container.innerHTML = `
+        <div class="panel notes-empty">
+            Shift Notes unavailable.
+        </div>
+    `;
+
+
+                noteCount.textContent =
+                    "0";
+
+            }
+
         }
 
 
@@ -462,7 +538,7 @@
                 const section =
                     notes.find(
                         item =>
-                            item.category === category
+                            item.name === category
                     );
 
 
@@ -497,14 +573,18 @@
             }
         );
 
-
         search.addEventListener(
             "input",
             renderNotes
         );
 
+        shiftDate.addEventListener(
+            "change",
+            loadShiftNotes
+        );
 
-        renderNotes();
+
+        loadShiftNotes();
 
     </script>
 

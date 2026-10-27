@@ -105,7 +105,7 @@
 
                     <div class="page-controls">
 
-                        <input id="dashboard-date" class="date-control" type="date" value="2026-10-22">
+                        <input id="dashboard-date" class="date-control" type="date">
 
                         <div id="shift-status" class="ready-badge">
                             ● LOADING
@@ -312,12 +312,9 @@
     <script type="module">
 
         import {
-            activity
-        } from "./js/mock-data.js";
-
-        import {
             getDashboard,
-            getTickets
+            getTickets,
+            getShiftNotes
         } from "./js/api.js";
 
         const dashboardDate =
@@ -358,6 +355,29 @@
 
         const ticketTable =
             document.querySelector("#ticket-table");
+
+
+        function getLocalDateString() {
+
+            const now = new Date();
+
+            const year =
+                now.getFullYear();
+
+            const month =
+                String(now.getMonth() + 1)
+                    .padStart(2, "0");
+
+            const day =
+                String(now.getDate())
+                    .padStart(2, "0");
+
+            return `${year}-${month}-${day}`;
+        }
+
+
+        dashboardDate.value =
+            getLocalDateString();
 
 
         function getStatusClass(status) {
@@ -487,28 +507,103 @@
 
 
         const activityList =
-            document.querySelector("#activity-list");
+            document.querySelector(
+                "#activity-list"
+            );
 
 
-        for (const item of activity) {
+        function renderActivity(
+            activity
+        ) {
 
-            const row =
-                document.createElement("div");
+            activityList.innerHTML = "";
 
-            row.className =
-                "activity-row";
 
-            row.innerHTML = `
-      <div class="activity-time">
-        ${item.time}
-      </div>
+            if (activity.length === 0) {
 
-      <div>
-        ${item.text}
-      </div>
+                activityList.innerHTML = `
+            <div class="notes-empty">
+                No shift activity recorded.
+            </div>
+        `;
+
+                return;
+            }
+
+
+            for (
+                const item
+                of activity.slice(-6).reverse()
+            ) {
+
+                const row =
+                    document.createElement(
+                        "div"
+                    );
+
+                row.className =
+                    "activity-row";
+
+
+                const time =
+                    item.time || "—";
+
+
+                row.innerHTML = `
+            <div class="activity-time">
+                ${time}
+            </div>
+
+            <div>
+                <strong>
+                    ${item.section}
+                </strong>
+
+                <div>
+                    ${item.text}
+                </div>
+            </div>
+        `;
+
+
+                activityList.appendChild(
+                    row
+                );
+
+            }
+
+        }
+
+        async function loadActivity() {
+
+            try {
+
+                const response =
+                    await getShiftNotes(
+                        dashboardDate.value
+                    );
+
+
+                renderActivity(
+                    response.activity
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "Shift activity load failed:",
+                    error
+                );
+
+
+                activityList.innerHTML = `
+        <div class="notes-empty">
+            Shift activity unavailable.
+        </div>
     `;
 
-            activityList.appendChild(row);
+            }
+
         }
 
         async function loadDashboard() {
@@ -625,11 +720,17 @@
 
         dashboardDate.addEventListener(
             "change",
-            loadDashboard
+            () => {
+
+                loadDashboard();
+                loadActivity();
+
+            }
         );
 
         loadDashboard();
         loadTickets();
+        loadActivity();
 
     </script>
 

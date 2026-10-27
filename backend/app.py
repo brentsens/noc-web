@@ -11,6 +11,14 @@ from backend.api.tickets import (
     router as tickets_router,
 )
 
+from backend.api.shift_notes import (
+    router as shift_notes_router,
+)
+
+from backend.api.investigations import (
+    router as investigations_router,
+)
+
 
 app = FastAPI(
     title="SES NOC Operations API",
@@ -34,6 +42,14 @@ app.include_router(
     tickets_router
 )
 
+app.include_router(
+    shift_notes_router
+)
+
+app.include_router(
+    investigations_router
+)
+
 app.mount(
     "/",
     StaticFiles(
@@ -42,3 +58,4 @@ app.mount(
     ),
     name="frontend",
 )
+
