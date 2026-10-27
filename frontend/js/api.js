@@ -99,3 +99,27 @@ export function getInvestigation(
   );
 
 }
+
+export function getAiReports(
+  shiftDate
+) {
+
+  return apiRequest(
+      `/api/shifts/${shiftDate}/ai-reports`
+  );
+
+}
+
+
+export function getAiReport(
+  shiftDate,
+  reportName
+) {
+
+  return apiRequest(
+      `/api/shifts/${shiftDate}/ai-reports/${
+          encodeURIComponent(reportName)
+      }`
+  );
+
+}

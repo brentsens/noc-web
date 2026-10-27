@@ -19,6 +19,10 @@ from backend.api.investigations import (
     router as investigations_router,
 )
 
+from backend.api.ai_reports import (
+    router as ai_reports_router,
+)
+
 
 app = FastAPI(
     title="SES NOC Operations API",
@@ -48,6 +52,10 @@ app.include_router(
 
 app.include_router(
     investigations_router
+)
+
+app.include_router(
+    ai_reports_router
 )
 
 app.mount(

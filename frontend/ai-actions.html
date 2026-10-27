@@ -123,7 +123,7 @@
 
                     <div class="page-controls">
 
-                        <input class="date-control" type="date" value="2026-10-26">
+                        <input id="ai-date" class="date-control" type="date">
 
                         <span class="ai-badge">
                             COPILOT
@@ -140,7 +140,7 @@
 
                     <article class="panel ai-context-card">
 
-                        <div class="ai-context-status success">
+                        <div id="context-shift-notes-icon" class="ai-context-status success">
                             ✓
                         </div>
 
@@ -149,8 +149,8 @@
                                 Shift Notes
                             </div>
 
-                            <div class="ai-context-value">
-                                Available
+                            <div id="context-shift-notes" class="ai-context-value">
+                                Checking...
                             </div>
                         </div>
 
@@ -159,7 +159,7 @@
 
                     <article class="panel ai-context-card">
 
-                        <div class="ai-context-status success">
+                        <div id="context-tickets-icon" class="ai-context-status success">
                             ✓
                         </div>
 
@@ -168,8 +168,8 @@
                                 Open Jira Tickets
                             </div>
 
-                            <div class="ai-context-value">
-                                5 records
+                            <div id="context-tickets" class="ai-context-value">
+                                Checking...
                             </div>
                         </div>
 
@@ -178,7 +178,7 @@
 
                     <article class="panel ai-context-card">
 
-                        <div class="ai-context-status success">
+                        <div id="context-investigations-icon" class="ai-context-status success">
                             ✓
                         </div>
 
@@ -187,8 +187,8 @@
                                 Validated Investigations
                             </div>
 
-                            <div class="ai-context-value">
-                                1 record
+                            <div id="context-investigations" class="ai-context-value">
+                                Checking...
                             </div>
                         </div>
 
@@ -197,7 +197,7 @@
 
                     <article class="panel ai-context-card">
 
-                        <div class="ai-context-status warning-text">
+                        <div id="context-handover-icon" class="ai-context-status warning-text">
                             ○
                         </div>
 
@@ -206,8 +206,8 @@
                                 Handover
                             </div>
 
-                            <div class="ai-context-value">
-                                Not created
+                            <div id="context-handover" class="ai-context-value">
+                                Checking...
                             </div>
                         </div>
 
@@ -351,97 +351,14 @@
                                 Recent AI Reports
                             </h2>
 
-                            <span class="count-badge">
-                                4 reports
+                            <span id="ai-report-count" class="count-badge">
+                                0 reports
                             </span>
 
                         </div>
 
 
-                        <div class="ai-report-list">
-
-                            <button class="ai-report-row" type="button" data-report="analysis">
-
-                                <div>
-
-                                    <strong>
-                                        Shift Analysis
-                                    </strong>
-
-                                    <span>
-                                        ai-shift-analysis.md
-                                    </span>
-
-                                </div>
-
-                                <span class="report-state">
-                                    Available
-                                </span>
-
-                            </button>
-
-
-                            <button class="ai-report-row" type="button" data-report="summary">
-
-                                <div>
-
-                                    <strong>
-                                        Shift Summary
-                                    </strong>
-
-                                    <span>
-                                        ai-shift-summary.md
-                                    </span>
-
-                                </div>
-
-                                <span class="report-state">
-                                    Available
-                                </span>
-
-                            </button>
-
-
-                            <button class="ai-report-row" type="button" data-report="followups">
-
-                                <div>
-
-                                    <strong>
-                                        Follow-ups
-                                    </strong>
-
-                                    <span>
-                                        ai-followups.md
-                                    </span>
-
-                                </div>
-
-                                <span class="report-state">
-                                    Available
-                                </span>
-
-                            </button>
-
-
-                            <button class="ai-report-row" type="button" data-report="handover">
-
-                                <div>
-
-                                    <strong>
-                                        Handover Review
-                                    </strong>
-
-                                    <span>
-                                        ai-handover-review.md
-                                    </span>
-
-                                </div>
-
-                                <span class="report-state">
-                                    Available
-                                </span>
-
-                            </button>
+                        <div id="ai-report-list" class="ai-report-list">
 
                         </div>
 
@@ -524,13 +441,16 @@
 
     </div>
 
-    <script>
+    <script type="module">
 
-        const reportButtons =
-            document.querySelectorAll(
-                ".ai-report-row"
-            );
-
+        import {
+            getAiReport,
+            getAiReports,
+            getDashboard,
+            getShiftNotes,
+            getTickets,
+            getInvestigations
+        } from "./js/api.js";
 
         const reportModal =
             document.querySelector(
@@ -567,253 +487,445 @@
                 "#close-ai-report-button"
             );
 
+        const aiDate =
+            document.querySelector(
+                "#ai-date"
+            );
 
-        const mockReports = {
+        const reportList =
+            document.querySelector(
+                "#ai-report-list"
+            );
 
-            analysis: {
+        const reportCount =
+            document.querySelector(
+                "#ai-report-count"
+            );
 
-                title:
-                    "Shift Analysis",
+        const contextShiftNotes =
+            document.querySelector(
+                "#context-shift-notes"
+            );
 
-                file:
-                    "ai-shift-analysis.md",
+        const contextShiftNotesIcon =
+            document.querySelector(
+                "#context-shift-notes-icon"
+            );
 
-                content: `
-                        <section class="ai-report-item">
-            
-                            <strong>
-                                Operational Activity
-                            </strong>
-            
-                            <p>
-                                Five Jira tickets remain locally open.
-                                One validated investigation is available.
-                            </p>
-            
-                        </section>
-            
-            
-                        <section class="ai-report-item">
-            
-                            <strong>
-                                Needs Attention
-                            </strong>
-            
-                            <p>
-                                NOC-556 has no Next Action recorded.
-                            </p>
-            
-                        </section>
-            
-            
-                        <section class="ai-report-item">
-            
-                            <strong>
-                                IR-16
-                            </strong>
-            
-                            <p>
-                                Export memory investigation remains open
-                                for operational follow-up.
-                            </p>
-            
-                        </section>
-                    `
-            },
+        const contextTickets =
+            document.querySelector(
+                "#context-tickets"
+            );
+
+        const contextTicketsIcon =
+            document.querySelector(
+                "#context-tickets-icon"
+            );
+
+        const contextInvestigations =
+            document.querySelector(
+                "#context-investigations"
+            );
 
 
-            summary: {
+        const contextInvestigationsIcon =
+            document.querySelector(
+                "#context-investigations-icon"
+            );
 
-                title:
-                    "Shift Summary",
+        const contextHandover =
+            document.querySelector(
+                "#context-handover"
+            );
+        const contextHandoverIcon =
+            document.querySelector(
+                "#context-handover-icon"
+            );
 
-                file:
-                    "ai-shift-summary.md",
+        function getLocalDateString() {
 
-                content: `
-                        <section class="ai-report-item">
-            
-                            <strong>
-                                Summary
-                            </strong>
-            
-                            <p>
-                                Shift activity included Jira ticket
-                                follow-up, monitoring changes,
-                                Salesforce activity, and review of the
-                                IR-16 Export memory investigation.
-                            </p>
-            
-                        </section>
-            
-            
-                        <section class="ai-report-item">
-            
-                            <strong>
-                                Outstanding Work
-                            </strong>
-            
-                            <p>
-                                Development investigations, pending
-                                testing, and the recommended Export
-                                restart remain open.
-                            </p>
-            
-                        </section>
-                    `
-            },
+            const now =
+                new Date();
+
+            const year =
+                now.getFullYear();
+
+            const month =
+                String(
+                    now.getMonth() + 1
+                ).padStart(2, "0");
+
+            const day =
+                String(
+                    now.getDate()
+                ).padStart(2, "0");
+
+            return `${year}-${month}-${day}`;
+        }
 
 
-            followups: {
-
-                title:
-                    "Follow-ups",
-
-                file:
-                    "ai-followups.md",
-
-                content: `
-                        <section class="ai-report-item">
-            
-                            <strong>
-                                NOC-545
-                            </strong>
-            
-                            <p>
-                                Pending test from Josh Keogh remains
-                                outstanding.
-                            </p>
-            
-                        </section>
-            
-            
-                        <section class="ai-report-item">
-            
-                            <strong>
-                                NOC-556
-                            </strong>
-            
-                            <p>
-                                Escalated ticket has no Next Action
-                                recorded. Human review is recommended.
-                            </p>
-            
-                        </section>
-            
-            
-                        <section class="ai-report-item">
-            
-                            <strong>
-                                NOC-575
-                            </strong>
-            
-                            <p>
-                                Development investigation remains
-                                pending.
-                            </p>
-            
-                        </section>
-            
-            
-                        <section class="ai-report-item">
-            
-                            <strong>
-                                IR-16 Export Memory
-                            </strong>
-            
-                            <p>
-                                Controlled Export restart remains
-                                outstanding.
-                            </p>
-            
-                        </section>
-                    `
-            },
+        aiDate.value =
+            getLocalDateString();
 
 
-            handover: {
-
-                title:
-                    "Handover Review",
-
-                file:
-                    "ai-handover-review.md",
-
-                content: `
-                        <section class="ai-report-item">
-            
-                            <strong>
-                                NOC-556
-                            </strong>
-            
-                            <p>
-                                Add a next-shift follow-up because no
-                                Next Action is currently recorded.
-                            </p>
-            
-                        </section>
-            
-            
-                        <section class="ai-report-item">
-            
-                            <strong>
-                                IR-16
-                            </strong>
-            
-                            <p>
-                                Clearly separate Notebook snapshot
-                                observations from current live status.
-                            </p>
-            
-                        </section>
-            
-            
-                        <section class="ai-report-item">
-            
-                            <strong>
-                                Clarity
-                            </strong>
-            
-                            <p>
-                                Keep recommended actions separate from
-                                actions documented as completed.
-                            </p>
-            
-                        </section>
-                    `
-            }
-
-        };
-
-
-        function showReportModal(
-            reportKey
+        function renderReports(
+            reports
         ) {
 
-            const report =
-                mockReports[reportKey];
+            reportList.innerHTML = "";
 
 
-            if (!report) {
+            reportCount.textContent =
+                `${reports.length} report${reports.length === 1
+                    ? ""
+                    : "s"
+                }`;
+
+
+            if (reports.length === 0) {
+
+                reportList.innerHTML = `
+            <div class="notes-empty">
+                No AI reports available for this shift.
+            </div>
+        `;
+
                 return;
+
             }
 
 
-            reportTitle.textContent =
-                report.title;
+            for (const report of reports) {
+
+                const button =
+                    document.createElement(
+                        "button"
+                    );
+
+                button.type =
+                    "button";
+
+                button.className =
+                    "ai-report-row";
 
 
-            reportFile.textContent =
-                report.file;
+                button.innerHTML = `
+            <div>
+
+                <strong>
+                    ${report.title}
+                </strong>
+
+                <span>
+                    ${report.file}
+                </span>
+
+            </div>
+
+            <span class="report-state">
+                Available
+            </span>
+        `;
 
 
-            reportContent.innerHTML =
-                report.content;
+                button.addEventListener(
+                    "click",
+                    () => {
+
+                        openRealReport(
+                            report.name
+                        );
+
+                    }
+                );
 
 
-            reportModal.classList.remove(
-                "hidden"
-            );
+                reportList.appendChild(
+                    button
+                );
+
+            }
+
+        }
+
+        async function loadReports() {
+
+            try {
+
+                const response =
+                    await getAiReports(
+                        aiDate.value
+                    );
+
+
+                renderReports(
+                    response.reports
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "AI report load failed:",
+                    error
+                );
+
+
+                reportCount.textContent =
+                    "Unavailable";
+
+
+                reportList.innerHTML = `
+        <div class="notes-empty">
+            AI reports unavailable.
+        </div>
+    `;
+
+            }
+
+        }
+
+        async function loadContext() {
+
+            try {
+
+                const [
+                    notes,
+                    tickets,
+                    investigations,
+                    dashboard
+                ] = await Promise.all([
+                    getShiftNotes(
+                        aiDate.value
+                    ),
+                    getTickets(),
+                    getInvestigations(
+                        aiDate.value
+                    ),
+                    getDashboard(
+                        aiDate.value
+                    )
+                ]);
+
+
+                if (notes.exists) {
+
+                    contextShiftNotes.textContent =
+                        `${notes.activity.length} entries`;
+
+                    contextShiftNotesIcon.textContent =
+                        "✓";
+
+                    contextShiftNotesIcon.classList.remove(
+                        "warning-text"
+                    );
+
+                    contextShiftNotesIcon.classList.add(
+                        "success"
+                    );
+
+                } else {
+
+                    contextShiftNotes.textContent =
+                        "Not available";
+
+                    contextShiftNotesIcon.textContent =
+                        "○";
+
+                    contextShiftNotesIcon.classList.remove(
+                        "success"
+                    );
+
+                    contextShiftNotesIcon.classList.add(
+                        "warning-text"
+                    );
+
+                }
+
+
+                contextTickets.textContent =
+                    `${tickets.tickets.length} record${tickets.tickets.length === 1
+                        ? ""
+                        : "s"
+                    }`;
+
+
+                contextInvestigations.textContent =
+                    `${investigations.count} record${investigations.count === 1
+                        ? ""
+                        : "s"
+                    }`;
+
+
+                if (investigations.count > 0) {
+
+                    contextInvestigationsIcon.textContent =
+                        "✓";
+
+                    contextInvestigationsIcon.classList.remove(
+                        "warning-text"
+                    );
+
+                    contextInvestigationsIcon.classList.add(
+                        "success"
+                    );
+
+                } else {
+
+                    contextInvestigationsIcon.textContent =
+                        "○";
+
+                    contextInvestigationsIcon.classList.remove(
+                        "success"
+                    );
+
+                    contextInvestigationsIcon.classList.add(
+                        "warning-text"
+                    );
+
+                }
+
+
+                if (dashboard.handover === "created") {
+
+                    contextHandover.textContent =
+                        "Created";
+
+                    contextHandoverIcon.textContent =
+                        "✓";
+
+                    contextHandoverIcon.classList.remove(
+                        "warning-text"
+                    );
+
+                    contextHandoverIcon.classList.add(
+                        "success"
+                    );
+
+                } else {
+
+                    contextHandover.textContent =
+                        "Not created";
+
+                    contextHandoverIcon.textContent =
+                        "○";
+
+                    contextHandoverIcon.classList.remove(
+                        "success"
+                    );
+
+                    contextHandoverIcon.classList.add(
+                        "warning-text"
+                    );
+
+                }
+
+
+            } catch (error) {
+
+                console.error(
+                    "AI context load failed:",
+                    error
+                );
+
+
+                contextShiftNotes.textContent =
+                    "Unavailable";
+
+                contextTicketsIcon.textContent =
+                    "!";
+
+                contextTicketsIcon.classList.remove(
+                    "success"
+                );
+
+                contextTicketsIcon.classList.add(
+                    "warning-text"
+                );
+
+                contextShiftNotesIcon.textContent =
+                    "!";
+
+                contextShiftNotesIcon.classList.remove(
+                    "success"
+                );
+
+                contextShiftNotesIcon.classList.add(
+                    "warning-text"
+                );
+
+                contextTickets.textContent =
+                    "Unavailable";
+
+                contextInvestigations.textContent =
+                    "Unavailable";
+
+                contextInvestigationsIcon.textContent =
+                    "!";
+
+                contextInvestigationsIcon.classList.remove(
+                    "success"
+                );
+
+                contextInvestigationsIcon.classList.add(
+                    "warning-text"
+                );
+
+                contextHandover.textContent =
+                    "Unavailable";
+
+                contextHandoverIcon.textContent =
+                    "!";
+
+                contextHandoverIcon.classList.remove(
+                    "success"
+                );
+
+                contextHandoverIcon.classList.add(
+                    "warning-text"
+                );
+
+            }
+
+        }
+
+
+        async function openRealReport(
+            reportName
+        ) {
+
+            try {
+
+                const report =
+                    await getAiReport(
+                        aiDate.value,
+                        reportName
+                    );
+
+
+                reportTitle.textContent =
+                    report.title;
+
+
+                reportFile.textContent =
+                    report.file;
+
+
+                reportContent.textContent =
+                    report.content;
+
+
+                reportModal.classList.remove(
+                    "hidden"
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "AI report detail load failed:",
+                    error
+                );
+
+            }
 
         }
 
@@ -826,24 +938,17 @@
 
         }
 
+        aiDate.addEventListener(
+            "change",
+            () => {
 
-        reportButtons.forEach(
-            button => {
+                hideReportModal();
 
-                button.addEventListener(
-                    "click",
-                    () => {
-
-                        showReportModal(
-                            button.dataset.report
-                        );
-
-                    }
-                );
+                loadReports();
+                loadContext();
 
             }
         );
-
 
         reportCloseX.addEventListener(
             "click",
@@ -890,6 +995,9 @@
 
             }
         );
+
+        loadReports();
+        loadContext();
 
     </script>
 
