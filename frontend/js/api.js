@@ -153,3 +153,26 @@ export function getHealth(
   );
 
 }
+
+export function getStartShiftPreflight(
+  shiftDate
+) {
+
+  return apiRequest(
+    `/api/start-shift/${shiftDate}`
+  );
+
+}
+
+export function executeStartShift(
+  shiftDate
+) {
+
+  return apiRequest(
+    `/api/start-shift/${shiftDate}`,
+    {
+      method: "POST"
+    }
+  );
+
+}

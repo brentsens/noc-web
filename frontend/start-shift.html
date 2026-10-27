@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SES NOC Operations - Start Shift</title>
+
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-name">SESAMI</div>
+                <div class="brand-subtitle">
+                    NOC OPERATIONS
+                </div>
+            </div>
+
+            <nav class="nav">
+
+                <a class="nav-item" href="index.html">
+                    Dashboard
+                </a>
+
+                <a class="nav-item" href="shift-notes.html">
+                    Shift Notes
+                </a>
+
+                <a class="nav-item" href="tickets.html">
+                    Tickets
+                </a>
+
+                <a class="nav-item" href="investigations.html">
+                    Investigations
+                </a>
+
+                <a class="nav-item ai" href="ai-actions.html">
+                    AI Actions
+                </a>
+
+                <div class="nav-divider"></div>
+
+                <a class="nav-item active" href="start-shift.html">
+                    Start Shift
+                </a>
+
+                <a class="nav-item" href="status.html">
+                    Status
+                </a>
+
+                <a class="nav-item" href="health.html">
+                    Health
+                </a>
+
+                <a class="nav-item" href="end-shift.html">
+                    End Shift
+                </a>
+
+            </nav>
+
+            <div class="sidebar-bottom">
+
+                <div class="nav-item">
+                    Settings
+                </div>
+
+                <div class="version">
+                    noc-web v0.1.0
+                </div>
+
+            </div>
+
+        </aside>
+
+
+        <main class="main">
+
+            <header class="topbar">
+
+                <input class="search" type="search" placeholder="Search...">
+
+                <div class="profile">
+
+                    <div class="avatar">
+                        BS
+                    </div>
+
+                    <div>
+                        <div class="profile-name">
+                            NOC Engineer
+                        </div>
+
+                        <div class="profile-subtitle">
+                            Local Workstation
+                        </div>
+                    </div>
+
+                </div>
+
+            </header>
+
+
+            <section class="content">
+
+                <div class="page-header">
+
+                    <div>
+                        <h1>Start Shift</h1>
+
+                        <p>
+                            Review shift readiness before
+                            initializing the NOC workspace.
+                        </p>
+                    </div>
+
+                    <div class="page-controls">
+
+                        <input id="start-shift-date" class="date-control" type="date">
+
+                        <div id="preflight-mode" class="ready-badge">
+                            ● PREFLIGHT / READ ONLY
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <section class="metrics">
+
+                    <article class="metric-card">
+
+                        <div class="metric-label">
+                            Shift Readiness
+                        </div>
+
+                        <div id="shift-readiness" class="metric-value yellow small">
+                            Checking
+                        </div>
+
+                        <div class="metric-subtitle">
+                            Required tools
+                        </div>
+
+                    </article>
+
+
+                    <article class="metric-card">
+
+                        <div class="metric-label">
+                            Workspace
+                        </div>
+
+                        <div id="workspace-count" class="metric-value teal">
+                            -
+                        </div>
+
+                        <div class="metric-subtitle">
+                            Directories available
+                        </div>
+
+                    </article>
+
+
+                    <article class="metric-card">
+
+                        <div class="metric-label">
+                            Required Tools
+                        </div>
+
+                        <div id="required-tools-count" class="metric-value teal">
+                            -
+                        </div>
+
+                        <div class="metric-subtitle">
+                            Available
+                        </div>
+
+                    </article>
+
+
+                    <article class="metric-card">
+
+                        <div class="metric-label">
+                            Planned Actions
+                        </div>
+
+                        <div id="planned-action-count" class="metric-value purple">
+                            -
+                        </div>
+
+                        <div class="metric-subtitle">
+                            Would be performed
+                        </div>
+
+                    </article>
+
+                </section>
+
+
+                <section class="dashboard-grid">
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+
+                            <h2>
+                                Shift Workspace
+                            </h2>
+
+                            <span id="workspace-badge" class="count-badge">
+                                -
+                            </span>
+
+                        </div>
+
+                        <table>
+
+                            <thead>
+                                <tr>
+                                    <th>Path</th>
+                                    <th>State</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="workspace-table">
+                            </tbody>
+
+                        </table>
+
+                    </article>
+
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Shift Notes</h2>
+                        </div>
+
+                        <table>
+
+                            <tbody>
+
+                                <tr>
+                                    <th>Path</th>
+
+                                    <td id="notes-path">
+                                        Checking...
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th>State</th>
+
+                                    <td id="notes-state">
+                                        Checking...
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th>Planned Action</th>
+
+                                    <td id="notes-action">
+                                        Checking...
+                                    </td>
+                                </tr>
+
+                            </tbody>
+
+                        </table>
+
+                    </article>
+
+                </section>
+
+
+                <section class="dashboard-grid">
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+
+                            <h2>
+                                Required Tools
+                            </h2>
+
+                            <span id="required-tools-badge" class="count-badge">
+                                -
+                            </span>
+
+                        </div>
+
+                        <table>
+
+                            <thead>
+                                <tr>
+                                    <th>Tool</th>
+                                    <th>State</th>
+                                    <th>Path</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="required-tools-table">
+                            </tbody>
+
+                        </table>
+
+                    </article>
+
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+
+                            <h2>
+                                Optional Tools
+                            </h2>
+
+                            <span id="optional-tools-badge" class="count-badge">
+                                -
+                            </span>
+
+                        </div>
+
+                        <table>
+
+                            <thead>
+                                <tr>
+                                    <th>Tool</th>
+                                    <th>State</th>
+                                    <th>Path</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="optional-tools-table">
+                            </tbody>
+
+                        </table>
+
+                    </article>
+
+                </section>
+
+
+                <section class="panel">
+
+                    <div class="panel-header">
+
+                        <h2>
+                            Planned Start Actions
+                        </h2>
+
+                        <span id="planned-actions-badge" class="count-badge">
+                            -
+                        </span>
+
+                    </div>
+
+                    <div id="planned-actions">
+                        Loading...
+                    </div>
+
+                </section>
+
+
+                <section class="panel">
+
+                    <div class="panel-header">
+
+                        <h2>
+                            Start Shift Execution
+                        </h2>
+
+                        <span id="execution-state" class="count-badge">
+                            CHECKING
+                        </span>
+
+                    </div>
+
+                    <p id="execution-message">
+                        Checking execution state...
+                    </p>
+
+                    <button id="start-shift-button" type="button" disabled>
+                        Start Shift
+                    </button>
+
+                    <p>
+                        Start Shift performs local workspace initialization only.
+                        Existing non-empty shift notes are preserved.
+                    </p>
+
+                </section>
+
+            </section>
+
+        </main>
+
+    </div>
+
+
+    <script type="module">
+
+        import {
+            getStartShiftPreflight,
+            executeStartShift
+        } from "./js/api.js";
+
+
+        const shiftDate =
+            document.querySelector(
+                "#start-shift-date"
+            );
+
+        const readiness =
+            document.querySelector(
+                "#shift-readiness"
+            );
+
+        const workspaceCount =
+            document.querySelector(
+                "#workspace-count"
+            );
+
+        const requiredToolsCount =
+            document.querySelector(
+                "#required-tools-count"
+            );
+
+        const plannedActionCount =
+            document.querySelector(
+                "#planned-action-count"
+            );
+
+        const workspaceBadge =
+            document.querySelector(
+                "#workspace-badge"
+            );
+
+        const workspaceTable =
+            document.querySelector(
+                "#workspace-table"
+            );
+
+        const notesPath =
+            document.querySelector(
+                "#notes-path"
+            );
+
+        const notesState =
+            document.querySelector(
+                "#notes-state"
+            );
+
+        const notesAction =
+            document.querySelector(
+                "#notes-action"
+            );
+
+        const requiredToolsBadge =
+            document.querySelector(
+                "#required-tools-badge"
+            );
+
+        const requiredToolsTable =
+            document.querySelector(
+                "#required-tools-table"
+            );
+
+        const optionalToolsBadge =
+            document.querySelector(
+                "#optional-tools-badge"
+            );
+
+        const optionalToolsTable =
+            document.querySelector(
+                "#optional-tools-table"
+            );
+
+        const plannedActionsBadge =
+            document.querySelector(
+                "#planned-actions-badge"
+            );
+
+        const plannedActions =
+            document.querySelector(
+                "#planned-actions"
+            );
+
+        const executionMessage =
+            document.querySelector(
+                "#execution-message"
+            );
+
+        const startButton =
+            document.querySelector(
+                "#start-shift-button"
+            );
+
+        const executionState =
+            document.querySelector(
+                "#execution-state"
+            );
+
+
+        function getDefaultShiftDate() {
+
+            const now = new Date();
+
+            if (now.getHours() < 6) {
+                now.setDate(
+                    now.getDate() - 1
+                );
+            }
+
+            return now.toLocaleDateString(
+                "en-CA"
+            );
+        }
+
+
+        function stateText(
+            value
+        ) {
+
+            return value
+                ? "Available"
+                : "Missing";
+        }
+
+
+        function statusClass(
+            value
+        ) {
+
+            return value
+                ? "status-blue"
+                : "status-red";
+        }
+
+
+        function actionClass(
+            action
+        ) {
+
+            return action === "skip"
+                ? "status-blue"
+                : "status-red";
+        }
+
+
+        function actionText(
+            action
+        ) {
+
+            return action === "skip"
+                ? "Skip"
+                : "Create";
+        }
+
+
+        function renderWorkspace(
+            workspace
+        ) {
+
+            workspaceTable.innerHTML = "";
+
+            const existingCount =
+                workspace.filter(
+                    item => item.exists
+                ).length;
+
+            workspaceCount.textContent =
+                `${existingCount}/${workspace.length}`;
+
+            workspaceBadge.textContent =
+                `${existingCount}/${workspace.length}`;
+
+
+            workspace.forEach(
+                item => {
+
+                    const row =
+                        document.createElement(
+                            "tr"
+                        );
+
+                    row.innerHTML = `
+                        <td>
+                            ${item.path}
+                        </td>
+
+                        <td>
+                            <span class="status ${statusClass(
+                        item.exists
+                    )
+                        }">
+                                ${stateText(
+                            item.exists
+                        )
+                        }
+                            </span>
+                        </td>
+
+                        <td>
+                            <span class="status ${actionClass(
+                            item.action
+                        )
+                        }">
+                                ${actionText(
+                            item.action
+                        )
+                        }
+                            </span>
+                        </td>
+                    `;
+
+                    workspaceTable.appendChild(
+                        row
+                    );
+                }
+            );
+        }
+
+
+        function renderTools(
+            table,
+            badge,
+            tools
+        ) {
+
+            table.innerHTML = "";
+
+            const availableCount =
+                tools.filter(
+                    tool =>
+                        tool.available
+                ).length;
+
+            badge.textContent =
+                `${availableCount}/${tools.length}`;
+
+
+            tools.forEach(
+                tool => {
+
+                    const row =
+                        document.createElement(
+                            "tr"
+                        );
+
+                    row.innerHTML = `
+                        <td>
+                            ${tool.name}
+                        </td>
+
+                        <td>
+                            <span class="status ${statusClass(
+                        tool.available
+                    )
+                        }">
+                                ${stateText(
+                            tool.available
+                        )
+                        }
+                            </span>
+                        </td>
+
+                        <td>
+                            ${tool.path
+                        || "Not found"
+                        }
+                        </td>
+                    `;
+
+                    table.appendChild(
+                        row
+                    );
+                }
+            );
+
+            return availableCount;
+        }
+
+
+        function renderPlannedActions(
+            actions
+        ) {
+
+            plannedActions.innerHTML = "";
+
+            plannedActionCount.textContent =
+                actions.length;
+
+            plannedActionsBadge.textContent =
+                actions.length;
+
+
+            if (actions.length === 0) {
+
+                plannedActions.innerHTML = `
+                    <p>
+                        No changes are currently
+                        required.
+                    </p>
+                `;
+
+                return;
+            }
+
+
+            actions.forEach(
+                action => {
+
+                    const entry =
+                        document.createElement(
+                            "p"
+                        );
+
+                    entry.textContent =
+                        `• ${action}`;
+
+                    plannedActions.appendChild(
+                        entry
+                    );
+                }
+            );
+        }
+
+
+        function renderNotes(
+            notes
+        ) {
+
+            notesPath.textContent =
+                notes.path;
+
+            notesState.textContent =
+                stateText(
+                    notes.exists
+                );
+
+            notesState.style.color =
+                notes.exists
+                    ? "var(--success)"
+                    : "var(--warning)";
+
+            notesAction.textContent =
+                actionText(
+                    notes.action
+                );
+
+            notesAction.style.color =
+                notes.action === "skip"
+                    ? "var(--success)"
+                    : "var(--warning)";
+        }
+
+
+        function renderReadiness(
+            preflight
+        ) {
+
+            readiness.classList.remove(
+                "teal",
+                "yellow"
+            );
+
+            readiness.style.color = "";
+
+            if (preflight.started) {
+
+                readiness.textContent =
+                    "SHIFT STARTED";
+
+                readiness.classList.add(
+                    "teal"
+                );
+
+                return;
+            }
+
+            if (preflight.ready) {
+
+                readiness.textContent =
+                    "SHIFT READY";
+
+                readiness.classList.add(
+                    "teal"
+                );
+
+                return;
+            }
+
+            readiness.textContent =
+                "NOT READY";
+
+            readiness.style.color =
+                "var(--danger)";
+        }
+
+        async function loadPreflight() {
+
+            const date =
+                shiftDate.value;
+
+            if (!date) {
+                return;
+            }
+
+
+            readiness.textContent =
+                "Checking";
+
+            startButton.disabled = true;
+
+            try {
+
+                const preflight =
+                    await getStartShiftPreflight(
+                        date
+                    );
+
+
+                renderReadiness(
+                    preflight
+                );
+
+
+                renderWorkspace(
+                    preflight.workspace
+                );
+
+
+                renderNotes(
+                    preflight.shiftNotes
+                );
+
+
+                const requiredAvailable =
+                    renderTools(
+                        requiredToolsTable,
+                        requiredToolsBadge,
+                        preflight.requiredTools
+                    );
+
+
+                renderTools(
+                    optionalToolsTable,
+                    optionalToolsBadge,
+                    preflight.optionalTools
+                );
+
+
+                requiredToolsCount.textContent =
+                    `${requiredAvailable}/${preflight.requiredTools.length
+                    }`;
+
+
+                renderPlannedActions(
+                    preflight.plannedActions
+                );
+
+
+                startButton.disabled =
+                    !preflight.execution.enabled;
+
+                executionMessage.textContent =
+                    preflight.execution.message;
+
+                startButton.textContent =
+                    preflight.started
+                        ? "Shift Started"
+                        : "Start Shift";
+
+                executionState.textContent =
+                    preflight.started
+                        ? "STARTED"
+                        : (
+                            preflight.execution.enabled
+                                ? "READY"
+                                : "BLOCKED"
+                        );
+
+
+            } catch (error) {
+
+                console.error(
+                    "Start Shift preflight failed:",
+                    error
+                );
+
+                readiness.textContent =
+                    "Unavailable";
+
+                readiness.style.color =
+                    "var(--danger)";
+
+                workspaceCount.textContent =
+                    "Error";
+
+                requiredToolsCount.textContent =
+                    "Error";
+
+                plannedActionCount.textContent =
+                    "Error";
+
+                executionMessage.textContent =
+                    (
+                        "Could not load Start "
+                        + "Shift preflight: "
+                        + error.message
+                    );
+
+                startButton.disabled = true;
+            }
+        }
+
+        async function executeShift() {
+
+            const date =
+                shiftDate.value;
+
+            if (!date) {
+                return;
+            }
+
+            const confirmed =
+                window.confirm(
+                    `Start NOC shift for ${date}?\n\n`
+                    + "This will initialize the local "
+                    + "shift workspace, create shift notes "
+                    + "only if needed, and update ~/noc/today.\n\n"
+                    + "Existing non-empty notes will not "
+                    + "be overwritten."
+                );
+
+            if (!confirmed) {
+                return;
+            }
+
+            startButton.disabled = true;
+            startButton.textContent =
+                "Starting...";
+
+            executionMessage.textContent =
+                "Initializing shift workspace...";
+
+            try {
+
+                const result =
+                    await executeStartShift(
+                        date
+                    );
+
+                executionMessage.textContent =
+                    result.started
+                        ? "Shift workspace initialized successfully."
+                        : "Start Shift did not complete.";
+
+                startButton.textContent =
+                    "Start Shift";
+
+                await loadPreflight();
+
+            } catch (error) {
+
+                console.error(
+                    "Start Shift failed:",
+                    error
+                );
+
+                executionMessage.textContent =
+                    `Start Shift failed: ${error.message}`;
+
+                startButton.textContent =
+                    "Start Shift";
+
+                await loadPreflight();
+            }
+        }
+
+
+        shiftDate.value =
+            getDefaultShiftDate();
+
+
+        shiftDate.addEventListener(
+            "change",
+            loadPreflight
+        );
+
+        startButton.addEventListener(
+            "click",
+            executeShift
+        );
+
+
+        loadPreflight();
+
+    </script>
+
+</body>
+
+</html>
