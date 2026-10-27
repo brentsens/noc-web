@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SES NOC Operations - Investigations</title>
+
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-name">SESAMI</div>
+                <div class="brand-subtitle">NOC OPERATIONS</div>
+            </div>
+
+            <nav class="nav">
+                <a class="nav-item" href="index.html">Dashboard</a>
+                <a class="nav-item" href="shift-notes.html">Shift Notes</a>
+                <a class="nav-item" href="tickets.html">Tickets</a>
+                <a class="nav-item active" href="investigations.html">Investigations</a>
+                <a class="nav-item ai" href="ai-actions.html">AI Actions</a>
+
+                <div class="nav-divider"></div>
+
+                <a class="nav-item" href="#">Status</a>
+                <a class="nav-item" href="#">Health</a>
+                <a class="nav-item" href="end-shift.html">End Shift</a>
+            </nav>
+
+            <div class="sidebar-bottom">
+                <div class="nav-item">Settings</div>
+                <div class="version">noc-web v0.1.0</div>
+            </div>
+
+        </aside>
+
+
+        <main class="main">
+
+            <header class="topbar">
+
+                <input id="investigation-search" class="search" type="search" placeholder="Search investigations...">
+
+                <div class="profile">
+                    <div class="avatar">BS</div>
+
+                    <div>
+                        <div class="profile-name">NOC Engineer</div>
+                        <div class="profile-subtitle">Local Workstation</div>
+                    </div>
+                </div>
+
+            </header>
+
+
+            <section class="content">
+
+                <div class="page-header">
+
+                    <div>
+                        <h1>Investigations</h1>
+                        <p>
+                            Reviewed Datadog Notebook investigations for the selected shift.
+                        </p>
+                    </div>
+
+                    <div class="page-controls">
+
+                        <input class="date-control" type="date" value="2026-10-26">
+
+                        <button id="new-investigation" class="button primary" type="button">
+                            + New Investigation
+                        </button>
+
+                    </div>
+
+                </div>
+
+
+                <section class="investigation-layout">
+
+                    <article class="panel investigation-list-panel">
+
+                        <div class="panel-header">
+                            <h2>Reviewed Investigations</h2>
+                            <span class="count-badge">1 investigation</span>
+                        </div>
+
+                        <div id="investigation-list" class="investigation-list"></div>
+
+                    </article>
+
+
+                    <article class="panel investigation-details">
+
+                        <div id="investigation-empty" class="details-empty">
+                            <div class="details-empty-icon">◆</div>
+
+                            <h2>Select an investigation</h2>
+
+                            <p>
+                                Choose an investigation to view its validated
+                                findings, status, next actions, and handover summary.
+                            </p>
+                        </div>
+
+
+                        <div id="investigation-content" class="details-content hidden">
+
+                            <div class="investigation-detail-header">
+
+                                <div>
+                                    <div id="investigation-name" class="detail-ticket-id"></div>
+
+                                    <h2 id="investigation-title"></h2>
+                                </div>
+
+                                <span class="ready-outline">
+                                    READY FOR HANDOVER
+                                </span>
+
+                            </div>
+
+
+                            <div class="investigation-meta">
+
+                                <div>
+                                    <label>Source</label>
+                                    <span>Final Datadog Notebook</span>
+                                </div>
+
+                                <div>
+                                    <label>Capture</label>
+                                    <span>Datadog MCP</span>
+                                </div>
+
+                            </div>
+
+
+                            <section class="investigation-section">
+                                <h3>Summary</h3>
+                                <p id="investigation-summary"></p>
+                            </section>
+
+                            <section class="investigation-section">
+                                <h3>Confirmed Findings</h3>
+                                <p id="investigation-findings"></p>
+                            </section>
+
+                            <section class="investigation-section">
+                                <h3>Current Status</h3>
+                                <p id="investigation-status"></p>
+                            </section>
+
+                            <section class="investigation-section">
+                                <h3>Next Actions</h3>
+                                <p id="investigation-actions"></p>
+                            </section>
+
+                            <section class="investigation-section">
+                                <h3>Handover Summary</h3>
+                                <p id="investigation-handover"></p>
+                            </section>
+
+                            <div class="ticket-actions">
+
+                                <button class="button" type="button">
+                                    Open Notebook
+                                </button>
+
+                                <button class="button" type="button">
+                                    Open Local Record
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                    </article>
+
+                </section>
+
+            </section>
+
+        </main>
+    </div>
+
+
+    <section class="investigation-section">
+
+        <script>
+
+            const investigations = [
+                {
+                    name: "Export-memory-working-set-high-IR-16",
+                    title: "Export Memory Working Set High - IR-16",
+                    status: "Reviewed Notebook Summary",
+
+                    summary:
+                        "Export memory was above the critical threshold in prod and USPRI in the reviewed Notebook snapshot.",
+
+                    findings:
+                        "The validated investigation identified sustained Export memory growth, with USPRI higher and alerting longer. RabbitMQ was documented as healthy in both clusters.",
+
+                    currentStatus:
+                        "The investigation remains open for operational follow-up. The controlled Export restart has not been documented as completed.",
+
+                    nextActions:
+                        "Coordinate a controlled restart with DevOps, USPRI first, during a low-volume window. Verify memory recovery, monitor recovery, consumer totals, and normal queue drain afterward.",
+
+                    handover:
+                        "Continue follow-up on Export memory growth and coordinate the recommended controlled restart with DevOps.",
+
+                    notebook:
+                        "https://app.datadoghq.com/notebook/example"
+                }
+            ];
+
+
+            const list =
+                document.querySelector("#investigation-list");
+
+            const search =
+                document.querySelector("#investigation-search");
+
+            const empty =
+                document.querySelector("#investigation-empty");
+
+            const content =
+                document.querySelector("#investigation-content");
+
+            const modal =
+                document.querySelector("#investigation-modal");
+
+            const openModal =
+                document.querySelector("#new-investigation");
+
+            const closeModal =
+                document.querySelector("#close-investigation-modal");
+
+            const cancel =
+                document.querySelector("#cancel-investigation");
+
+            const form =
+                document.querySelector("#investigation-form");
+
+
+            function renderInvestigations() {
+
+                const query =
+                    search.value.trim().toLowerCase();
+
+                list.innerHTML = "";
+
+                const filtered =
+                    investigations.filter(item => {
+
+                        const searchable = [
+                            item.name,
+                            item.title,
+                            item.status
+                        ]
+                            .join(" ")
+                            .toLowerCase();
+
+                        return searchable.includes(query);
+                    });
+
+
+                if (filtered.length === 0) {
+
+                    const noResults =
+                        document.createElement("div");
+
+                    noResults.className = "notes-empty";
+
+                    noResults.textContent =
+                        "No matching investigations.";
+
+                    list.appendChild(noResults);
+
+                    return;
+                }
+
+
+                for (const investigation of filtered) {
+
+                    const card =
+                        document.createElement("button");
+
+                    card.type = "button";
+
+                    card.className =
+                        "investigation-card";
+
+                    card.innerHTML = `
+                                                                          <div class="investigation-card-top">
+                                                                    
+                                                                            <div>
+                                                                              <div class="investigation-card-title">
+                                                                                ${investigation.title}
+                                                                              </div>
+                                                                    
+                                                                              <div class="investigation-card-name">
+                                                                                ${investigation.name}
+                                                                              </div>
+                                                                            </div>
+                                                                    
+                                                                            <span class="ready-outline">
+                                                                              READY
+                                                                            </span>
+                                                                    
+                                                                          </div>
+                                                                    
+                                                                          <div class="investigation-card-meta">
+                                                                            ${investigation.status}
+                                                                          </div>
+                                                                        `;
+
+                    card.addEventListener(
+                        "click",
+                        () => showInvestigation(
+                            investigation,
+                            card
+                        )
+                    );
+
+                    list.appendChild(card);
+                }
+            }
+
+
+            function showInvestigation(
+                investigation,
+                card
+            ) {
+
+                document
+                    .querySelectorAll(".investigation-card")
+                    .forEach(item => {
+                        item.classList.remove(
+                            "selected-investigation"
+                        );
+                    });
+
+                card.classList.add(
+                    "selected-investigation"
+                );
+
+                empty.classList.add("hidden");
+                content.classList.remove("hidden");
+
+                document.querySelector(
+                    "#investigation-name"
+                ).textContent = investigation.name;
+
+                document.querySelector(
+                    "#investigation-title"
+                ).textContent = investigation.title;
+
+                document.querySelector(
+                    "#investigation-summary"
+                ).textContent = investigation.summary;
+
+                document.querySelector(
+                    "#investigation-findings"
+                ).textContent = investigation.findings;
+
+                document.querySelector(
+                    "#investigation-status"
+                ).textContent = investigation.currentStatus;
+
+                document.querySelector(
+                    "#investigation-actions"
+                ).textContent = investigation.nextActions;
+
+                document.querySelector(
+                    "#investigation-handover"
+                ).textContent = investigation.handover;
+            }
+
+
+            function showModal() {
+                modal.classList.remove("hidden");
+            }
+
+
+            function hideModal() {
+                modal.classList.add("hidden");
+            }
+
+
+            openModal.addEventListener(
+                "click",
+                showModal
+            );
+
+
+            closeModal.addEventListener(
+                "click",
+                hideModal
+            );
+
+
+            cancel.addEventListener(
+                "click",
+                hideModal
+            );
+
+
+            modal.addEventListener(
+                "click",
+                event => {
+                    if (event.target === modal) {
+                        hideModal();
+                    }
+                }
+            );
+
+
+            document.addEventListener(
+                "keydown",
+                event => {
+                    if (
+                        event.key === "Escape" &&
+                        !modal.classList.contains("hidden")
+                    ) {
+                        hideModal();
+                    }
+                }
+            );
+
+
+            form.addEventListener(
+                "submit",
+                event => {
+
+                    event.preventDefault();
+
+                    const name =
+                        document
+                            .querySelector(
+                                "#new-investigation-name"
+                            )
+                            .value
+                            .trim();
+
+                    const notebook =
+                        document
+                            .querySelector(
+                                "#notebook-url"
+                            )
+                            .value
+                            .trim();
+
+                    if (!name || !notebook) {
+                        return;
+                    }
+
+                    hideModal();
+
+                    alert(
+                        "Prototype only. No Datadog or noc-inv action was performed."
+                    );
+                }
+            );
+
+
+            search.addEventListener(
+                "input",
+                renderInvestigations
+            );
+
+
+            renderInvestigations();
+
+        </script>
+
+</body>
+
+</html>

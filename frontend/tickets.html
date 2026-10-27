@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SES NOC Operations - Tickets</title>
+
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-name">SESAMI</div>
+                <div class="brand-subtitle">NOC OPERATIONS</div>
+            </div>
+
+            <nav class="nav">
+
+                <a class="nav-item" href="index.html">
+                    Dashboard
+                </a>
+
+                <a class="nav-item" href="shift-notes.html">
+                    Shift Notes
+                </a>
+
+                <a class="nav-item active" href="tickets.html">
+                    Tickets
+                </a>
+
+                <a class="nav-item" href="investigations.html">
+                    Investigations
+                </a>
+
+                <a class="nav-item ai" href="ai-actions.html">
+                    AI Actions
+                </a>
+
+                <div class="nav-divider"></div>
+
+                <a class="nav-item" href="#">
+                    Status
+                </a>
+
+                <a class="nav-item" href="#">
+                    Health
+                </a>
+
+                <a class="nav-item" href="end-shift.html">
+                    End Shift
+                </a>
+
+            </nav>
+
+            <div class="sidebar-bottom">
+                <div class="nav-item">Settings</div>
+                <div class="version">noc-web v0.1.0</div>
+            </div>
+
+        </aside>
+
+
+        <main class="main">
+
+            <header class="topbar">
+
+                <input id="ticket-search" class="search" type="search" placeholder="Search tickets...">
+
+                <div class="profile">
+                    <div class="avatar">BS</div>
+
+                    <div>
+                        <div class="profile-name">NOC Engineer</div>
+                        <div class="profile-subtitle">
+                            Local Workstation
+                        </div>
+                    </div>
+                </div>
+
+            </header>
+
+
+            <section class="content">
+
+                <div class="page-header">
+
+                    <div>
+                        <h1>Jira Tickets</h1>
+                        <p>
+                            Locally tracked NOC tickets backed by Jira through Atlas.
+                        </p>
+                    </div>
+
+                    <div class="page-controls">
+                        <button class="button primary" type="button">
+                            + Add Ticket
+                        </button>
+                    </div>
+
+                </div>
+
+
+                <section class="ticket-toolbar">
+
+                    <select id="status-filter" class="filter-control">
+                        <option value="">All Statuses</option>
+                        <option value="Escalated">Escalated</option>
+                        <option value="Re Open">Re Open</option>
+                    </select>
+
+                    <select id="environment-filter" class="filter-control">
+                        <option value="">All Environments</option>
+                        <option value="EU">EU</option>
+                        <option value="USPRI">USPRI</option>
+                    </select>
+
+                    <label class="review-filter">
+                        <input id="review-filter" type="checkbox">
+                        Needs Review Only
+                    </label>
+
+                    <div class="toolbar-spacer"></div>
+
+                    <button class="button" type="button">
+                        Sync All Tickets
+                    </button>
+
+                </section>
+
+
+                <section class="ticket-layout">
+
+                    <article class="panel ticket-list-panel">
+
+                        <div class="panel-header">
+                            <h2>Open Tickets</h2>
+                            <span id="ticket-count" class="count-badge">
+                                5 tickets
+                            </span>
+                        </div>
+
+                        <div class="ticket-table-wrap">
+
+                            <table class="ticket-table">
+
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Summary</th>
+                                        <th>Status</th>
+                                        <th>Environment</th>
+                                        <th>Next Action</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody id="ticket-table"></tbody>
+
+                            </table>
+
+                        </div>
+
+                    </article>
+
+
+                    <aside class="panel ticket-details">
+
+                        <div class="details-empty" id="details-empty">
+
+                            <div class="details-empty-icon">
+                                ◉
+                            </div>
+
+                            <h2>Select a ticket</h2>
+
+                            <p>
+                                Choose a ticket to view Jira-managed
+                                and NOC-managed information.
+                            </p>
+
+                        </div>
+
+
+                        <div id="details-content" class="details-content hidden">
+
+                            <div class="ticket-title-row">
+
+                                <div>
+                                    <div id="detail-ticket-id" class="detail-ticket-id"></div>
+
+                                    <h2 id="detail-summary" class="detail-summary"></h2>
+                                </div>
+
+                                <span id="detail-status" class="status"></span>
+
+                            </div>
+
+
+                            <section class="ownership-section">
+
+                                <div class="ownership-heading jira-heading">
+                                    JIRA-MANAGED
+                                </div>
+
+                                <div class="details-grid">
+
+                                    <div class="detail-field">
+                                        <label>Status</label>
+                                        <div id="jira-status"></div>
+                                    </div>
+
+                                    <div class="detail-field">
+                                        <label>Assignee</label>
+                                        <div id="jira-assignee"></div>
+                                    </div>
+
+                                    <div class="detail-field">
+                                        <label>Priority</label>
+                                        <div id="jira-priority"></div>
+                                    </div>
+
+                                </div>
+
+                            </section>
+
+
+                            <section class="ownership-section">
+
+                                <div class="ownership-heading noc-heading">
+                                    NOC-MANAGED
+                                </div>
+
+                                <div class="details-grid">
+
+                                    <div class="detail-field">
+                                        <label>Environment</label>
+                                        <div id="noc-environment"></div>
+                                    </div>
+
+                                    <div class="detail-field full">
+                                        <label>Next Action</label>
+                                        <div id="noc-next-action"></div>
+                                    </div>
+
+                                    <div class="detail-field full">
+                                        <label>NOC Notes</label>
+                                        <div id="noc-notes"></div>
+                                    </div>
+
+                                </div>
+
+                            </section>
+
+
+                            <div class="ticket-actions">
+
+                                <button class="button">
+                                    Update NOC Fields
+                                </button>
+
+                                <button class="button">
+                                    Sync Ticket
+                                </button>
+
+                                <button class="button danger-outline">
+                                    Close Ticket
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                    </aside>
+
+                </section>
+
+            </section>
+
+        </main>
+
+    </div>
+
+
+    <script type="module">
+
+        import {
+            tickets
+        } from "./js/mock-data.js";
+
+
+        const expandedTickets = tickets.map(ticket => ({
+            ...ticket,
+
+            assignee:
+                ticket.id === "NOC-555"
+                    ? "Christopher Shelton"
+                    : ticket.id === "NOC-556"
+                        ? "Joseph Estrella"
+                        : "Iulia Sagau",
+
+            priority:
+                ticket.id === "NOC-556"
+                    ? "High"
+                    : "Medium",
+
+            notes:
+                ticket.id === "NOC-555"
+                    ? "Related to Salesforce ticket 00459666."
+                    : "No additional NOC notes."
+        }));
+
+
+        const ticketTable =
+            document.querySelector("#ticket-table");
+
+        const ticketCount =
+            document.querySelector("#ticket-count");
+
+        const search =
+            document.querySelector("#ticket-search");
+
+        const statusFilter =
+            document.querySelector("#status-filter");
+
+        const environmentFilter =
+            document.querySelector("#environment-filter");
+
+        const reviewFilter =
+            document.querySelector("#review-filter");
+
+
+        function renderTickets() {
+
+            const query =
+                search.value.trim().toLowerCase();
+
+            const status =
+                statusFilter.value;
+
+            const environment =
+                environmentFilter.value;
+
+
+            const filtered =
+                expandedTickets.filter(ticket => {
+
+                    const searchable =
+                        `
+          ${ticket.id}
+          ${ticket.summary}
+          ${ticket.status}
+          ${ticket.environment}
+          ${ticket.nextAction}
+        `.toLowerCase();
+
+
+                    if (
+                        query &&
+                        !searchable.includes(query)
+                    ) {
+                        return false;
+                    }
+
+
+                    if (
+                        status &&
+                        ticket.status !== status
+                    ) {
+                        return false;
+                    }
+
+
+                    if (
+                        environment &&
+                        ticket.environment !== environment
+                    ) {
+                        return false;
+                    }
+
+
+                    if (
+                        reviewFilter.checked &&
+                        ticket.nextAction
+                    ) {
+                        return false;
+                    }
+
+
+                    return true;
+                });
+
+
+            ticketTable.innerHTML = "";
+
+
+            for (const ticket of filtered) {
+
+                const row =
+                    document.createElement("tr");
+
+                row.classList.add("selectable-row");
+
+
+                if (!ticket.nextAction) {
+                    row.classList.add("ticket-review");
+                }
+
+
+                row.innerHTML = `
+      <td>
+        <strong>${ticket.id}</strong>
+      </td>
+
+      <td>${ticket.summary}</td>
+
+      <td>
+        <span class="status ${ticket.status === "Re Open"
+                        ? "status-blue"
+                        : "status-red"
+                    }">
+          ${ticket.status}
+        </span>
+      </td>
+
+      <td>${ticket.environment}</td>
+
+      <td>
+        ${ticket.nextAction ||
+                    '<span class="warning-text">No Next Action</span>'
+                    }
+      </td>
+    `;
+
+
+                row.addEventListener(
+                    "click",
+                    () => showDetails(ticket, row)
+                );
+
+
+                ticketTable.appendChild(row);
+            }
+
+
+            ticketCount.textContent =
+                `${filtered.length} ticket${filtered.length === 1 ? "" : "s"
+                }`;
+        }
+
+
+        function showDetails(ticket, activeRow) {
+
+            document
+                .querySelectorAll(".selectable-row")
+                .forEach(row => {
+                    row.classList.remove("selected-row");
+                });
+
+
+            activeRow.classList.add("selected-row");
+
+
+            document
+                .querySelector("#details-empty")
+                .classList.add("hidden");
+
+
+            document
+                .querySelector("#details-content")
+                .classList.remove("hidden");
+
+
+            document.querySelector(
+                "#detail-ticket-id"
+            ).textContent = ticket.id;
+
+
+            document.querySelector(
+                "#detail-summary"
+            ).textContent = ticket.summary;
+
+
+            const status =
+                document.querySelector(
+                    "#detail-status"
+                );
+
+
+            status.textContent =
+                ticket.status;
+
+
+            status.className =
+                `status ${ticket.status === "Re Open"
+                    ? "status-blue"
+                    : "status-red"
+                }`;
+
+
+            document.querySelector(
+                "#jira-status"
+            ).textContent =
+                ticket.status;
+
+
+            document.querySelector(
+                "#jira-assignee"
+            ).textContent =
+                ticket.assignee;
+
+
+            document.querySelector(
+                "#jira-priority"
+            ).textContent =
+                ticket.priority;
+
+
+            document.querySelector(
+                "#noc-environment"
+            ).textContent =
+                ticket.environment;
+
+
+            document.querySelector(
+                "#noc-next-action"
+            ).innerHTML =
+                ticket.nextAction ||
+                '<span class="warning-text">No Next Action recorded</span>';
+
+
+            document.querySelector(
+                "#noc-notes"
+            ).textContent =
+                ticket.notes;
+        }
+
+
+        search.addEventListener(
+            "input",
+            renderTickets
+        );
+
+
+        statusFilter.addEventListener(
+            "change",
+            renderTickets
+        );
+
+
+        environmentFilter.addEventListener(
+            "change",
+            renderTickets
+        );
+
+
+        reviewFilter.addEventListener(
+            "change",
+            renderTickets
+        );
+
+
+        renderTickets();
+
+    </script>
+
+</body>
+
+</html>

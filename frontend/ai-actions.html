@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SES NOC Operations - AI Actions</title>
+
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+
+
+<body>
+
+    <div class="app-shell">
+
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-name">SESAMI</div>
+                <div class="brand-subtitle">NOC OPERATIONS</div>
+            </div>
+
+            <nav class="nav">
+
+                <a class="nav-item" href="index.html">
+                    Dashboard
+                </a>
+
+                <a class="nav-item" href="shift-notes.html">
+                    Shift Notes
+                </a>
+
+                <a class="nav-item" href="tickets.html">
+                    Tickets
+                </a>
+
+                <a class="nav-item" href="investigations.html">
+                    Investigations
+                </a>
+
+                <a class="nav-item ai active" href="ai-actions.html">
+                    AI Actions
+                </a>
+
+                <div class="nav-divider"></div>
+
+                <a class="nav-item" href="#">
+                    Status
+                </a>
+
+                <a class="nav-item" href="#">
+                    Health
+                </a>
+
+                <a class="nav-item" href="end-shift.html">
+                    End Shift
+                </a>
+
+            </nav>
+
+            <div class="sidebar-bottom">
+
+                <div class="nav-item">
+                    Settings
+                </div>
+
+                <div class="version">
+                    noc-web v0.1.0
+                </div>
+
+            </div>
+
+        </aside>
+
+
+        <main class="main">
+
+            <header class="topbar">
+
+                <div class="ai-page-label">
+                    COPILOT ASSISTANCE
+                </div>
+
+                <div class="profile">
+
+                    <div class="avatar">
+                        BS
+                    </div>
+
+                    <div>
+                        <div class="profile-name">
+                            NOC Engineer
+                        </div>
+
+                        <div class="profile-subtitle">
+                            Local Workstation
+                        </div>
+                    </div>
+
+                </div>
+
+            </header>
+
+
+            <section class="content">
+
+                <div class="page-header">
+
+                    <div>
+
+                        <h1>AI Actions</h1>
+
+                        <p>
+                            Read-only AI analysis across the selected shift's
+                            operational records.
+                        </p>
+
+                    </div>
+
+                    <div class="page-controls">
+
+                        <input class="date-control" type="date" value="2026-10-26">
+
+                        <span class="ai-badge">
+                            COPILOT
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <!-- CONTEXT -->
+
+                <section class="ai-context-grid">
+
+                    <article class="panel ai-context-card">
+
+                        <div class="ai-context-status success">
+                            ✓
+                        </div>
+
+                        <div>
+                            <div class="ai-context-label">
+                                Shift Notes
+                            </div>
+
+                            <div class="ai-context-value">
+                                Available
+                            </div>
+                        </div>
+
+                    </article>
+
+
+                    <article class="panel ai-context-card">
+
+                        <div class="ai-context-status success">
+                            ✓
+                        </div>
+
+                        <div>
+                            <div class="ai-context-label">
+                                Open Jira Tickets
+                            </div>
+
+                            <div class="ai-context-value">
+                                5 records
+                            </div>
+                        </div>
+
+                    </article>
+
+
+                    <article class="panel ai-context-card">
+
+                        <div class="ai-context-status success">
+                            ✓
+                        </div>
+
+                        <div>
+                            <div class="ai-context-label">
+                                Validated Investigations
+                            </div>
+
+                            <div class="ai-context-value">
+                                1 record
+                            </div>
+                        </div>
+
+                    </article>
+
+
+                    <article class="panel ai-context-card">
+
+                        <div class="ai-context-status warning-text">
+                            ○
+                        </div>
+
+                        <div>
+                            <div class="ai-context-label">
+                                Handover
+                            </div>
+
+                            <div class="ai-context-value">
+                                Not created
+                            </div>
+                        </div>
+
+                    </article>
+
+                </section>
+
+
+                <section class="ai-layout">
+
+                    <!-- ACTIONS -->
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>AI Analysis</h2>
+
+                            <span class="ai-badge">
+                                READ ONLY
+                            </span>
+                        </div>
+
+
+                        <div class="ai-action-list">
+
+                            <button class="ai-action-card" type="button" data-action="analysis">
+
+                                <div class="ai-action-icon">
+                                    ◆
+                                </div>
+
+                                <div>
+
+                                    <strong>
+                                        Analyze Entire Shift
+                                    </strong>
+
+                                    <p>
+                                        Review operational activity, tickets,
+                                        investigations, changes, and unresolved work.
+                                    </p>
+
+                                    <div class="ai-action-state">
+                                        Ready
+                                    </div>
+
+                                </div>
+
+                            </button>
+
+
+                            <button class="ai-action-card" type="button" data-action="summary">
+
+                                <div class="ai-action-icon">
+                                    ◆
+                                </div>
+
+                                <div>
+
+                                    <strong>
+                                        Summarize Current Shift
+                                    </strong>
+
+                                    <p>
+                                        Produce a concise operational summary using
+                                        the available shift context.
+                                    </p>
+
+                                    <div class="ai-action-state">
+                                        Ready
+                                    </div>
+
+                                </div>
+
+                            </button>
+
+
+                            <button class="ai-action-card" type="button" data-action="followups">
+
+                                <div class="ai-action-icon">
+                                    ◆
+                                </div>
+
+                                <div>
+
+                                    <strong>
+                                        Identify Follow-ups
+                                    </strong>
+
+                                    <p>
+                                        Find unresolved work across tickets,
+                                        shift notes, and validated investigations.
+                                    </p>
+
+                                    <div class="ai-action-state">
+                                        Ready
+                                    </div>
+
+                                </div>
+
+                            </button>
+
+
+                            <button class="ai-action-card" type="button" data-action="handover">
+
+                                <div class="ai-action-icon">
+                                    ◆
+                                </div>
+
+                                <div>
+
+                                    <strong>
+                                        Review Handover Draft
+                                    </strong>
+
+                                    <p>
+                                        Check the handover for gaps, unclear wording,
+                                        contradictions, and missing next actions.
+                                    </p>
+
+                                    <div class="ai-action-state">
+                                        Ready
+                                    </div>
+
+                                </div>
+
+                            </button>
+
+                        </div>
+
+                    </article>
+
+
+                    <!-- REPORTS -->
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+
+                            <h2>
+                                Recent AI Reports
+                            </h2>
+
+                            <span class="count-badge">
+                                4 reports
+                            </span>
+
+                        </div>
+
+
+                        <div class="ai-report-list">
+
+                            <button class="ai-report-row" type="button" data-report="analysis">
+
+                                <div>
+
+                                    <strong>
+                                        Shift Analysis
+                                    </strong>
+
+                                    <span>
+                                        ai-shift-analysis.md
+                                    </span>
+
+                                </div>
+
+                                <span class="report-state">
+                                    Available
+                                </span>
+
+                            </button>
+
+
+                            <button class="ai-report-row" type="button" data-report="summary">
+
+                                <div>
+
+                                    <strong>
+                                        Shift Summary
+                                    </strong>
+
+                                    <span>
+                                        ai-shift-summary.md
+                                    </span>
+
+                                </div>
+
+                                <span class="report-state">
+                                    Available
+                                </span>
+
+                            </button>
+
+
+                            <button class="ai-report-row" type="button" data-report="followups">
+
+                                <div>
+
+                                    <strong>
+                                        Follow-ups
+                                    </strong>
+
+                                    <span>
+                                        ai-followups.md
+                                    </span>
+
+                                </div>
+
+                                <span class="report-state">
+                                    Available
+                                </span>
+
+                            </button>
+
+
+                            <button class="ai-report-row" type="button" data-report="handover">
+
+                                <div>
+
+                                    <strong>
+                                        Handover Review
+                                    </strong>
+
+                                    <span>
+                                        ai-handover-review.md
+                                    </span>
+
+                                </div>
+
+                                <span class="report-state">
+                                    Available
+                                </span>
+
+                            </button>
+
+                        </div>
+
+                    </article>
+
+                </section>
+
+
+                <!-- SAFETY NOTICE -->
+
+                <section class="ai-safety-notice">
+
+                    <div class="ai-safety-icon">
+                        ◆
+                    </div>
+
+                    <div>
+
+                        <strong>
+                            Human-controlled AI
+                        </strong>
+
+                        <p>
+                            AI reports are advisory. Copilot does not modify
+                            tickets, shift notes, investigations, handovers,
+                            Datadog, or Microsoft 365 from this workflow.
+                        </p>
+
+                    </div>
+
+                </section>
+
+            </section>
+
+        </main>
+
+    </div>
+
+    <!-- AI REPORT MODAL -->
+
+    <div id="ai-report-modal" class="modal-backdrop hidden">
+
+        <div class="modal-card ai-report-modal">
+
+            <div class="modal-header">
+
+                <div>
+
+                    <div class="ai-report-kicker">
+                        AI REPORT
+                    </div>
+
+                    <h2 id="ai-report-title">
+                    </h2>
+
+                    <p id="ai-report-file">
+                    </p>
+
+                </div>
+
+                <button id="close-ai-report" class="modal-close" type="button" aria-label="Close">
+                    ×
+                </button>
+
+            </div>
+
+
+            <div id="ai-report-content" class="ai-report-content"></div>
+
+
+            <div class="modal-actions">
+
+                <button id="close-ai-report-button" class="button" type="button">
+                    Close
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+
+        const reportButtons =
+            document.querySelectorAll(
+                ".ai-report-row"
+            );
+
+
+        const reportModal =
+            document.querySelector(
+                "#ai-report-modal"
+            );
+
+
+        const reportTitle =
+            document.querySelector(
+                "#ai-report-title"
+            );
+
+
+        const reportFile =
+            document.querySelector(
+                "#ai-report-file"
+            );
+
+
+        const reportContent =
+            document.querySelector(
+                "#ai-report-content"
+            );
+
+
+        const reportCloseX =
+            document.querySelector(
+                "#close-ai-report"
+            );
+
+
+        const reportCloseButton =
+            document.querySelector(
+                "#close-ai-report-button"
+            );
+
+
+        const mockReports = {
+
+            analysis: {
+
+                title:
+                    "Shift Analysis",
+
+                file:
+                    "ai-shift-analysis.md",
+
+                content: `
+                        <section class="ai-report-item">
+            
+                            <strong>
+                                Operational Activity
+                            </strong>
+            
+                            <p>
+                                Five Jira tickets remain locally open.
+                                One validated investigation is available.
+                            </p>
+            
+                        </section>
+            
+            
+                        <section class="ai-report-item">
+            
+                            <strong>
+                                Needs Attention
+                            </strong>
+            
+                            <p>
+                                NOC-556 has no Next Action recorded.
+                            </p>
+            
+                        </section>
+            
+            
+                        <section class="ai-report-item">
+            
+                            <strong>
+                                IR-16
+                            </strong>
+            
+                            <p>
+                                Export memory investigation remains open
+                                for operational follow-up.
+                            </p>
+            
+                        </section>
+                    `
+            },
+
+
+            summary: {
+
+                title:
+                    "Shift Summary",
+
+                file:
+                    "ai-shift-summary.md",
+
+                content: `
+                        <section class="ai-report-item">
+            
+                            <strong>
+                                Summary
+                            </strong>
+            
+                            <p>
+                                Shift activity included Jira ticket
+                                follow-up, monitoring changes,
+                                Salesforce activity, and review of the
+                                IR-16 Export memory investigation.
+                            </p>
+            
+                        </section>
+            
+            
+                        <section class="ai-report-item">
+            
+                            <strong>
+                                Outstanding Work
+                            </strong>
+            
+                            <p>
+                                Development investigations, pending
+                                testing, and the recommended Export
+                                restart remain open.
+                            </p>
+            
+                        </section>
+                    `
+            },
+
+
+            followups: {
+
+                title:
+                    "Follow-ups",
+
+                file:
+                    "ai-followups.md",
+
+                content: `
+                        <section class="ai-report-item">
+            
+                            <strong>
+                                NOC-545
+                            </strong>
+            
+                            <p>
+                                Pending test from Josh Keogh remains
+                                outstanding.
+                            </p>
+            
+                        </section>
+            
+            
+                        <section class="ai-report-item">
+            
+                            <strong>
+                                NOC-556
+                            </strong>
+            
+                            <p>
+                                Escalated ticket has no Next Action
+                                recorded. Human review is recommended.
+                            </p>
+            
+                        </section>
+            
+            
+                        <section class="ai-report-item">
+            
+                            <strong>
+                                NOC-575
+                            </strong>
+            
+                            <p>
+                                Development investigation remains
+                                pending.
+                            </p>
+            
+                        </section>
+            
+            
+                        <section class="ai-report-item">
+            
+                            <strong>
+                                IR-16 Export Memory
+                            </strong>
+            
+                            <p>
+                                Controlled Export restart remains
+                                outstanding.
+                            </p>
+            
+                        </section>
+                    `
+            },
+
+
+            handover: {
+
+                title:
+                    "Handover Review",
+
+                file:
+                    "ai-handover-review.md",
+
+                content: `
+                        <section class="ai-report-item">
+            
+                            <strong>
+                                NOC-556
+                            </strong>
+            
+                            <p>
+                                Add a next-shift follow-up because no
+                                Next Action is currently recorded.
+                            </p>
+            
+                        </section>
+            
+            
+                        <section class="ai-report-item">
+            
+                            <strong>
+                                IR-16
+                            </strong>
+            
+                            <p>
+                                Clearly separate Notebook snapshot
+                                observations from current live status.
+                            </p>
+            
+                        </section>
+            
+            
+                        <section class="ai-report-item">
+            
+                            <strong>
+                                Clarity
+                            </strong>
+            
+                            <p>
+                                Keep recommended actions separate from
+                                actions documented as completed.
+                            </p>
+            
+                        </section>
+                    `
+            }
+
+        };
+
+
+        function showReportModal(
+            reportKey
+        ) {
+
+            const report =
+                mockReports[reportKey];
+
+
+            if (!report) {
+                return;
+            }
+
+
+            reportTitle.textContent =
+                report.title;
+
+
+            reportFile.textContent =
+                report.file;
+
+
+            reportContent.innerHTML =
+                report.content;
+
+
+            reportModal.classList.remove(
+                "hidden"
+            );
+
+        }
+
+
+        function hideReportModal() {
+
+            reportModal.classList.add(
+                "hidden"
+            );
+
+        }
+
+
+        reportButtons.forEach(
+            button => {
+
+                button.addEventListener(
+                    "click",
+                    () => {
+
+                        showReportModal(
+                            button.dataset.report
+                        );
+
+                    }
+                );
+
+            }
+        );
+
+
+        reportCloseX.addEventListener(
+            "click",
+            hideReportModal
+        );
+
+
+        reportCloseButton.addEventListener(
+            "click",
+            hideReportModal
+        );
+
+
+        reportModal.addEventListener(
+            "click",
+            event => {
+
+                if (
+                    event.target === reportModal
+                ) {
+
+                    hideReportModal();
+
+                }
+
+            }
+        );
+
+
+        document.addEventListener(
+            "keydown",
+            event => {
+
+                if (
+                    event.key === "Escape" &&
+                    !reportModal.classList.contains(
+                        "hidden"
+                    )
+                ) {
+
+                    hideReportModal();
+
+                }
+
+            }
+        );
+
+    </script>
+
+</body>
+
+</html>

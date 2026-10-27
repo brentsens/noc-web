@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SES NOC Operations - Shift Notes</title>
+
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-name">SESAMI</div>
+                <div class="brand-subtitle">NOC OPERATIONS</div>
+            </div>
+
+            <nav class="nav">
+                <a class="nav-item" href="index.html">Dashboard</a>
+                <a class="nav-item active" href="shift-notes.html">Shift Notes</a>
+                <a class="nav-item" href="tickets.html">Tickets</a>
+                <a class="nav-item" href="investigations.html">Investigations</a>
+                <a class="nav-item ai" href="ai-actions.html">AI Actions</a>
+
+                <div class="nav-divider"></div>
+
+                <a class="nav-item" href="#">Status</a>
+                <a class="nav-item" href="#">Health</a>
+                <a class="nav-item" href="end-shift.html">End Shift</a>
+            </nav>
+
+            <div class="sidebar-bottom">
+                <div class="nav-item">Settings</div>
+                <div class="version">noc-web v0.1.0</div>
+            </div>
+
+        </aside>
+
+
+        <main class="main">
+
+            <header class="topbar">
+
+                <input id="note-search" class="search" type="search" placeholder="Search shift notes...">
+
+                <div class="profile">
+                    <div class="avatar">BS</div>
+
+                    <div>
+                        <div class="profile-name">NOC Engineer</div>
+                        <div class="profile-subtitle">Local Workstation</div>
+                    </div>
+                </div>
+
+            </header>
+
+
+            <section class="content">
+
+                <div class="page-header">
+
+                    <div>
+                        <h1>Shift Notes</h1>
+                        <p>
+                            Structured activity recorded during the selected shift.
+                        </p>
+                    </div>
+
+                    <div class="page-controls">
+
+                        <input id="shift-date" class="date-control" type="date" value="2026-10-26">
+
+                        <button id="open-add-note" class="button primary" type="button">
+                            + Add Note
+                        </button>
+
+                    </div>
+
+                </div>
+
+
+                <section class="notes-summary">
+
+                    <div class="notes-summary-item">
+                        <span class="summary-label">Shift</span>
+                        <strong>4:00 PM - 12:00 AM</strong>
+                    </div>
+
+                    <div class="notes-summary-item">
+                        <span class="summary-label">Entries</span>
+                        <strong id="note-count">6</strong>
+                    </div>
+
+                    <div class="notes-summary-item">
+                        <span class="summary-label">Last Update</span>
+                        <strong>15:10</strong>
+                    </div>
+
+                </section>
+
+
+                <section id="notes-container" class="notes-container"></section>
+
+            </section>
+
+        </main>
+
+    </div>
+
+
+    <div id="note-modal" class="modal-backdrop hidden">
+
+        <div class="modal-card">
+
+            <div class="modal-header">
+                <div>
+                    <h2>Add Shift Note</h2>
+                    <p>
+                        Record structured activity for this shift.
+                    </p>
+                </div>
+
+                <button id="close-modal" class="modal-close" type="button" aria-label="Close">
+                    ×
+                </button>
+            </div>
+
+
+            <form id="note-form">
+
+                <label class="form-label" for="note-category">
+                    Category
+                </label>
+
+                <select id="note-category" class="form-control">
+                    <option>Open Tickets</option>
+                    <option>Active Alerts / Investigations</option>
+                    <option>Salesforce Tickets</option>
+                    <option>Escalations</option>
+                    <option>Changes / Monitor Updates</option>
+                    <option>Notes for Handover</option>
+                </select>
+
+
+                <label class="form-label" for="note-text">
+                    Note
+                </label>
+
+                <textarea id="note-text" class="form-control note-textarea" placeholder="Enter the operational note..."
+                    rows="6"></textarea>
+
+
+                <div class="modal-actions">
+
+                    <button id="cancel-note" class="button" type="button">
+                        Cancel
+                    </button>
+
+                    <button class="button primary" type="submit">
+                        Add Note
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+    <script>
+
+        const notes = [
+            {
+                category: "Open Tickets",
+                entries: [
+                    {
+                        time: "14:22",
+                        text: "NOC-545 pending test from Josh Keogh."
+                    },
+                    {
+                        time: "13:47",
+                        text: "Contacted Chris Shelton regarding NOC-555."
+                    }
+                ]
+            },
+
+            {
+                category: "Active Alerts / Investigations",
+                entries: [
+                    {
+                        time: "13:05",
+                        text: "Export memory investigation IR-16 reviewed."
+                    }
+                ]
+            },
+
+            {
+                category: "Salesforce Tickets",
+                entries: [
+                    {
+                        time: "12:48",
+                        text: "SF 00459666 instructions provided to Brinks."
+                    }
+                ]
+            },
+
+            {
+                category: "Escalations",
+                entries: []
+            },
+
+            {
+                category: "Changes / Monitor Updates",
+                entries: [
+                    {
+                        time: "14:12",
+                        text: "Added alerting tags to Platform Services monitor."
+                    }
+                ]
+            },
+
+            {
+                category: "Notes for Handover",
+                entries: [
+                    {
+                        time: "15:10",
+                        text: "Follow up on Dev investigation for NOC-575."
+                    }
+                ]
+            }
+        ];
+
+
+        const container =
+            document.querySelector("#notes-container");
+
+        const search =
+            document.querySelector("#note-search");
+
+        const modal =
+            document.querySelector("#note-modal");
+
+        const openModal =
+            document.querySelector("#open-add-note");
+
+        const closeModal =
+            document.querySelector("#close-modal");
+
+        const cancelNote =
+            document.querySelector("#cancel-note");
+
+        const form =
+            document.querySelector("#note-form");
+
+        const categoryInput =
+            document.querySelector("#note-category");
+
+        const noteInput =
+            document.querySelector("#note-text");
+
+        const noteCount =
+            document.querySelector("#note-count");
+
+
+        function totalEntries() {
+            return notes.reduce(
+                (total, section) =>
+                    total + section.entries.length,
+                0
+            );
+        }
+
+
+        function renderNotes() {
+
+            const query =
+                search.value.trim().toLowerCase();
+
+            container.innerHTML = "";
+
+
+            for (const section of notes) {
+
+                const matchingEntries =
+                    section.entries.filter(entry =>
+                        entry.text
+                            .toLowerCase()
+                            .includes(query)
+                    );
+
+
+                if (
+                    query &&
+                    matchingEntries.length === 0
+                ) {
+                    continue;
+                }
+
+
+                const card =
+                    document.createElement("article");
+
+                card.className =
+                    "panel note-section";
+
+
+                const heading =
+                    document.createElement("div");
+
+                heading.className =
+                    "note-section-header";
+
+
+                heading.innerHTML = `
+      <h2>${section.category}</h2>
+
+      <span class="count-badge">
+        ${section.entries.length}
+      </span>
+    `;
+
+
+                card.appendChild(heading);
+
+
+                const entries =
+                    query
+                        ? matchingEntries
+                        : section.entries;
+
+
+                if (entries.length === 0) {
+
+                    const empty =
+                        document.createElement("div");
+
+                    empty.className =
+                        "notes-empty";
+
+                    empty.textContent =
+                        "No entries recorded.";
+
+                    card.appendChild(empty);
+
+                } else {
+
+                    for (const entry of entries) {
+
+                        const row =
+                            document.createElement("div");
+
+                        row.className =
+                            "note-entry";
+
+
+                        row.innerHTML = `
+          <div class="note-time">
+            ${entry.time}
+          </div>
+
+          <div class="note-body">
+            ${entry.text}
+          </div>
+        `;
+
+
+                        card.appendChild(row);
+                    }
+                }
+
+
+                container.appendChild(card);
+            }
+
+
+            noteCount.textContent =
+                totalEntries();
+        }
+
+
+        function showModal() {
+            modal.classList.remove("hidden");
+            noteInput.focus();
+        }
+
+
+        function hideModal() {
+            modal.classList.add("hidden");
+            noteInput.value = "";
+        }
+
+
+        openModal.addEventListener(
+            "click",
+            showModal
+        );
+
+
+        closeModal.addEventListener(
+            "click",
+            hideModal
+        );
+
+
+        cancelNote.addEventListener(
+            "click",
+            hideModal
+        );
+
+
+        modal.addEventListener(
+            "click",
+            event => {
+
+                if (event.target === modal) {
+                    hideModal();
+                }
+            }
+        );
+
+        document.addEventListener(
+            "keydown",
+            event => {
+                if (
+                    event.key === "Escape" &&
+                    !modal.classList.contains("hidden")
+                ) {
+                    hideModal();
+                }
+            }
+        );
+
+        form.addEventListener(
+            "submit",
+            event => {
+
+                event.preventDefault();
+
+                const text =
+                    noteInput.value.trim();
+
+
+                if (!text) {
+                    return;
+                }
+
+
+                const category =
+                    categoryInput.value;
+
+
+                const section =
+                    notes.find(
+                        item =>
+                            item.category === category
+                    );
+
+
+                if (!section) {
+                    return;
+                }
+
+
+                const now =
+                    new Date();
+
+
+                const time =
+                    now.toLocaleTimeString(
+                        [],
+                        {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: false
+                        }
+                    );
+
+
+                section.entries.push({
+                    time,
+                    text
+                });
+
+
+                hideModal();
+                renderNotes();
+            }
+        );
+
+
+        search.addEventListener(
+            "input",
+            renderNotes
+        );
+
+
+        renderNotes();
+
+    </script>
+
+</body>
+
+</html>

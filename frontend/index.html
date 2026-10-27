@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SES NOC Operations</title>
+
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-name">SESAMI</div>
+                <div class="brand-subtitle">NOC OPERATIONS</div>
+            </div>
+
+            <nav class="nav">
+
+                <a class="nav-item active" href="index.html">
+                    Dashboard
+                </a>
+
+                <a class="nav-item" href="shift-notes.html">
+                    Shift Notes
+                </a>
+
+                <a class="nav-item" href="tickets.html">
+                    Tickets
+                </a>
+
+                <a class="nav-item" href="investigations.html">
+                    Investigations
+                </a>
+
+                <a class="nav-item ai" href="ai-actions.html">
+                    AI Actions
+                </a>
+
+                <div class="nav-divider"></div>
+
+                <a class="nav-item" href="#">
+                    Status
+                </a>
+
+                <a class="nav-item" href="#">
+                    Health
+                </a>
+
+                <a class="nav-item" href="end-shift.html">
+                    End Shift
+                </a>
+
+            </nav>
+
+            <div class="sidebar-bottom">
+
+                <div class="nav-item">
+                    Settings
+                </div>
+
+                <div class="version">
+                    noc-web v0.1.0
+                </div>
+
+            </div>
+
+        </aside>
+
+
+        <main class="main">
+
+            <header class="topbar">
+
+                <input class="search" type="search" placeholder="Search...">
+
+                <div class="profile">
+                    <div class="avatar">BS</div>
+
+                    <div>
+                        <div class="profile-name">NOC Engineer</div>
+                        <div class="profile-subtitle">Local Workstation</div>
+                    </div>
+                </div>
+
+            </header>
+
+
+            <section class="content">
+
+                <div class="page-header">
+
+                    <div>
+                        <h1>NOC Dashboard</h1>
+                        <p>Operational overview for your selected shift.</p>
+                    </div>
+
+                    <div class="page-controls">
+
+                        <input class="date-control" type="date" value="2026-10-26">
+
+                        <div class="ready-badge">
+                            ● SHIFT READY
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <section class="metrics">
+
+                    <article class="metric-card">
+                        <div class="metric-label">Open Jira</div>
+                        <div class="metric-value teal">5</div>
+                        <div class="metric-subtitle">Tracked tickets</div>
+                    </article>
+
+                    <article class="metric-card">
+                        <div class="metric-label">Investigations</div>
+                        <div class="metric-value purple">1</div>
+                        <div class="metric-subtitle">This shift</div>
+                    </article>
+
+                    <article class="metric-card">
+                        <div class="metric-label">Needs Review</div>
+                        <div class="metric-value yellow">0</div>
+                        <div class="metric-subtitle">Items</div>
+                    </article>
+
+                    <article class="metric-card">
+                        <div class="metric-label">Handover</div>
+                        <div class="metric-value yellow small">
+                            Pending
+                        </div>
+                        <div class="metric-subtitle">
+                            Not yet created
+                        </div>
+                    </article>
+
+                </section>
+
+
+                <section class="dashboard-grid">
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Open Tickets</h2>
+                            <a href="tickets.html">View All →</a>
+                        </div>
+
+                        <table>
+
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Status</th>
+                                    <th>Environment</th>
+                                    <th>Next Action</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="ticket-table"></tbody>
+
+                        </table>
+
+                    </article>
+
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Recent Shift Activity</h2>
+                            <a href="shift-notes.html">
+                                View Notes →
+                            </a>
+                        </div>
+
+                        <div id="activity-list" class="activity-list"></div>
+
+                    </article>
+
+                </section>
+
+
+                <section class="lower-grid">
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>AI Insights</h2>
+                            <span class="ai-badge">COPILOT</span>
+                        </div>
+
+                        <div class="ai-insight">
+
+                            <div class="insight-row warning">
+                                <span>●</span>
+
+                                <div>
+                                    <strong>NOC-556</strong>
+                                    <p>No Next Action recorded.</p>
+                                </div>
+                            </div>
+
+                            <div class="insight-row purple-insight">
+                                <span>●</span>
+
+                                <div>
+                                    <strong>IR-16</strong>
+                                    <p>
+                                        Controlled restart remains outstanding.
+                                    </p>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <a class="button purple-button" href="ai-actions.html">
+                            View AI Actions
+                        </a>
+
+                    </article>
+
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Quick Actions</h2>
+                        </div>
+
+                        <div class="quick-actions">
+
+                            <button class="button primary">
+                                Start Shift
+                            </button>
+
+                            <button class="button">
+                                Add Shift Note
+                            </button>
+
+                            <a class="button" href="tickets.html">
+                                Manage Tickets
+                            </a>
+
+                            <a class="button" href="investigations.html">
+                                New Investigation
+                            </a>
+
+                            <a class="button" href="end-shift.html">
+                                End Shift
+                            </a>
+
+                        </div>
+
+                    </article>
+
+                </section>
+
+
+                <section class="dependency-bar">
+
+                    <span>
+                        <span class="dot green-dot"></span>
+                        Atlas
+                    </span>
+
+                    <span>
+                        <span class="dot green-dot"></span>
+                        M365
+                    </span>
+
+                    <span>
+                        <span class="dot green-dot"></span>
+                        Copilot CLI
+                    </span>
+
+                    <span>
+                        <span class="dot green-dot"></span>
+                        Datadog MCP
+                    </span>
+
+                </section>
+
+            </section>
+
+        </main>
+
+    </div>
+
+
+    <script type="module">
+
+        import {
+            tickets,
+            activity
+        } from "./js/mock-data.js";
+
+
+        const ticketTable =
+            document.querySelector("#ticket-table");
+
+
+        for (const ticket of tickets) {
+
+            const row =
+                document.createElement("tr");
+
+            if (!ticket.nextAction) {
+                row.classList.add("ticket-review");
+            }
+
+
+            const statusClass =
+                ticket.status === "Re Open"
+                    ? "status-blue"
+                    : "status-red";
+
+            const nextAction =
+                ticket.nextAction ||
+                '<span class="warning-text">No Next Action</span>';
+
+            row.innerHTML = `
+      <td>${ticket.id}</td>
+
+      <td>
+        <span class="status ${statusClass}">
+          ${ticket.status}
+        </span>
+      </td>
+
+      <td>${ticket.environment}</td>
+
+      <td>${nextAction}</td>
+    `;
+
+            ticketTable.appendChild(row);
+        }
+
+
+        const activityList =
+            document.querySelector("#activity-list");
+
+
+        for (const item of activity) {
+
+            const row =
+                document.createElement("div");
+
+            row.className =
+                "activity-row";
+
+            row.innerHTML = `
+      <div class="activity-time">
+        ${item.time}
+      </div>
+
+      <div>
+        ${item.text}
+      </div>
+    `;
+
+            activityList.appendChild(row);
+        }
+
+    </script>
+
+</body>
+
+</html>

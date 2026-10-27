@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SES NOC Operations - End Shift</title>
+
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-name">SESAMI</div>
+                <div class="brand-subtitle">NOC OPERATIONS</div>
+            </div>
+
+            <nav class="nav">
+
+                <a class="nav-item" href="index.html">
+                    Dashboard
+                </a>
+
+                <a class="nav-item" href="shift-notes.html">
+                    Shift Notes
+                </a>
+
+                <a class="nav-item" href="tickets.html">
+                    Tickets
+                </a>
+
+                <a class="nav-item" href="investigations.html">
+                    Investigations
+                </a>
+
+                <a class="nav-item ai" href="ai-actions.html">
+                    AI Actions
+                </a>
+
+                <div class="nav-divider"></div>
+
+                <a class="nav-item" href="#">
+                    Status
+                </a>
+
+                <a class="nav-item" href="#">
+                    Health
+                </a>
+
+                <a class="nav-item active" href="end-shift.html">
+                    End Shift
+                </a>
+
+            </nav>
+
+            <div class="sidebar-bottom">
+                <div class="nav-item">Settings</div>
+                <div class="version">noc-web v0.1.0</div>
+            </div>
+
+        </aside>
+
+
+        <main class="main">
+
+            <header class="topbar">
+
+                <div class="end-shift-label">
+                    SHIFT CONTROL
+                </div>
+
+                <div class="profile">
+
+                    <div class="avatar">
+                        BS
+                    </div>
+
+                    <div>
+                        <div class="profile-name">
+                            NOC Engineer
+                        </div>
+
+                        <div class="profile-subtitle">
+                            Local Workstation
+                        </div>
+                    </div>
+
+                </div>
+
+            </header>
+
+
+            <section class="content">
+
+                <div class="page-header">
+
+                    <div>
+
+                        <h1>
+                            End Shift
+                        </h1>
+
+                        <p>
+                            Review operational readiness before generating
+                            the shift handover.
+                        </p>
+
+                    </div>
+
+                    <div class="page-controls">
+
+                        <input class="date-control" type="date" value="2026-10-26">
+
+                        <span class="end-ready-badge">
+                            READY FOR REVIEW
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <section class="end-shift-layout">
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+
+                            <h2>
+                                End-of-Shift Readiness
+                            </h2>
+
+                            <span class="count-badge">
+                                5 checks
+                            </span>
+
+                        </div>
+
+
+                        <div class="readiness-list">
+
+                            <div class="readiness-row">
+
+                                <div class="readiness-icon success">
+                                    ✓
+                                </div>
+
+                                <div class="readiness-copy">
+
+                                    <strong>
+                                        Jira Freshness
+                                    </strong>
+
+                                    <p>
+                                        Five locally tracked tickets checked.
+                                    </p>
+
+                                </div>
+
+                                <span class="readiness-state success-text">
+                                    CHECKED
+                                </span>
+
+                            </div>
+
+
+                            <div class="readiness-row">
+
+                                <div class="readiness-icon success">
+                                    ✓
+                                </div>
+
+                                <div class="readiness-copy">
+
+                                    <strong>
+                                        Shift Status
+                                    </strong>
+
+                                    <p>
+                                        Shift notes and local workspace are available.
+                                    </p>
+
+                                </div>
+
+                                <span class="readiness-state success-text">
+                                    CLEAR
+                                </span>
+
+                            </div>
+
+
+                            <div class="readiness-row">
+
+                                <div class="readiness-icon success">
+                                    ✓
+                                </div>
+
+                                <div class="readiness-copy">
+
+                                    <strong>
+                                        Review Gate
+                                    </strong>
+
+                                    <p>
+                                        No unresolved review blockers detected.
+                                    </p>
+
+                                </div>
+
+                                <span class="readiness-state success-text">
+                                    CLEAR
+                                </span>
+
+                            </div>
+
+
+                            <div class="readiness-row">
+
+                                <div class="readiness-icon success">
+                                    ✓
+                                </div>
+
+                                <div class="readiness-copy">
+
+                                    <strong>
+                                        Automation Health
+                                    </strong>
+
+                                    <p>
+                                        NOC automation is healthy with no blocking failures.
+                                    </p>
+
+                                </div>
+
+                                <span class="readiness-state success-text">
+                                    HEALTHY
+                                </span>
+
+                            </div>
+
+
+                            <div class="readiness-row">
+
+                                <div class="readiness-icon success">
+                                    ✓
+                                </div>
+
+                                <div class="readiness-copy">
+
+                                    <strong>
+                                        Investigations
+                                    </strong>
+
+                                    <p>
+                                        One validated investigation is ready for handover.
+                                    </p>
+
+                                </div>
+
+                                <span class="readiness-state success-text">
+                                    VALIDATED
+                                </span>
+
+                            </div>
+
+                        </div>
+
+                    </article>
+
+
+                    <aside class="panel handover-status-panel">
+
+                        <div class="panel-header">
+
+                            <h2>
+                                Handover
+                            </h2>
+
+                            <span id="handover-state" class="handover-pending-badge">
+                                PENDING
+                            </span>
+
+                        </div>
+
+
+                        <div id="handover-empty" class="handover-empty-state">
+
+                            <div class="handover-icon">
+                                ◇
+                            </div>
+
+                            <h3>
+                                Handover Not Generated
+                            </h3>
+
+                            <p>
+                                All readiness checks should be reviewed before
+                                generating the official shift handover.
+                            </p>
+
+
+                            <button id="generate-handover" class="button primary generate-handover" type="button">
+                                Generate Handover
+                            </button>
+
+                        </div>
+
+                        <div id="handover-preview" class="handover-preview hidden">
+
+                            <div class="handover-preview-header">
+                                <div>
+                                    <span class="success-text">
+                                        ✓ CREATED
+                                    </span>
+
+                                    <h3>
+                                        NOC Shift Handover
+                                    </h3>
+
+                                    <p>
+                                        October 26, 2026
+                                    </p>
+                                </div>
+                            </div>
+
+
+                            <div class="handover-preview-content">
+
+                                <h4>Summary</h4>
+
+                                <p>
+                                    Shift included Jira ticket follow-up,
+                                    monitoring changes, and review of the
+                                    IR-16 Export memory investigation.
+                                </p>
+
+
+                                <h4>Open Tickets</h4>
+
+                                <p>
+                                    Five Jira tickets remain locally tracked.
+                                    NOC-556 requires review because no Next
+                                    Action is recorded.
+                                </p>
+
+
+                                <h4>Investigations</h4>
+
+                                <p>
+                                    IR-16 is validated and ready for handover.
+                                    Controlled Export restart remains an
+                                    outstanding follow-up.
+                                </p>
+
+
+                                <h4>Next Shift Actions</h4>
+
+                                <p>
+                                    Follow up on pending testing, development
+                                    investigations, NOC-556 Next Action, and
+                                    the IR-16 restart recommendation.
+                                </p>
+
+                            </div>
+
+
+                            <div class="handover-preview-actions">
+
+                                <button class="button" type="button">
+                                    View Full Handover
+                                </button>
+
+                                <button id="continue-delivery" class="button primary" type="button">
+                                    Continue to Delivery
+                                </button>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="handover-safety-note">
+
+                            <strong>
+                                Human approval required
+                            </strong>
+
+                            <p>
+                                Handover generation, M365 preview, and email delivery
+                                will remain explicitly controlled by the NOC Engineer.
+                            </p>
+
+                        </div>
+
+                    </aside>
+
+                </section>
+
+            </section>
+
+        </main>
+
+    </div>
+
+    <!-- DELIVERY OPTIONS MODAL -->
+
+    <div id="delivery-modal" class="modal-backdrop hidden">
+
+        <div class="modal-card">
+
+            <div class="modal-header">
+
+                <div>
+                    <h2>Deliver Handover</h2>
+
+                    <p>
+                        Choose how the reviewed handover should be delivered.
+                    </p>
+                </div>
+
+                <button id="close-delivery-modal" class="modal-close" type="button" aria-label="Close">
+                    ×
+                </button>
+
+            </div>
+
+
+            <form id="delivery-form">
+
+                <div class="delivery-options">
+
+                    <label class="delivery-option">
+
+                        <input type="radio" name="delivery" value="self" checked>
+
+                        <div>
+                            <strong>Send to Myself</strong>
+
+                            <p>
+                                Use the signed-in Microsoft 365 mailbox.
+                            </p>
+                        </div>
+
+                    </label>
+
+
+                    <label class="delivery-option">
+
+                        <input type="radio" name="delivery" value="other">
+
+                        <div>
+                            <strong>Send to Another Recipient</strong>
+
+                            <p>
+                                Specify an email address for delivery.
+                            </p>
+                        </div>
+
+                    </label>
+
+
+                    <label class="delivery-option">
+
+                        <input type="radio" name="delivery" value="skip">
+
+                        <div>
+                            <strong>Do Not Send</strong>
+
+                            <p>
+                                Keep the handover locally without email delivery.
+                            </p>
+                        </div>
+
+                    </label>
+
+                </div>
+
+
+                <div id="recipient-field" class="recipient-field hidden">
+
+                    <label class="form-label" for="recipient-email">
+                        Recipient Email
+                    </label>
+
+                    <input id="recipient-email" class="form-control" type="email" placeholder="noc@example.com">
+
+                </div>
+
+
+                <div class="modal-actions">
+
+                    <button id="cancel-delivery" class="button" type="button">
+                        Cancel
+                    </button>
+
+                    <button id="preview-delivery" class="button primary" type="submit">
+                        Preview Email
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+    <!-- EMAIL PREVIEW MODAL -->
+
+    <div id="email-preview-modal" class="modal-backdrop hidden">
+
+        <div class="modal-card email-preview-modal">
+
+            <div class="modal-header">
+
+                <div>
+                    <div class="email-preview-kicker">
+                        M365 EMAIL PREVIEW
+                    </div>
+
+                    <h2>Handover Email Preview</h2>
+
+                    <p>
+                        Review the complete message before sending.
+                    </p>
+                </div>
+
+                <button id="close-email-preview" class="modal-close" type="button" aria-label="Close">
+                    ×
+                </button>
+
+            </div>
+
+
+            <div class="email-preview-metadata">
+
+                <div>
+                    <label>To</label>
+                    <span id="preview-recipient">
+                        Signed-in Microsoft 365 mailbox
+                    </span>
+                </div>
+
+                <div>
+                    <label>Subject</label>
+                    <span>
+                        NOC Shift Handover - 10/26/2026
+                    </span>
+                </div>
+
+            </div>
+
+
+            <div class="email-preview-body">
+
+                <h3>NOC Shift Handover</h3>
+
+                <p class="email-preview-date">
+                    October 26, 2026
+                </p>
+
+                <h4>Summary</h4>
+
+                <p>
+                    Shift included Jira ticket follow-up,
+                    monitoring changes, and review of the
+                    IR-16 Export memory investigation.
+                </p>
+
+
+                <h4>Open Tickets</h4>
+
+                <p>
+                    Five Jira tickets remain locally tracked.
+                    NOC-556 requires review because no Next
+                    Action is recorded.
+                </p>
+
+
+                <h4>Investigations</h4>
+
+                <p>
+                    IR-16 is validated and ready for handover.
+                    Controlled Export restart remains an
+                    outstanding follow-up.
+                </p>
+
+
+                <h4>Next Shift Actions</h4>
+
+                <p>
+                    Follow up on pending testing, development
+                    investigations, NOC-556 Next Action, and
+                    the IR-16 restart recommendation.
+                </p>
+
+            </div>
+
+
+            <div class="email-preview-warning">
+
+                <strong>Human approval required</strong>
+
+                <p>
+                    Sending requires an explicit action.
+                    This prototype does not send Microsoft 365 email.
+                </p>
+
+            </div>
+
+
+            <div class="modal-actions">
+
+                <button id="back-to-delivery" class="button" type="button">
+                    Back
+                </button>
+
+                <button id="send-email" class="button primary" type="button">
+                    Send Email
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+
+        const generateButton =
+            document.querySelector(
+                "#generate-handover"
+            );
+
+        const handoverState =
+            document.querySelector(
+                "#handover-state"
+            );
+
+        const handoverEmpty =
+            document.querySelector(
+                "#handover-empty"
+            );
+
+        const handoverPreview =
+            document.querySelector(
+                "#handover-preview"
+            );
+
+        const continueDelivery =
+            document.querySelector(
+                "#continue-delivery"
+            );
+
+        const deliveryModal =
+            document.querySelector(
+                "#delivery-modal"
+            );
+
+        const closeDeliveryModal =
+            document.querySelector(
+                "#close-delivery-modal"
+            );
+
+        const cancelDelivery =
+            document.querySelector(
+                "#cancel-delivery"
+            );
+
+        const deliveryForm =
+            document.querySelector(
+                "#delivery-form"
+            );
+
+        const recipientField =
+            document.querySelector(
+                "#recipient-field"
+            );
+
+        const recipientEmail =
+            document.querySelector(
+                "#recipient-email"
+            );
+
+        const deliveryChoices =
+            document.querySelectorAll(
+                'input[name="delivery"]'
+            );
+
+        const previewButton =
+            document.querySelector(
+                "#preview-delivery"
+            );
+
+        const emailPreviewModal =
+            document.querySelector(
+                "#email-preview-modal"
+            );
+
+        const previewRecipient =
+            document.querySelector(
+                "#preview-recipient"
+            );
+
+        const closeEmailPreview =
+            document.querySelector(
+                "#close-email-preview"
+            );
+
+        const backToDelivery =
+            document.querySelector(
+                "#back-to-delivery"
+            );
+
+        const sendEmailButton =
+            document.querySelector(
+                "#send-email"
+            );
+
+        function showDeliveryModal() {
+
+            deliveryModal.classList.remove(
+                "hidden"
+            );
+
+        }
+
+
+        function hideDeliveryModal() {
+
+            deliveryModal.classList.add(
+                "hidden"
+            );
+
+        }
+
+        continueDelivery.addEventListener(
+            "click",
+            showDeliveryModal
+        );
+
+        closeDeliveryModal.addEventListener(
+            "click",
+            hideDeliveryModal
+        );
+
+
+        cancelDelivery.addEventListener(
+            "click",
+            hideDeliveryModal
+        );
+
+        deliveryModal.addEventListener(
+            "click",
+            event => {
+
+                if (
+                    event.target === deliveryModal
+                ) {
+
+                    hideDeliveryModal();
+
+                }
+
+            }
+        );
+
+        document.addEventListener(
+            "keydown",
+            event => {
+
+                if (
+                    event.key !== "Escape"
+                ) {
+                    return;
+                }
+
+
+                if (
+                    !emailPreviewModal.classList.contains(
+                        "hidden"
+                    )
+                ) {
+
+                    hideEmailPreview();
+
+                    return;
+                }
+
+
+                if (
+                    !deliveryModal.classList.contains(
+                        "hidden"
+                    )
+                ) {
+
+                    hideDeliveryModal();
+
+                }
+
+            }
+        );
+
+        sendEmailButton.addEventListener(
+            "click",
+            () => {
+
+                hideEmailPreview();
+
+
+                alert(
+                    "Prototype only. No Microsoft 365 email was sent."
+                );
+
+            }
+        );
+
+        deliveryChoices.forEach(
+            choice => {
+
+                choice.addEventListener(
+                    "change",
+                    () => {
+
+                        if (
+                            choice.checked &&
+                            choice.value === "other"
+                        ) {
+
+                            recipientField.classList.remove(
+                                "hidden"
+                            );
+
+                            recipientEmail.focus();
+
+                        } else if (
+                            choice.checked
+                        ) {
+
+                            recipientField.classList.add(
+                                "hidden"
+                            );
+
+                            recipientEmail.value = "";
+
+                        }
+
+                    }
+                );
+
+            }
+        );
+
+        deliveryForm.addEventListener(
+            "submit",
+            event => {
+
+                event.preventDefault();
+
+
+                const selectedDelivery =
+                    document.querySelector(
+                        'input[name="delivery"]:checked'
+                    );
+
+
+                if (!selectedDelivery) {
+                    return;
+                }
+
+
+                if (
+                    selectedDelivery.value === "skip"
+                ) {
+
+                    hideDeliveryModal();
+
+                    alert(
+                        "Prototype only. Handover retained locally. No email was sent."
+                    );
+
+                    return;
+                }
+
+
+                if (
+                    selectedDelivery.value === "other"
+                ) {
+
+                    const address =
+                        recipientEmail.value.trim();
+
+
+                    if (!address) {
+                        recipientEmail.focus();
+                        return;
+                    }
+
+
+                    previewRecipient.textContent =
+                        address;
+
+                } else {
+
+                    previewRecipient.textContent =
+                        "Signed-in Microsoft 365 mailbox";
+
+                }
+
+
+                hideDeliveryModal();
+
+
+                emailPreviewModal.classList.remove(
+                    "hidden"
+                );
+
+            }
+        );
+
+        generateButton.addEventListener(
+            "click",
+            () => {
+
+                generateButton.disabled = true;
+
+                generateButton.textContent =
+                    "Generating...";
+
+                handoverState.textContent =
+                    "GENERATING...";
+
+
+                setTimeout(
+                    () => {
+
+                        handoverState.textContent =
+                            "CREATED";
+
+                        handoverEmpty.classList.add(
+                            "hidden"
+                        );
+
+                        handoverPreview.classList.remove(
+                            "hidden"
+                        );
+
+                    },
+                    1500
+                );
+
+            }
+        );
+
+        function hideEmailPreview() {
+
+            emailPreviewModal.classList.add(
+                "hidden"
+            );
+
+        }
+
+
+        closeEmailPreview.addEventListener(
+            "click",
+            hideEmailPreview
+        );
+
+
+        backToDelivery.addEventListener(
+            "click",
+            () => {
+
+                hideEmailPreview();
+
+                showDeliveryModal();
+
+            }
+        );
+
+
+        emailPreviewModal.addEventListener(
+            "click",
+            event => {
+
+                if (
+                    event.target === emailPreviewModal
+                ) {
+
+                    hideEmailPreview();
+
+                }
+
+            }
+        );
+
+    </script>
+
+</body>
+
+</html>

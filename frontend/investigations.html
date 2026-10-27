@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SES NOC Operations - Investigations</title>
+
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <!-- SIDEBAR -->
+
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-name">SESAMI</div>
+                <div class="brand-subtitle">NOC OPERATIONS</div>
+            </div>
+
+            <nav class="nav">
+
+                <a class="nav-item" href="index.html">
+                    Dashboard
+                </a>
+
+                <a class="nav-item" href="shift-notes.html">
+                    Shift Notes
+                </a>
+
+                <a class="nav-item" href="tickets.html">
+                    Tickets
+                </a>
+
+                <a class="nav-item active" href="investigations.html">
+                    Investigations
+                </a>
+
+                <a class="nav-item ai" href="ai-actions.html">
+                    AI Actions
+                </a>
+
+                <div class="nav-divider"></div>
+
+                <a class="nav-item" href="#">
+                    Status
+                </a>
+
+                <a class="nav-item" href="#">
+                    Health
+                </a>
+
+                <a class="nav-item" href="end-shift.html">
+                    End Shift
+                </a>
+
+            </nav>
+
+            <div class="sidebar-bottom">
+
+                <div class="nav-item">
+                    Settings
+                </div>
+
+                <div class="version">
+                    noc-web v0.1.0
+                </div>
+
+            </div>
+
+        </aside>
+
+
+        <!-- MAIN APPLICATION -->
+
+        <main class="main">
+
+            <!-- TOP BAR -->
+
+            <header class="topbar">
+
+                <input id="investigation-search" class="search" type="search" placeholder="Search investigations...">
+
+                <div class="profile">
+
+                    <div class="avatar">
+                        BS
+                    </div>
+
+                    <div>
+                        <div class="profile-name">
+                            NOC Engineer
+                        </div>
+
+                        <div class="profile-subtitle">
+                            Local Workstation
+                        </div>
+                    </div>
+
+                </div>
+
+            </header>
+
+
+            <!-- PAGE CONTENT -->
+
+            <section class="content">
+
+                <div class="page-header">
+
+                    <div>
+
+                        <h1>
+                            Investigations
+                        </h1>
+
+                        <p>
+                            Reviewed Datadog Notebook investigations for the selected shift.
+                        </p>
+
+                    </div>
+
+                    <div class="page-controls">
+
+                        <input class="date-control" type="date" value="2026-10-26">
+
+                        <button id="new-investigation" class="button primary" type="button">
+                            + New Investigation
+                        </button>
+
+                    </div>
+
+                </div>
+
+
+                <!-- INVESTIGATION WORKSPACE -->
+
+                <section class="investigation-layout">
+
+                    <!-- LIST -->
+
+                    <article class="panel investigation-list-panel">
+
+                        <div class="panel-header">
+
+                            <h2>
+                                Reviewed Investigations
+                            </h2>
+
+                            <span id="investigation-count" class="count-badge">
+                                1 investigation
+                            </span>
+
+                        </div>
+
+
+                        <!-- STATIC TEST CARD -->
+
+                        <div id="investigation-list" class="investigation-list">
+
+                            <button id="ir16-card" class="investigation-card" type="button">
+
+                                <div class="investigation-card-top">
+
+                                    <div>
+
+                                        <div class="investigation-card-title">
+                                            Export Memory Working Set High - IR-16
+                                        </div>
+
+                                        <div class="investigation-card-name">
+                                            Export-memory-working-set-high-IR-16
+                                        </div>
+
+                                    </div>
+
+
+                                    <span class="ready-outline">
+                                        READY
+                                    </span>
+
+                                </div>
+
+
+                                <div class="investigation-card-meta">
+                                    Reviewed Notebook Summary
+                                </div>
+
+                            </button>
+
+                        </div>
+
+                    </article>
+
+
+                    <!-- DETAILS -->
+
+                    <article class="panel investigation-details">
+
+                        <!-- DEFAULT EMPTY STATE -->
+
+                        <div id="investigation-empty" class="details-empty">
+
+                            <div class="details-empty-icon">
+                                ◆
+                            </div>
+
+                            <h2>
+                                Select an investigation
+                            </h2>
+
+                            <p>
+                                Choose an investigation to view its validated findings,
+                                status, next actions, and handover summary.
+                            </p>
+
+                        </div>
+
+
+                        <!-- INVESTIGATION DETAILS -->
+
+                        <div id="investigation-content" class="details-content hidden">
+
+                            <div class="investigation-detail-header">
+
+                                <div>
+
+                                    <div class="detail-ticket-id">
+                                        Export-memory-working-set-high-IR-16
+                                    </div>
+
+                                    <h2>
+                                        Export Memory Working Set High - IR-16
+                                    </h2>
+
+                                </div>
+
+                                <span class="ready-outline">
+                                    READY FOR HANDOVER
+                                </span>
+
+                            </div>
+
+
+                            <div class="investigation-meta">
+
+                                <div>
+                                    <label>Source</label>
+                                    <span>Final Datadog Notebook</span>
+                                </div>
+
+                                <div>
+                                    <label>Capture</label>
+                                    <span>Datadog MCP</span>
+                                </div>
+
+                            </div>
+
+
+                            <section class="investigation-section">
+
+                                <h3>Summary</h3>
+
+                                <p>
+                                    Export memory was above the critical threshold
+                                    in prod and USPRI in the reviewed Notebook snapshot.
+                                </p>
+
+                            </section>
+
+
+                            <section class="investigation-section">
+
+                                <h3>Confirmed Findings</h3>
+
+                                <p>
+                                    The validated investigation identified sustained
+                                    Export memory growth, with USPRI higher and alerting
+                                    longer. RabbitMQ was documented as healthy in both
+                                    clusters.
+                                </p>
+
+                            </section>
+
+
+                            <section class="investigation-section">
+
+                                <h3>Current Status</h3>
+
+                                <p>
+                                    The investigation remains open for operational
+                                    follow-up. The controlled Export restart has not
+                                    been documented as completed.
+                                </p>
+
+                            </section>
+
+
+                            <section class="investigation-section">
+
+                                <h3>Next Actions</h3>
+
+                                <p>
+                                    Coordinate a controlled restart with DevOps,
+                                    USPRI first, during a low-volume window.
+
+                                    Verify memory recovery, monitor recovery,
+                                    consumer totals, and normal queue drain afterward.
+                                </p>
+
+                            </section>
+
+
+                            <section class="investigation-section">
+
+                                <h3>Handover Summary</h3>
+
+                                <p>
+                                    Continue follow-up on Export memory growth and
+                                    coordinate the recommended controlled restart
+                                    with DevOps.
+                                </p>
+
+                            </section>
+
+                        </div>
+                    </article>
+
+                </section>
+
+            </section>
+
+        </main>
+
+    </div>
+
+    <!-- NEW INVESTIGATION MODAL -->
+
+    <div id="investigation-modal" class="modal-backdrop hidden">
+
+        <div class="modal-card">
+
+            <div class="modal-header">
+
+                <div>
+                    <h2>New Investigation</h2>
+
+                    <p>
+                        Create an investigation from a FINAL reviewed
+                        Datadog Notebook.
+                    </p>
+                </div>
+
+                <button id="close-investigation-modal" class="modal-close" type="button" aria-label="Close">
+                    ×
+                </button>
+
+            </div>
+
+
+            <form id="investigation-form">
+
+                <label class="form-label" for="new-investigation-name">
+                    Investigation Name
+                </label>
+
+                <input id="new-investigation-name" class="form-control" type="text"
+                    placeholder="Export-memory-working-set-high-IR-16">
+
+
+                <label class="form-label" for="notebook-url">
+                    Final Datadog Notebook URL
+                </label>
+
+                <input id="notebook-url" class="form-control" type="url"
+                    placeholder="https://app.datadoghq.com/notebook/...">
+
+
+                <div class="investigation-warning">
+
+                    <strong>
+                        Final Notebook only
+                    </strong>
+
+                    <p>
+                        Complete the investigation, validation,
+                        contradiction review, and Notebook updates
+                        before submitting the FINAL Datadog Notebook.
+                    </p>
+
+                </div>
+
+
+                <div class="modal-actions">
+
+                    <button id="cancel-investigation" class="button" type="button">
+                        Cancel
+                    </button>
+
+                    <button class="button primary" type="submit">
+                        Create Investigation
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+    <script>
+
+        const card =
+            document.querySelector(
+                "#ir16-card"
+            );
+
+        const emptyState =
+            document.querySelector(
+                "#investigation-empty"
+            );
+
+        const detailContent =
+            document.querySelector(
+                "#investigation-content"
+            );
+
+        const search =
+            document.querySelector(
+                "#investigation-search"
+            );
+
+        const investigationList =
+            document.querySelector(
+                "#investigation-list"
+            );
+
+        const investigationCount =
+            document.querySelector(
+                "#investigation-count"
+            );
+
+        const newInvestigationButton =
+            document.querySelector(
+                "#new-investigation"
+            );
+
+        const modal =
+            document.querySelector(
+                "#investigation-modal"
+            );
+
+        const closeModalButton =
+            document.querySelector(
+                "#close-investigation-modal"
+            );
+
+        const cancelInvestigationButton =
+            document.querySelector(
+                "#cancel-investigation"
+            );
+
+        const investigationForm =
+            document.querySelector(
+                "#investigation-form"
+            );
+
+        const investigationName =
+            document.querySelector(
+                "#new-investigation-name"
+            );
+
+        const notebookUrl =
+            document.querySelector(
+                "#notebook-url"
+            );
+
+        const actionButtons =
+            document.querySelectorAll(
+                ".ai-action-card"
+            );
+
+        function showInvestigationModal() {
+
+            modal.classList.remove(
+                "hidden"
+            );
+
+            investigationName.focus();
+
+        }
+
+
+        function hideInvestigationModal() {
+
+            modal.classList.add(
+                "hidden"
+            );
+
+            investigationForm.reset();
+
+        }
+
+
+        card.addEventListener(
+            "click",
+            () => {
+
+                emptyState.classList.add(
+                    "hidden"
+                );
+
+                detailContent.classList.remove(
+                    "hidden"
+                );
+
+                card.classList.add(
+                    "selected-investigation"
+                );
+
+            }
+        );
+
+        search.addEventListener(
+            "input",
+            () => {
+
+                const query =
+                    search.value
+                        .trim()
+                        .toLowerCase();
+
+                const searchable =
+                    card.textContent
+                        .toLowerCase();
+
+                const matches =
+                    query === "" ||
+                    searchable.includes(query);
+
+
+                if (matches) {
+
+                    card.style.display = "";
+
+                    investigationCount.textContent =
+                        "1 investigation";
+
+                } else {
+
+                    card.style.display = "none";
+
+                    investigationCount.textContent =
+                        "0 investigations";
+
+                    emptyState.classList.remove(
+                        "hidden"
+                    );
+
+                    detailContent.classList.add(
+                        "hidden"
+                    );
+
+                    card.classList.remove(
+                        "selected-investigation"
+                    );
+
+                }
+
+            }
+        );
+
+        newInvestigationButton.addEventListener(
+            "click",
+            showInvestigationModal
+        );
+
+
+        closeModalButton.addEventListener(
+            "click",
+            hideInvestigationModal
+        );
+
+
+        cancelInvestigationButton.addEventListener(
+            "click",
+            hideInvestigationModal
+        );
+
+        modal.addEventListener(
+            "click",
+            event => {
+
+                if (
+                    event.target === modal
+                ) {
+
+                    hideInvestigationModal();
+
+                }
+
+            }
+        );
+
+        document.addEventListener(
+            "keydown",
+            event => {
+
+                if (
+                    event.key === "Escape" &&
+                    !modal.classList.contains(
+                        "hidden"
+                    )
+                ) {
+
+                    hideInvestigationModal();
+
+                }
+
+            }
+        );
+
+        investigationForm.addEventListener(
+            "submit",
+            event => {
+
+                event.preventDefault();
+
+
+                const name =
+                    document
+                        .querySelector(
+                            "#new-investigation-name"
+                        )
+                        .value
+                        .trim();
+
+
+                const notebookUrl =
+                    document
+                        .querySelector(
+                            "#notebook-url"
+                        )
+                        .value
+                        .trim();
+
+
+                if (
+                    !name ||
+                    !notebookUrl
+                ) {
+
+                    return;
+
+                }
+
+
+                hideInvestigationModal();
+
+
+                alert(
+                    "Prototype only. No investigation was created."
+                );
+
+            }
+        );
+
+        actionButtons.forEach(
+            button => {
+
+                button.addEventListener(
+                    "click",
+                    () => {
+
+                        const state =
+                            button.querySelector(
+                                ".ai-action-state"
+                            );
+
+
+                        if (
+                            button.classList.contains(
+                                "is-running"
+                            )
+                        ) {
+                            return;
+                        }
+
+
+                        button.classList.remove(
+                            "is-complete"
+                        );
+
+
+                        button.classList.add(
+                            "is-running"
+                        );
+
+
+                        state.textContent =
+                            "Running...";
+
+
+                        button.disabled =
+                            true;
+
+
+                        setTimeout(
+                            () => {
+
+                                button.classList.remove(
+                                    "is-running"
+                                );
+
+
+                                button.classList.add(
+                                    "is-complete"
+                                );
+
+
+                                state.textContent =
+                                    "Completed";
+
+
+                                button.disabled =
+                                    false;
+
+                            },
+                            1500
+                        );
+
+                    }
+                );
+
+            }
+        );
+
+    </script>
+
+
+</body>
+
+</html>
