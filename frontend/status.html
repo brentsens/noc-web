@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SES NOC Operations - Status</title>
+
+
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-name">SESAMI</div>
+                <div class="brand-subtitle">NOC OPERATIONS</div>
+            </div>
+
+            <nav class="nav">
+
+                <a class="nav-item" href="index.html">
+                    Dashboard
+                </a>
+
+                <a class="nav-item" href="shift-notes.html">
+                    Shift Notes
+                </a>
+
+                <a class="nav-item" href="tickets.html">
+                    Tickets
+                </a>
+
+                <a class="nav-item" href="investigations.html">
+                    Investigations
+                </a>
+
+                <a class="nav-item ai" href="ai-actions.html">
+                    AI Actions
+                </a>
+
+                <div class="nav-divider"></div>
+
+                <a class="nav-item active" href="status.html">
+                    Status
+                </a>
+
+                <a class="nav-item" href="health.html">
+                    Health
+                </a>
+
+                <a class="nav-item" href="end-shift.html">
+                    End Shift
+                </a>
+
+            </nav>
+
+            <div class="sidebar-bottom">
+
+                <div class="nav-item">
+                    Settings
+                </div>
+
+                <div class="version">
+                    noc-web v0.1.0
+                </div>
+
+            </div>
+
+        </aside>
+
+
+        <main class="main">
+
+            <header class="topbar">
+
+                <input class="search" type="search" placeholder="Search...">
+
+                <div class="profile">
+                    <div class="avatar">BS</div>
+
+                    <div>
+                        <div class="profile-name">NOC Engineer</div>
+                        <div class="profile-subtitle">Local Workstation</div>
+                    </div>
+                </div>
+
+            </header>
+
+
+            <section class="content">
+
+                <div class="page-header">
+
+                    <div>
+                        <h1>NOC Status</h1>
+                        <p>
+                            Read-only overview of the selected NOC shift.
+                        </p>
+                    </div>
+
+                    <div class="page-controls">
+
+                        <input id="status-date" class="date-control" type="date">
+
+                        <div id="status-mode" class="ready-badge">
+                            ● READ ONLY
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <section class="metrics">
+
+                    <article class="metric-card">
+                        <div class="metric-label">
+                            Open Tickets
+                        </div>
+
+                        <div id="status-ticket-count" class="metric-value teal">
+                            -
+                        </div>
+
+                        <div class="metric-subtitle">
+                            Locally tracked
+                        </div>
+                    </article>
+
+
+                    <article class="metric-card">
+                        <div class="metric-label">
+                            Investigations
+                        </div>
+
+                        <div id="status-investigation-count" class="metric-value purple">
+                            -
+                        </div>
+
+                        <div class="metric-subtitle">
+                            Selected shift
+                        </div>
+                    </article>
+
+
+                    <article class="metric-card">
+                        <div class="metric-label">
+                            Needs Review
+                        </div>
+
+                        <div id="status-review-count" class="metric-value yellow">
+                            -
+                        </div>
+
+                        <div class="metric-subtitle">
+                            Human review
+                        </div>
+                    </article>
+
+
+                    <article class="metric-card">
+                        <div class="metric-label">
+                            Handover
+                        </div>
+
+                        <div id="status-handover" class="metric-value yellow small">
+                            Loading
+                        </div>
+
+                        <div class="metric-subtitle">
+                            Selected shift
+                        </div>
+                    </article>
+
+                </section>
+
+
+                <section class="dashboard-grid">
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Shift</h2>
+                        </div>
+
+                        <table>
+                            <tbody>
+                                <tr>
+                                    <th>Shift Directory</th>
+                                    <td id="status-shift-directory">
+                                        Checking...
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th>Shift Notes</th>
+                                    <td id="status-shift-notes">
+                                        Checking...
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th>Non-empty Note Lines</th>
+                                    <td id="status-note-lines">
+                                        -
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                    </article>
+
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Dependencies</h2>
+                        </div>
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Command</th>
+                                    <th>State</th>
+                                    <th>Path</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="status-dependencies">
+                            </tbody>
+                        </table>
+
+                    </article>
+
+                </section>
+
+
+                <section class="panel">
+
+                    <div class="panel-header">
+                        <h2>Open Tickets</h2>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Status</th>
+                                <th>Environment</th>
+                                <th>Source</th>
+                                <th>Next Action</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="status-ticket-table">
+                        </tbody>
+                    </table>
+
+                </section>
+
+
+                <section class="dashboard-grid">
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Needs Review</h2>
+
+                            <span id="status-review-badge" class="count-badge">
+                                0
+                            </span>
+                        </div>
+
+                        <div id="status-review-list">
+                            Loading...
+                        </div>
+
+                    </article>
+
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Investigations</h2>
+
+                            <span id="status-investigation-badge" class="count-badge">
+                                0
+                            </span>
+                        </div>
+
+                        <div id="status-investigation-list">
+                            Loading...
+                        </div>
+
+                    </article>
+                </section>
+
+            </section>
+
+        </main>
+
+    </div>
+
+
+    <script type="module">
+
+        import {
+            getStatus
+        } from "./js/api.js";
+
+
+        const statusDate =
+            document.querySelector(
+                "#status-date"
+            );
+
+        const ticketCount =
+            document.querySelector(
+                "#status-ticket-count"
+            );
+
+        const investigationCount =
+            document.querySelector(
+                "#status-investigation-count"
+            );
+
+        const reviewCount =
+            document.querySelector(
+                "#status-review-count"
+            );
+
+        const handoverStatus =
+            document.querySelector(
+                "#status-handover"
+            );
+
+        const shiftDirectory =
+            document.querySelector(
+                "#status-shift-directory"
+            );
+
+        const shiftNotes =
+            document.querySelector(
+                "#status-shift-notes"
+            );
+
+        const noteLines =
+            document.querySelector(
+                "#status-note-lines"
+            );
+
+        const dependencyTable =
+            document.querySelector(
+                "#status-dependencies"
+            );
+
+        const ticketTable =
+            document.querySelector(
+                "#status-ticket-table"
+            );
+
+        const reviewBadge =
+            document.querySelector(
+                "#status-review-badge"
+            );
+
+        const reviewList =
+            document.querySelector(
+                "#status-review-list"
+            );
+
+        const investigationBadge =
+            document.querySelector(
+                "#status-investigation-badge"
+            );
+
+        const investigationList =
+            document.querySelector(
+                "#status-investigation-list"
+            );
+
+
+        function getDefaultShiftDate() {
+
+            const now = new Date();
+
+            if (now.getHours() < 6) {
+                now.setDate(
+                    now.getDate() - 1
+                );
+            }
+
+            return now
+                .toLocaleDateString(
+                    "en-CA"
+                );
+        }
+
+
+        function setStateText(
+            element,
+            available,
+            successText,
+            warningText
+        ) {
+
+            element.textContent =
+                available
+                    ? successText
+                    : warningText;
+
+            element.style.color =
+                available
+                    ? "var(--success)"
+                    : "var(--warning)";
+        }
+
+
+        function renderDependencies(
+            dependencies
+        ) {
+
+            dependencyTable.innerHTML = "";
+
+            dependencies.forEach(
+                dependency => {
+
+                    const row =
+                        document.createElement(
+                            "tr"
+                        );
+
+                    row.innerHTML = `
+                        <td>
+                            ${dependency.name}
+                        </td>
+
+                        <td>
+                            <span class="status ${dependency.available
+                            ? "status-blue"
+                            : "status-red"
+                        }">
+                                ${dependency.available
+                            ? "Available"
+                            : "Missing"
+                        }
+                            </span>
+                        </td>
+
+                        <td>
+                            ${dependency.path
+                        || "Not found"
+                        }
+                        </td>
+                    `;
+
+                    dependencyTable.appendChild(
+                        row
+                    );
+                }
+            );
+        }
+
+        function getStatusClass(status) {
+
+            const normalized =
+                (status || "")
+                    .trim()
+                    .toLowerCase();
+
+            if (
+                normalized === "re open" ||
+                normalized === "support team"
+            ) {
+                return "status-blue";
+            }
+
+            return "status-red";
+        }
+
+
+        function renderTickets(
+            tickets
+        ) {
+
+            ticketTable.innerHTML = "";
+
+            if (tickets.length === 0) {
+
+                ticketTable.innerHTML = `
+                    <tr>
+                        <td colspan="5">
+                            No open tickets found.
+                        </td>
+                    </tr>
+                `;
+
+                return;
+            }
+
+            tickets.forEach(
+                ticket => {
+
+                    const row =
+                        document.createElement(
+                            "tr"
+                        );
+
+                    row.innerHTML = `
+                        <td>
+                            ${ticket.id}
+                        </td>
+
+                        <td>
+                            <span class="status ${getStatusClass(ticket.status)}">
+                                ${ticket.status
+                        || "Not recorded"
+                        }
+                            </span>
+                        </td>
+
+                        <td>
+                            ${ticket.environment
+                        || "Not recorded"
+                        }
+                        </td>
+
+                        <td>
+                            ${ticket.source
+                        || "Not recorded"
+                        }
+                        </td>
+
+                        <td>
+                            ${ticket.nextAction
+                        || "No next action"
+                        }
+                        </td>
+                    `;
+
+                    ticketTable.appendChild(
+                        row
+                    );
+                }
+            );
+        }
+
+
+        function renderReviewItems(
+            items
+        ) {
+
+            reviewList.innerHTML = "";
+
+            if (items.length === 0) {
+
+                reviewList.innerHTML = `
+                    <p>
+                        No items require review.
+                    </p>
+                `;
+
+                return;
+            }
+
+            items.forEach(
+                item => {
+
+                    const entry =
+                        document.createElement(
+                            "p"
+                        );
+
+                    entry.textContent =
+                        `${item.id}: ${item.reason}`;
+
+                    reviewList.appendChild(
+                        entry
+                    );
+                }
+            );
+        }
+
+
+        function renderInvestigations(
+            investigations
+        ) {
+
+            investigationList.innerHTML = "";
+
+            if (
+                investigations.length === 0
+            ) {
+
+                investigationList.innerHTML = `
+                    <p>
+                        No investigations found
+                        for this shift.
+                    </p>
+                `;
+
+                return;
+            }
+
+            investigations.forEach(
+                investigation => {
+
+                    const entry =
+                        document.createElement(
+                            "p"
+                        );
+
+                    entry.textContent =
+                        `${investigation.name}: ${investigation.status
+                        }`;
+
+                    investigationList
+                        .appendChild(
+                            entry
+                        );
+                }
+            );
+        }
+
+
+        async function loadStatus() {
+
+            const shiftDate =
+                statusDate.value;
+
+            if (!shiftDate) {
+                return;
+            }
+
+            try {
+
+                const status =
+                    await getStatus(
+                        shiftDate
+                    );
+
+                ticketCount.textContent =
+                    status.openTickets.count;
+
+                investigationCount.textContent =
+                    status.investigations.count;
+
+                reviewCount.textContent =
+                    status.needsReview.count;
+
+                reviewBadge.textContent =
+                    status.needsReview.count;
+
+                investigationBadge.textContent =
+                    status.investigations.count;
+
+                setStateText(
+                    shiftDirectory,
+                    status.shift.directoryExists,
+                    "Available",
+                    "Not found"
+                );
+
+                setStateText(
+                    shiftNotes,
+                    status.shift.notesAvailable,
+                    "Available",
+                    "Missing"
+                );
+
+                noteLines.textContent =
+                    status.shift.notesLines;
+
+                handoverStatus.textContent =
+                    status.handover.created
+                        ? "Created"
+                        : "Pending";
+
+                handoverStatus.classList.remove(
+                    "yellow",
+                    "teal"
+                );
+
+                handoverStatus.classList.add(
+                    status.handover.created
+                        ? "teal"
+                        : "yellow"
+                );
+
+                renderDependencies(
+                    status.dependencies
+                );
+
+                renderTickets(
+                    status.openTickets.items
+                );
+
+                renderReviewItems(
+                    status.needsReview.items
+                );
+
+                renderInvestigations(
+                    status.investigations.items
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "Status load failed:",
+                    error
+                );
+
+                ticketCount.textContent = "Error";
+                investigationCount.textContent = "Error";
+                reviewCount.textContent = "Error";
+                handoverStatus.textContent = "Error";
+
+                reviewList.textContent =
+                    error.message;
+
+                investigationList.textContent =
+                    "Could not load status data.";
+            }
+        }
+
+
+        statusDate.value =
+            getDefaultShiftDate();
+
+        statusDate.addEventListener(
+            "change",
+            loadStatus
+        );
+
+        loadStatus();
+
+    </script>
+
+</body>
+
+</html>

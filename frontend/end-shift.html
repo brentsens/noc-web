@@ -47,11 +47,11 @@
 
                 <div class="nav-divider"></div>
 
-                <a class="nav-item" href="#">
+                <a class="nav-item" href="status.html">
                     Status
                 </a>
 
-                <a class="nav-item" href="#">
+                <a class="nav-item" href="health.html">
                     Health
                 </a>
 
@@ -117,7 +117,7 @@
 
                     <div class="page-controls">
 
-                        <input class="date-control" type="date" value="2026-10-26">
+                        <input id="end-shift-date" class="date-control" type="date">
 
                         <span class="end-ready-badge">
                             READY FOR REVIEW
@@ -149,24 +149,20 @@
 
                             <div class="readiness-row">
 
-                                <div class="readiness-icon success">
+                                <div id="readiness-jira-icon" class="readiness-icon success">
                                     ✓
                                 </div>
 
                                 <div class="readiness-copy">
+                                    <strong>Open Jira Tickets</strong>
 
-                                    <strong>
-                                        Jira Freshness
-                                    </strong>
-
-                                    <p>
-                                        Five locally tracked tickets checked.
+                                    <p id="readiness-jira-copy">
+                                        Checking ticket data...
                                     </p>
-
                                 </div>
 
-                                <span class="readiness-state success-text">
-                                    CHECKED
+                                <span id="readiness-jira-state" class="readiness-state success-text">
+                                    CHECKING
                                 </span>
 
                             </div>
@@ -174,24 +170,20 @@
 
                             <div class="readiness-row">
 
-                                <div class="readiness-icon success">
+                                <div id="readiness-shift-icon" class="readiness-icon success">
                                     ✓
                                 </div>
 
                                 <div class="readiness-copy">
+                                    <strong>Shift Status</strong>
 
-                                    <strong>
-                                        Shift Status
-                                    </strong>
-
-                                    <p>
-                                        Shift notes and local workspace are available.
+                                    <p id="readiness-shift-copy">
+                                        Checking shift data...
                                     </p>
-
                                 </div>
 
-                                <span class="readiness-state success-text">
-                                    CLEAR
+                                <span id="readiness-shift-state" class="readiness-state success-text">
+                                    CHECKING
                                 </span>
 
                             </div>
@@ -199,33 +191,28 @@
 
                             <div class="readiness-row">
 
-                                <div class="readiness-icon success">
+                                <div id="readiness-review-icon" class="readiness-icon success">
                                     ✓
                                 </div>
 
                                 <div class="readiness-copy">
+                                    <strong>Review Gate</strong>
 
-                                    <strong>
-                                        Review Gate
-                                    </strong>
-
-                                    <p>
-                                        No unresolved review blockers detected.
+                                    <p id="readiness-review-copy">
+                                        Checking review status...
                                     </p>
-
                                 </div>
 
-                                <span class="readiness-state success-text">
-                                    CLEAR
+                                <span id="readiness-review-state" class="readiness-state success-text">
+                                    CHECKING
                                 </span>
-
                             </div>
 
 
                             <div class="readiness-row">
 
-                                <div class="readiness-icon success">
-                                    ✓
+                                <div class="readiness-icon warning-text">
+                                    ○
                                 </div>
 
                                 <div class="readiness-copy">
@@ -235,38 +222,33 @@
                                     </strong>
 
                                     <p>
-                                        NOC automation is healthy with no blocking failures.
+                                        Health check runs during noc-end.
                                     </p>
 
                                 </div>
 
-                                <span class="readiness-state success-text">
-                                    HEALTHY
+                                <span class="readiness-state warning-text">
+                                    NOT CHECKED
                                 </span>
-
                             </div>
 
 
                             <div class="readiness-row">
 
-                                <div class="readiness-icon success">
+                                <div id="readiness-investigations-icon" class="readiness-icon success">
                                     ✓
                                 </div>
 
                                 <div class="readiness-copy">
+                                    <strong>Investigations</strong>
 
-                                    <strong>
-                                        Investigations
-                                    </strong>
-
-                                    <p>
-                                        One validated investigation is ready for handover.
+                                    <p id="readiness-investigations-copy">
+                                        Checking investigations...
                                     </p>
-
                                 </div>
 
-                                <span class="readiness-state success-text">
-                                    VALIDATED
+                                <span id="readiness-investigations-state" class="readiness-state success-text">
+                                    CHECKING
                                 </span>
 
                             </div>
@@ -325,51 +307,13 @@
                                         NOC Shift Handover
                                     </h3>
 
-                                    <p>
-                                        October 26, 2026
-                                    </p>
+                                    <p id="handover-preview-date"></p>
+
                                 </div>
                             </div>
 
 
-                            <div class="handover-preview-content">
-
-                                <h4>Summary</h4>
-
-                                <p>
-                                    Shift included Jira ticket follow-up,
-                                    monitoring changes, and review of the
-                                    IR-16 Export memory investigation.
-                                </p>
-
-
-                                <h4>Open Tickets</h4>
-
-                                <p>
-                                    Five Jira tickets remain locally tracked.
-                                    NOC-556 requires review because no Next
-                                    Action is recorded.
-                                </p>
-
-
-                                <h4>Investigations</h4>
-
-                                <p>
-                                    IR-16 is validated and ready for handover.
-                                    Controlled Export restart remains an
-                                    outstanding follow-up.
-                                </p>
-
-
-                                <h4>Next Shift Actions</h4>
-
-                                <p>
-                                    Follow up on pending testing, development
-                                    investigations, NOC-556 Next Action, and
-                                    the IR-16 restart recommendation.
-                                </p>
-
-                            </div>
+                            <div id="handover-preview-content" class="handover-preview-content"></div>
 
 
                             <div class="handover-preview-actions">
@@ -633,7 +577,78 @@
 
     </div>
 
-    <script>
+    <script type="module">
+
+        import {
+            getHandover,
+            getDashboard,
+            getShiftNotes,
+            getTickets,
+            getInvestigations
+        } from "./js/api.js";
+
+        const readinessJiraIcon =
+            document.querySelector(
+                "#readiness-jira-icon"
+            );
+
+        const readinessJiraCopy =
+            document.querySelector(
+                "#readiness-jira-copy"
+            );
+
+        const readinessJiraState =
+            document.querySelector(
+                "#readiness-jira-state"
+            );
+
+
+        const readinessShiftIcon =
+            document.querySelector(
+                "#readiness-shift-icon"
+            );
+
+        const readinessShiftCopy =
+            document.querySelector(
+                "#readiness-shift-copy"
+            );
+
+        const readinessShiftState =
+            document.querySelector(
+                "#readiness-shift-state"
+            );
+
+
+        const readinessReviewIcon =
+            document.querySelector(
+                "#readiness-review-icon"
+            );
+
+        const readinessReviewCopy =
+            document.querySelector(
+                "#readiness-review-copy"
+            );
+
+        const readinessReviewState =
+            document.querySelector(
+                "#readiness-review-state"
+            );
+
+
+        const readinessInvestigationsIcon =
+            document.querySelector(
+                "#readiness-investigations-icon"
+            );
+
+        const readinessInvestigationsCopy =
+            document.querySelector(
+                "#readiness-investigations-copy"
+            );
+
+        const readinessInvestigationsState =
+            document.querySelector(
+                "#readiness-investigations-state"
+            );
 
         const generateButton =
             document.querySelector(
@@ -653,6 +668,21 @@
         const handoverPreview =
             document.querySelector(
                 "#handover-preview"
+            );
+
+        const endShiftDate =
+            document.querySelector(
+                "#end-shift-date"
+            );
+
+        const handoverPreviewDate =
+            document.querySelector(
+                "#handover-preview-date"
+            );
+
+        const handoverPreviewContent =
+            document.querySelector(
+                "#handover-preview-content"
             );
 
         const continueDelivery =
@@ -724,6 +754,408 @@
             document.querySelector(
                 "#send-email"
             );
+
+        function getLocalDateString() {
+
+            const now = new Date();
+
+            const year =
+                now.getFullYear();
+
+            const month =
+                String(
+                    now.getMonth() + 1
+                ).padStart(2, "0");
+
+            const day =
+                String(
+                    now.getDate()
+                ).padStart(2, "0");
+
+            return `${year}-${month}-${day}`;
+        }
+
+
+        endShiftDate.value =
+            getLocalDateString();
+
+        function renderHandover(
+            handover
+        ) {
+
+            if (!handover.exists) {
+
+                handoverState.textContent =
+                    "PENDING";
+
+                handoverEmpty.classList.remove(
+                    "hidden"
+                );
+
+                handoverPreview.classList.add(
+                    "hidden"
+                );
+
+                return;
+            }
+
+
+            handoverState.textContent =
+                "CREATED";
+
+            handoverEmpty.classList.add(
+                "hidden"
+            );
+
+            handoverPreview.classList.remove(
+                "hidden"
+            );
+
+
+            const date =
+                new Date(
+                    `${handover.shiftDate}T12:00:00`
+                );
+
+            handoverPreviewDate.textContent =
+                date.toLocaleDateString(
+                    undefined,
+                    {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric"
+                    }
+                );
+
+
+            handoverPreviewContent.innerHTML =
+                "";
+
+
+            for (
+                const section
+                of handover.sections
+            ) {
+
+                const heading =
+                    document.createElement(
+                        "h4"
+                    );
+
+                heading.textContent =
+                    section.name;
+
+
+                const content =
+                    document.createElement(
+                        "div"
+                    );
+
+                content.className =
+                    "handover-section-content";
+
+                content.textContent =
+                    section.content;
+
+
+                handoverPreviewContent.appendChild(
+                    heading
+                );
+
+                handoverPreviewContent.appendChild(
+                    content
+                );
+
+            }
+
+        }
+
+        async function loadHandover() {
+
+            try {
+
+                const handover =
+                    await getHandover(
+                        endShiftDate.value
+                    );
+
+
+                renderHandover(
+                    handover
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "Handover load failed:",
+                    error
+                );
+
+
+                handoverState.textContent =
+                    "UNAVAILABLE";
+
+                handoverEmpty.classList.remove(
+                    "hidden"
+                );
+
+                handoverPreview.classList.add(
+                    "hidden"
+                );
+
+            }
+
+        }
+
+        endShiftDate.addEventListener(
+            "change",
+            () => {
+
+                loadHandover();
+                loadReadiness();
+
+            }
+        );
+
+        function setReadinessState(
+            icon,
+            state,
+            status,
+            success
+        ) {
+
+            icon.textContent =
+                success ? "✓" : "○";
+
+            icon.classList.toggle(
+                "success",
+                success
+            );
+
+            icon.classList.toggle(
+                "warning-text",
+                !success
+            );
+
+            state.textContent =
+                status;
+
+            state.classList.toggle(
+                "success-text",
+                success
+            );
+
+            state.classList.toggle(
+                "warning-text",
+                !success
+            );
+        }
+
+        async function loadReadiness() {
+
+            try {
+
+                const [
+                    tickets,
+                    notes,
+                    investigations,
+                    dashboard
+                ] = await Promise.all([
+                    getTickets(),
+                    getShiftNotes(
+                        endShiftDate.value
+                    ),
+                    getInvestigations(
+                        endShiftDate.value
+                    ),
+                    getDashboard(
+                        endShiftDate.value
+                    )
+                ]);
+
+
+                // Jira
+                readinessJiraCopy.textContent =
+                    `${tickets.tickets.length} locally tracked ticket${tickets.tickets.length === 1
+                        ? ""
+                        : "s"
+                    } loaded.`;
+
+                setReadinessState(
+                    readinessJiraIcon,
+                    readinessJiraState,
+                    "LOADED",
+                    true
+                );
+
+
+                // Shift Notes
+                if (notes.exists) {
+
+                    readinessShiftCopy.textContent =
+                        `${notes.activity.length} shift note entr${notes.activity.length === 1
+                            ? "y"
+                            : "ies"
+                        } available.`;
+
+                    setReadinessState(
+                        readinessShiftIcon,
+                        readinessShiftState,
+                        "CLEAR",
+                        true
+                    );
+
+                } else {
+
+                    readinessShiftCopy.textContent =
+                        "No shift notes available for this date.";
+
+                    setReadinessState(
+                        readinessShiftIcon,
+                        readinessShiftState,
+                        "REVIEW",
+                        false
+                    );
+
+                }
+
+
+                // Review Gate
+                const needsReview =
+                    Number(
+                        dashboard.needsReview ?? 0
+                    );
+
+                if (needsReview === 0) {
+
+                    readinessReviewCopy.textContent =
+                        "No unresolved review blockers detected.";
+
+                    setReadinessState(
+                        readinessReviewIcon,
+                        readinessReviewState,
+                        "CLEAR",
+                        true
+                    );
+
+                } else {
+
+                    readinessReviewCopy.textContent =
+                        `${needsReview} item${needsReview === 1
+                            ? ""
+                            : "s"
+                        } require review.`;
+
+                    setReadinessState(
+                        readinessReviewIcon,
+                        readinessReviewState,
+                        "REVIEW",
+                        false
+                    );
+
+                }
+
+
+                // Investigations
+                if (investigations.count > 0) {
+
+                    readinessInvestigationsCopy.textContent =
+                        `${investigations.count} validated investigation${investigations.count === 1
+                            ? ""
+                            : "s"
+                        } available for handover.`;
+
+                    setReadinessState(
+                        readinessInvestigationsIcon,
+                        readinessInvestigationsState,
+                        "VALIDATED",
+                        true
+                    );
+
+                } else {
+
+                    readinessInvestigationsCopy.textContent =
+                        "No validated investigations for this date.";
+
+                    setReadinessState(
+                        readinessInvestigationsIcon,
+                        readinessInvestigationsState,
+                        "NONE",
+                        false
+                    );
+
+                }
+
+            } catch (error) {
+
+                console.error(
+                    "Readiness load failed:",
+                    error
+                );
+
+
+                const checks = [
+                    [
+                        readinessJiraIcon,
+                        readinessJiraState,
+                        readinessJiraCopy
+                    ],
+                    [
+                        readinessShiftIcon,
+                        readinessShiftState,
+                        readinessShiftCopy
+                    ],
+                    [
+                        readinessReviewIcon,
+                        readinessReviewState,
+                        readinessReviewCopy
+                    ],
+                    [
+                        readinessInvestigationsIcon,
+                        readinessInvestigationsState,
+                        readinessInvestigationsCopy
+                    ]
+                ];
+
+
+                for (
+                    const [
+                        icon,
+                        state,
+                        copy
+                    ]
+                    of checks
+                ) {
+
+                    icon.textContent = "!";
+
+                    icon.classList.remove(
+                        "success"
+                    );
+
+                    icon.classList.add(
+                        "warning-text"
+                    );
+
+                    state.textContent =
+                        "UNAVAILABLE";
+
+                    state.classList.remove(
+                        "success-text"
+                    );
+
+                    state.classList.add(
+                        "warning-text"
+                    );
+
+                    copy.textContent =
+                        "Data unavailable.";
+
+                }
+
+            }
+
+        }
 
         function showDeliveryModal() {
 
@@ -930,31 +1362,8 @@
             "click",
             () => {
 
-                generateButton.disabled = true;
-
-                generateButton.textContent =
-                    "Generating...";
-
-                handoverState.textContent =
-                    "GENERATING...";
-
-
-                setTimeout(
-                    () => {
-
-                        handoverState.textContent =
-                            "CREATED";
-
-                        handoverEmpty.classList.add(
-                            "hidden"
-                        );
-
-                        handoverPreview.classList.remove(
-                            "hidden"
-                        );
-
-                    },
-                    1500
+                alert(
+                    "Prototype only. No handover was generated."
                 );
 
             }
@@ -1001,6 +1410,9 @@
 
             }
         );
+
+        loadHandover();
+        loadReadiness();
 
     </script>
 

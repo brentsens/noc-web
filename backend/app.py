@@ -23,6 +23,17 @@ from backend.api.ai_reports import (
     router as ai_reports_router,
 )
 
+from backend.api.handover import (
+    router as handover_router,
+)
+
+from backend.api.status import (
+    router as status_router,
+)
+
+from backend.api.health import (
+    router as health_router,
+)
 
 app = FastAPI(
     title="SES NOC Operations API",
@@ -56,6 +67,18 @@ app.include_router(
 
 app.include_router(
     ai_reports_router
+)
+
+app.include_router(
+    handover_router
+)
+
+app.include_router(
+    status_router
+)
+
+app.include_router(
+    health_router
 )
 
 app.mount(

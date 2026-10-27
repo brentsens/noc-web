@@ -123,3 +123,33 @@ export function getAiReport(
   );
 
 }
+
+export function getHandover(
+  shiftDate
+) {
+
+  return apiRequest(
+      `/api/shifts/${shiftDate}/handover`
+  );
+
+}
+
+export function getStatus(
+  shiftDate
+) {
+
+  return apiRequest(
+    `/api/status/${shiftDate}`
+  );
+
+}
+
+export function getHealth(
+  shiftDate
+) {
+
+  return apiRequest(
+    `/api/health/${shiftDate}`
+  );
+
+}

@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SES NOC Operations - Health</title>
+
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-name">SESAMI</div>
+                <div class="brand-subtitle">NOC OPERATIONS</div>
+            </div>
+
+            <nav class="nav">
+
+                <a class="nav-item" href="index.html">
+                    Dashboard
+                </a>
+
+                <a class="nav-item" href="shift-notes.html">
+                    Shift Notes
+                </a>
+
+                <a class="nav-item" href="tickets.html">
+                    Tickets
+                </a>
+
+                <a class="nav-item" href="investigations.html">
+                    Investigations
+                </a>
+
+                <a class="nav-item ai" href="ai-actions.html">
+                    AI Actions
+                </a>
+
+                <div class="nav-divider"></div>
+
+                <a class="nav-item" href="status.html">
+                    Status
+                </a>
+
+                <a class="nav-item active" href="health.html">
+                    Health
+                </a>
+
+                <a class="nav-item" href="end-shift.html">
+                    End Shift
+                </a>
+
+            </nav>
+
+            <div class="sidebar-bottom">
+
+                <div class="nav-item">
+                    Settings
+                </div>
+
+                <div class="version">
+                    noc-web v0.1.0
+                </div>
+
+            </div>
+
+        </aside>
+
+
+        <main class="main">
+
+            <header class="topbar">
+
+                <input class="search" type="search" placeholder="Search...">
+
+                <div class="profile">
+
+                    <div class="avatar">
+                        BS
+                    </div>
+
+                    <div>
+                        <div class="profile-name">
+                            NOC Engineer
+                        </div>
+
+                        <div class="profile-subtitle">
+                            Local Workstation
+                        </div>
+                    </div>
+
+                </div>
+
+            </header>
+
+
+            <section class="content">
+
+                <div class="page-header">
+
+                    <div>
+                        <h1>NOC Health</h1>
+
+                        <p>
+                            Read-only diagnostics for the
+                            NOC automation stack.
+                        </p>
+                    </div>
+
+                    <div class="page-controls">
+
+                        <input id="health-date" class="date-control" type="date">
+
+                        <div id="health-mode" class="ready-badge">
+                            ● STANDARD / READ ONLY
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <section class="metrics">
+
+                    <article class="metric-card">
+
+                        <div class="metric-label">
+                            Passed
+                        </div>
+
+                        <div id="health-passed" class="metric-value teal">
+                            -
+                        </div>
+
+                        <div class="metric-subtitle">
+                            Checks passed
+                        </div>
+
+                    </article>
+
+
+                    <article class="metric-card">
+
+                        <div class="metric-label">
+                            Warnings
+                        </div>
+
+                        <div id="health-warnings" class="metric-value yellow">
+                            -
+                        </div>
+
+                        <div class="metric-subtitle">
+                            Review suggested
+                        </div>
+
+                    </article>
+
+
+                    <article class="metric-card">
+
+                        <div class="metric-label">
+                            Failed
+                        </div>
+
+                        <div id="health-failed" class="metric-value">
+                            -
+                        </div>
+
+                        <div class="metric-subtitle">
+                            Critical checks
+                        </div>
+
+                    </article>
+
+
+                    <article class="metric-card">
+
+                        <div class="metric-label">
+                            Overall Health
+                        </div>
+
+                        <div id="health-result" class="metric-value yellow small">
+                            Loading
+                        </div>
+
+                        <div class="metric-subtitle">
+                            NOC automation stack
+                        </div>
+
+                    </article>
+
+                </section>
+
+
+                <section class="dashboard-grid">
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Tools</h2>
+
+                            <span id="tools-count" class="count-badge">
+                                -
+                            </span>
+                        </div>
+
+                        <div id="health-tools">
+                            Loading...
+                        </div>
+
+                    </article>
+
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Script Syntax</h2>
+
+                            <span id="syntax-count" class="count-badge">
+                                -
+                            </span>
+                        </div>
+
+                        <div id="health-syntax">
+                            Loading...
+                        </div>
+
+                    </article>
+
+                </section>
+
+
+                <section class="dashboard-grid">
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Storage</h2>
+
+                            <span id="storage-count" class="count-badge">
+                                -
+                            </span>
+                        </div>
+
+                        <div id="health-storage">
+                            Loading...
+                        </div>
+
+                    </article>
+
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Atlas / Jira</h2>
+                        </div>
+
+                        <div id="health-atlas">
+                            Loading...
+                        </div>
+
+                    </article>
+
+                </section>
+
+
+                <section class="panel">
+
+                    <div class="panel-header">
+
+                        <h2>
+                            Ticket JSON Integrity
+                        </h2>
+
+                        <span id="integrity-count" class="count-badge">
+                            -
+                        </span>
+
+                    </div>
+
+                    <div id="health-integrity">
+                        Loading...
+                    </div>
+
+                </section>
+
+
+                <section class="dashboard-grid">
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Copilot</h2>
+                        </div>
+
+                        <div id="health-copilot">
+                            Loading...
+                        </div>
+
+                    </article>
+
+
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Operational Safety</h2>
+
+                            <span id="safety-count" class="count-badge">
+                                -
+                            </span>
+                        </div>
+
+                        <div id="health-safety">
+                            Loading...
+                        </div>
+
+                    </article>
+
+                </section>
+
+            </section>
+
+        </main>
+
+    </div>
+
+
+    <script type="module">
+
+        import {
+            getHealth
+        } from "./js/api.js";
+
+
+        const healthDate =
+            document.querySelector(
+                "#health-date"
+            );
+
+        const passedCount =
+            document.querySelector(
+                "#health-passed"
+            );
+
+        const warningCount =
+            document.querySelector(
+                "#health-warnings"
+            );
+
+        const failedCount =
+            document.querySelector(
+                "#health-failed"
+            );
+
+        const overallHealth =
+            document.querySelector(
+                "#health-result"
+            );
+
+        const tools =
+            document.querySelector(
+                "#health-tools"
+            );
+
+        const syntax =
+            document.querySelector(
+                "#health-syntax"
+            );
+
+        const storage =
+            document.querySelector(
+                "#health-storage"
+            );
+
+        const integrity =
+            document.querySelector(
+                "#health-integrity"
+            );
+
+        const atlas =
+            document.querySelector(
+                "#health-atlas"
+            );
+
+        const copilot =
+            document.querySelector(
+                "#health-copilot"
+            );
+
+        const safety =
+            document.querySelector(
+                "#health-safety"
+            );
+
+
+        function getDefaultShiftDate() {
+
+            const now = new Date();
+
+            if (now.getHours() < 6) {
+                now.setDate(
+                    now.getDate() - 1
+                );
+            }
+
+            return now.toLocaleDateString(
+                "en-CA"
+            );
+        }
+
+
+        function getStateSymbol(state) {
+
+            if (state === "pass") {
+                return "✓";
+            }
+
+            if (state === "warning") {
+                return "⚠";
+            }
+
+            return "✕";
+        }
+
+
+        function getStateColor(state) {
+
+            if (state === "pass") {
+                return "var(--success)";
+            }
+
+            if (state === "warning") {
+                return "var(--warning)";
+            }
+
+            return "var(--danger)";
+        }
+
+
+        function sectionChecks(
+            checks,
+            section
+        ) {
+
+            return checks.filter(
+                check =>
+                    check.section === section
+            );
+        }
+
+
+        function renderChecks(
+            element,
+            checks
+        ) {
+
+            element.innerHTML = "";
+
+            if (checks.length === 0) {
+
+                element.innerHTML = `
+                    <p>
+                        No checks reported.
+                    </p>
+                `;
+
+                return;
+            }
+
+            checks.forEach(
+                check => {
+
+                    const row =
+                        document.createElement(
+                            "p"
+                        );
+
+                    row.style.marginBottom =
+                        "10px";
+
+                    row.style.color =
+                        getStateColor(
+                            check.state
+                        );
+
+                    row.textContent =
+                        `${getStateSymbol(
+                            check.state
+                        )} ${check.message}`;
+
+                    element.appendChild(
+                        row
+                    );
+                }
+            );
+        }
+
+
+        function setSectionCount(
+            selector,
+            checks
+        ) {
+
+            const badge =
+                document.querySelector(
+                    selector
+                );
+
+            const passed =
+                checks.filter(
+                    check =>
+                        check.state === "pass"
+                ).length;
+
+            badge.textContent =
+                `${passed}/${checks.length}`;
+        }
+
+
+        function setOverallState(
+            health
+        ) {
+
+            overallHealth.textContent =
+                health;
+
+            overallHealth.classList.remove(
+                "teal",
+                "yellow"
+            );
+
+            if (health === "HEALTHY") {
+
+                overallHealth.classList.add(
+                    "teal"
+                );
+
+                return;
+            }
+
+            if (
+                health ===
+                "HEALTHY WITH WARNINGS"
+            ) {
+
+                overallHealth.classList.add(
+                    "yellow"
+                );
+
+                return;
+            }
+
+            overallHealth.style.color =
+                "var(--danger)";
+        }
+
+
+        async function loadHealth() {
+
+            const shiftDate =
+                healthDate.value;
+
+            if (!shiftDate) {
+                return;
+            }
+
+            try {
+
+                const health =
+                    await getHealth(
+                        shiftDate
+                    );
+
+                passedCount.textContent =
+                    health.result.passed;
+
+                warningCount.textContent =
+                    health.result.warnings;
+
+                failedCount.textContent =
+                    health.result.failed;
+
+                setOverallState(
+                    health.result.health
+                );
+
+
+                const toolChecks =
+                    sectionChecks(
+                        health.checks,
+                        "Tools"
+                    );
+
+                const syntaxChecks =
+                    sectionChecks(
+                        health.checks,
+                        "Script Syntax"
+                    );
+
+                const storageChecks =
+                    sectionChecks(
+                        health.checks,
+                        "Storage"
+                    );
+
+                const integrityChecks =
+                    sectionChecks(
+                        health.checks,
+                        "Ticket JSON Integrity"
+                    );
+
+                const atlasChecks =
+                    sectionChecks(
+                        health.checks,
+                        "Atlas / Jira"
+                    );
+
+                const copilotChecks =
+                    sectionChecks(
+                        health.checks,
+                        "Copilot"
+                    );
+
+                const safetyChecks =
+                    sectionChecks(
+                        health.checks,
+                        "Operational Safety"
+                    );
+
+
+                renderChecks(
+                    tools,
+                    toolChecks
+                );
+
+                renderChecks(
+                    syntax,
+                    syntaxChecks
+                );
+
+                renderChecks(
+                    storage,
+                    storageChecks
+                );
+
+                renderChecks(
+                    integrity,
+                    integrityChecks
+                );
+
+                renderChecks(
+                    atlas,
+                    atlasChecks
+                );
+
+                renderChecks(
+                    copilot,
+                    copilotChecks
+                );
+
+                renderChecks(
+                    safety,
+                    safetyChecks
+                );
+
+
+                setSectionCount(
+                    "#tools-count",
+                    toolChecks
+                );
+
+                setSectionCount(
+                    "#syntax-count",
+                    syntaxChecks
+                );
+
+                setSectionCount(
+                    "#storage-count",
+                    storageChecks
+                );
+
+                setSectionCount(
+                    "#integrity-count",
+                    integrityChecks
+                );
+
+                setSectionCount(
+                    "#safety-count",
+                    safetyChecks
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "Health load failed:",
+                    error
+                );
+
+                passedCount.textContent =
+                    "Error";
+
+                warningCount.textContent =
+                    "Error";
+
+                failedCount.textContent =
+                    "Error";
+
+                overallHealth.textContent =
+                    "Unavailable";
+
+                tools.textContent =
+                    error.message;
+            }
+        }
+
+
+        healthDate.value =
+            getDefaultShiftDate();
+
+        healthDate.addEventListener(
+            "change",
+            loadHealth
+        );
+
+        loadHealth();
+
+    </script>
+
+</body>
+
+</html>
