@@ -292,30 +292,11 @@
     <script type="module">
 
         import {
-            tickets
-        } from "./js/mock-data.js";
+            getTickets
+        } from "./js/api.js";
 
 
-        const expandedTickets = tickets.map(ticket => ({
-            ...ticket,
-
-            assignee:
-                ticket.id === "NOC-555"
-                    ? "Christopher Shelton"
-                    : ticket.id === "NOC-556"
-                        ? "Joseph Estrella"
-                        : "Iulia Sagau",
-
-            priority:
-                ticket.id === "NOC-556"
-                    ? "High"
-                    : "Medium",
-
-            notes:
-                ticket.id === "NOC-555"
-                    ? "Related to Salesforce ticket 00459666."
-                    : "No additional NOC notes."
-        }));
+        let tickets = [];
 
 
         const ticketTable =
@@ -350,7 +331,7 @@
 
 
             const filtered =
-                expandedTickets.filter(ticket => {
+                tickets.filter(ticket => {
 
                     const searchable =
                         `
@@ -388,7 +369,7 @@
 
                     if (
                         reviewFilter.checked &&
-                        ticket.nextAction
+                        !ticket.needsReview
                     ) {
                         return false;
                     }
@@ -422,7 +403,10 @@
       <td>${ticket.summary}</td>
 
       <td>
-        <span class="status ${ticket.status === "Re Open"
+        <span class="status ${(
+                        ticket.status === "Re Open" ||
+                        ticket.status === "Support Team"
+                    )
                         ? "status-blue"
                         : "status-red"
                     }">
@@ -499,7 +483,10 @@
 
 
             status.className =
-                `status ${ticket.status === "Re Open"
+                `status ${(
+                    ticket.status === "Re Open" ||
+                    ticket.status === "Support Team"
+                )
                     ? "status-blue"
                     : "status-red"
                 }`;
@@ -542,6 +529,38 @@
                 ticket.notes;
         }
 
+        async function loadTickets() {
+
+            try {
+
+                const response =
+                    await getTickets();
+
+                tickets =
+                    response.tickets;
+
+                renderTickets();
+
+            } catch (error) {
+
+                console.error(
+                    "Ticket load failed:",
+                    error
+                );
+
+                ticketTable.innerHTML = `
+        <tr>
+            <td colspan="5">
+                Ticket data unavailable.
+            </td>
+        </tr>
+    `;
+
+                ticketCount.textContent =
+                    "Unavailable";
+            }
+
+        }
 
         search.addEventListener(
             "input",
@@ -567,7 +586,7 @@
         );
 
 
-        renderTickets();
+        loadTickets();
 
     </script>
 

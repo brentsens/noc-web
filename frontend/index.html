@@ -105,10 +105,10 @@
 
                     <div class="page-controls">
 
-                        <input class="date-control" type="date" value="2026-10-26">
+                        <input id="dashboard-date" class="date-control" type="date" value="2026-10-22">
 
-                        <div class="ready-badge">
-                            ● SHIFT READY
+                        <div id="shift-status" class="ready-badge">
+                            ● LOADING
                         </div>
 
                     </div>
@@ -120,29 +120,40 @@
 
                     <article class="metric-card">
                         <div class="metric-label">Open Jira</div>
-                        <div class="metric-value teal">5</div>
+                        <div id="open-ticket-count" class="metric-value teal">
+                            -
+                        </div>
                         <div class="metric-subtitle">Tracked tickets</div>
                     </article>
 
                     <article class="metric-card">
                         <div class="metric-label">Investigations</div>
-                        <div class="metric-value purple">1</div>
+                        <div id="investigation-count" class="metric-value purple">
+                            -
+                        </div>
                         <div class="metric-subtitle">This shift</div>
                     </article>
 
                     <article class="metric-card">
                         <div class="metric-label">Needs Review</div>
-                        <div class="metric-value yellow">0</div>
+                        <div id="review-count" class="metric-value yellow">
+                            -
+                        </div>
                         <div class="metric-subtitle">Items</div>
                     </article>
 
                     <article class="metric-card">
-                        <div class="metric-label">Handover</div>
-                        <div class="metric-value yellow small">
-                            Pending
+
+                        <div class="metric-label">
+                            Handover
                         </div>
-                        <div class="metric-subtitle">
-                            Not yet created
+
+                        <div id="handover-status" class="metric-value yellow small">
+                            Loading
+                        </div>
+
+                        <div id="handover-subtitle" class="metric-subtitle">
+                            Checking handover
                         </div>
                     </article>
 
@@ -302,48 +313,176 @@
 
         import {
             tickets,
-            activity
         } from "./js/mock-data.js";
+
+        import {
+            getDashboard,
+            getTickets
+        } from "./js/api.js";
+
+        const dashboardDate =
+            document.querySelector(
+                "#dashboard-date"
+            );
+
+        const shiftStatus =
+            document.querySelector(
+                "#shift-status"
+            );
+
+        const openTicketCount =
+            document.querySelector(
+                "#open-ticket-count"
+            );
+
+        const investigationCount =
+            document.querySelector(
+                "#investigation-count"
+            );
+
+        const reviewCount =
+            document.querySelector(
+                "#review-count"
+            );
+
+        const handoverStatus =
+            document.querySelector(
+                "#handover-status"
+            );
+
+        const handoverSubtitle =
+            document.querySelector(
+                "#handover-subtitle"
+            );
 
 
         const ticketTable =
             document.querySelector("#ticket-table");
 
 
-        for (const ticket of tickets) {
+        function getStatusClass(status) {
 
-            const row =
-                document.createElement("tr");
+            const normalized =
+                status
+                    .trim()
+                    .toLowerCase();
 
-            if (!ticket.nextAction) {
-                row.classList.add("ticket-review");
+            if (
+                normalized === "re open" ||
+                normalized === "support team"
+            ) {
+                return "status-blue";
+            }
+
+            return "status-red";
+        }
+
+
+        function renderTicketTable(tickets) {
+
+            ticketTable.innerHTML = "";
+
+            if (tickets.length === 0) {
+
+                const row =
+                    document.createElement("tr");
+
+                row.innerHTML = `
+        <td colspan="4">
+            No open tickets found.
+        </td>
+    `;
+
+                ticketTable.appendChild(row);
+
+                return;
             }
 
 
-            const statusClass =
-                ticket.status === "Re Open"
-                    ? "status-blue"
-                    : "status-red";
+            for (const ticket of tickets) {
 
-            const nextAction =
-                ticket.nextAction ||
-                '<span class="warning-text">No Next Action</span>';
+                const row =
+                    document.createElement("tr");
 
-            row.innerHTML = `
-      <td>${ticket.id}</td>
 
-      <td>
-        <span class="status ${statusClass}">
-          ${ticket.status}
-        </span>
-      </td>
+                if (ticket.needsReview) {
 
-      <td>${ticket.environment}</td>
+                    row.classList.add(
+                        "ticket-review"
+                    );
 
-      <td>${nextAction}</td>
+                }
+
+
+                const statusClass =
+                    getStatusClass(
+                        ticket.status
+                    );
+
+
+                const nextAction =
+                    ticket.nextAction
+                        ? ticket.nextAction
+                        : '<span class="warning-text">No Next Action</span>';
+
+
+                row.innerHTML = `
+        <td>${ticket.id}</td>
+
+        <td>
+            <span class="status ${statusClass}">
+                ${ticket.status || "Unknown"}
+            </span>
+        </td>
+
+        <td>
+            ${ticket.environment || "Not recorded"}
+        </td>
+
+        <td>
+            ${nextAction}
+        </td>
     `;
 
-            ticketTable.appendChild(row);
+
+                ticketTable.appendChild(
+                    row
+                );
+
+            }
+
+        }
+
+        async function loadTickets() {
+
+            try {
+
+                const response =
+                    await getTickets();
+
+
+                renderTicketTable(
+                    response.tickets
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "Ticket load failed:",
+                    error
+                );
+
+
+                ticketTable.innerHTML = `
+        <tr>
+            <td colspan="4">
+                Ticket data unavailable.
+            </td>
+        </tr>
+    `;
+
+            }
+
         }
 
 
@@ -371,6 +510,126 @@
 
             activityList.appendChild(row);
         }
+
+        async function loadDashboard() {
+
+            const shiftDate =
+                dashboardDate.value;
+
+
+            shiftStatus.textContent =
+                "● LOADING";
+
+
+            try {
+
+                const dashboard =
+                    await getDashboard(
+                        shiftDate
+                    );
+
+
+                openTicketCount.textContent =
+                    dashboard.openTickets;
+
+
+                investigationCount.textContent =
+                    dashboard.investigations;
+
+
+                reviewCount.textContent =
+                    dashboard.needsReview;
+
+
+                if (
+                    dashboard.handover === "created"
+                ) {
+
+                    handoverStatus.textContent =
+                        "Created";
+
+                    handoverSubtitle.textContent =
+                        "Handover available";
+
+                    handoverStatus.classList.remove(
+                        "yellow"
+                    );
+
+                    handoverStatus.classList.add(
+                        "success-text"
+                    );
+
+                } else {
+
+                    handoverStatus.textContent =
+                        "Pending";
+
+                    handoverSubtitle.textContent =
+                        "Not yet created";
+
+                    handoverStatus.classList.remove(
+                        "success-text"
+                    );
+
+                    handoverStatus.classList.add(
+                        "yellow"
+                    );
+
+                }
+
+
+                if (
+                    dashboard.status === "ready"
+                ) {
+
+                    shiftStatus.textContent =
+                        "● SHIFT READY";
+
+                } else {
+
+                    shiftStatus.textContent =
+                        "● NEEDS REVIEW";
+
+                }
+
+            } catch (error) {
+
+                console.error(
+                    "Dashboard load failed:",
+                    error
+                );
+
+
+                shiftStatus.textContent =
+                    "● DATA ERROR";
+
+
+                openTicketCount.textContent =
+                    "-";
+
+                investigationCount.textContent =
+                    "-";
+
+                reviewCount.textContent =
+                    "-";
+
+                handoverStatus.textContent =
+                    "Unavailable";
+
+                handoverSubtitle.textContent =
+                    "Could not determine status";
+
+            }
+
+        }
+
+        dashboardDate.addEventListener(
+            "change",
+            loadDashboard
+        );
+
+        loadDashboard();
+        loadTickets();
 
     </script>
 
