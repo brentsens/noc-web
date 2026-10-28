@@ -74,6 +74,25 @@ export async function apiRequest(
 
 }
 
+export function addShiftNote(
+  shiftDate,
+  category,
+  text
+) {
+
+  return apiRequest(
+    `/api/shifts/${shiftDate}/notes`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        category,
+        text
+      })
+    }
+  );
+
+}
+
 export function getInvestigations(
   shiftDate
 ) {

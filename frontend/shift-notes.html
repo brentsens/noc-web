@@ -185,7 +185,8 @@
     <script type="module">
 
         import {
-            getShiftNotes
+            getShiftNotes,
+            addShiftNote
         } from "./js/api.js";
 
         let notes = [];
@@ -522,58 +523,58 @@
 
         form.addEventListener(
             "submit",
-            event => {
+            async event => {
 
                 event.preventDefault();
 
                 const text =
                     noteInput.value.trim();
 
-
                 if (!text) {
                     return;
                 }
 
-
                 const category =
                     categoryInput.value;
 
-
-                const section =
-                    notes.find(
-                        item =>
-                            item.name === category
+                const submitButton =
+                    form.querySelector(
+                        'button[type="submit"]'
                     );
 
+                submitButton.disabled = true;
+                submitButton.textContent =
+                    "Saving...";
 
-                if (!section) {
-                    return;
+                try {
+
+                    await addShiftNote(
+                        shiftDate.value,
+                        category,
+                        text
+                    );
+
+                    hideModal();
+
+                    await loadShiftNotes();
+
+                } catch (error) {
+
+                    console.error(
+                        "Shift note save failed:",
+                        error
+                    );
+
+                    window.alert(
+                        `Could not save shift note: ${error.message}`
+                    );
+
+                } finally {
+
+                    submitButton.disabled = false;
+                    submitButton.textContent =
+                        "Add Note";
                 }
-
-
-                const now =
-                    new Date();
-
-
-                const time =
-                    now.toLocaleTimeString(
-                        [],
-                        {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            hour12: false
-                        }
-                    );
-
-
-                section.entries.push({
-                    time,
-                    text
-                });
-
-
-                hideModal();
-                renderNotes();
             }
         );
 
@@ -586,6 +587,24 @@
             "change",
             loadShiftNotes
         );
+
+        const pageParams =
+            new URLSearchParams(
+                window.location.search
+            );
+
+        if (
+            pageParams.get("action")
+            === "add"
+        ) {
+            showModal();
+
+            window.history.replaceState(
+                {},
+                "",
+                window.location.pathname
+            );
+        }
 
 
         loadShiftNotes();

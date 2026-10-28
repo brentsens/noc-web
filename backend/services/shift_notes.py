@@ -2,6 +2,7 @@ import re
 
 from backend.config import NOC_ROOT
 
+from datetime import datetime
 
 SECTION_PATTERN = re.compile(
     r"^##\s+(.+?)\s*$"
@@ -155,4 +156,125 @@ def get_shift_notes(
         "exists": True,
         "sections": sections,
         "activity": activity,
+    }
+
+def add_shift_note(
+    shift_date: str,
+    category: str,
+    text: str,
+) -> dict:
+
+    notes_file = (
+        NOC_ROOT
+        / shift_date
+        / "shift-notes.md"
+    )
+
+    if not notes_file.is_file():
+        raise FileNotFoundError(
+            f"Shift notes not found: {notes_file}"
+        )
+
+    clean_category = category.strip()
+
+    clean_text = " ".join(
+        text.split()
+    )
+
+    if not clean_category:
+        raise ValueError(
+            "Category is required."
+        )
+
+    if not clean_text:
+        raise ValueError(
+            "Note text is required."
+        )
+
+    content = notes_file.read_text(
+        encoding="utf-8"
+    )
+
+    lines = content.splitlines()
+
+    section_heading = (
+        f"## {clean_category}"
+    )
+
+    try:
+        section_index = lines.index(
+            section_heading
+        )
+
+    except ValueError as error:
+        raise ValueError(
+            (
+                "Shift note category "
+                f"not found: {clean_category}"
+            )
+        ) from error
+
+    insert_index = len(lines)
+
+    for index in range(
+        section_index + 1,
+        len(lines),
+    ):
+        if lines[index].startswith(
+            "## "
+        ):
+            insert_index = index
+            break
+
+    timestamp = datetime.now().strftime(
+        "%H:%M"
+    )
+
+    note_line = (
+        f"- {timestamp} {clean_text}"
+    )
+
+    # Keep a blank line between the final note
+    # in a section and the next Markdown heading.
+    lines.insert(
+        insert_index,
+        note_line,
+    )
+
+    if (
+        insert_index + 1 < len(lines)
+        and lines[insert_index + 1].startswith("## ")
+    ):
+        lines.insert(
+            insert_index + 1,
+            ""
+        )
+
+    updated_content = (
+        "\n".join(lines).rstrip()
+        + "\n"
+    )
+
+    temporary_file = (
+        notes_file.with_suffix(
+            ".md.tmp"
+        )
+    )
+
+    temporary_file.write_text(
+        updated_content,
+        encoding="utf-8",
+    )
+
+    temporary_file.replace(
+        notes_file
+    )
+
+    return {
+        "shiftDate": shift_date,
+        "category": clean_category,
+        "time": timestamp,
+        "text": clean_text,
+        "saved": True,
+        "path": str(notes_file),
     }
