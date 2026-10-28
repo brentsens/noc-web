@@ -47,6 +47,10 @@ from backend.api.handover_delivery import (
     router as handover_delivery_router,
 )
 
+from backend.api.ticket_sync import (
+    router as ticket_sync_router,
+)
+
 app = FastAPI(
     title="SES NOC Operations API",
     version="0.1.0",
@@ -104,6 +108,11 @@ app.include_router(
 app.include_router(
     handover_delivery_router
 )
+
+app.include_router(
+    ticket_sync_router
+)
+
 
 app.mount(
     "/",

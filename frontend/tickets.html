@@ -134,9 +134,13 @@
 
                     <div class="toolbar-spacer"></div>
 
-                    <button class="button" type="button">
+                    <button id="sync-all-tickets" class="button" type="button">
                         Sync All Tickets
                     </button>
+
+                    <span id="ticket-sync-status">
+                        Not synced this session
+                    </span>
 
                 </section>
 
@@ -296,7 +300,9 @@
     <script type="module">
 
         import {
-            getTickets
+            getTickets,
+            getTicketSyncState,
+            syncAllTickets
         } from "./js/api.js";
 
 
@@ -320,6 +326,16 @@
 
         const reviewFilter =
             document.querySelector("#review-filter");
+
+        const syncAllButton =
+            document.querySelector(
+                "#sync-all-tickets"
+            );
+
+        const syncStatus =
+            document.querySelector(
+                "#ticket-sync-status"
+            );
 
 
         function renderTickets() {
@@ -587,6 +603,120 @@
         reviewFilter.addEventListener(
             "change",
             renderTickets
+        );
+
+        async function loadTicketSyncState() {
+
+            try {
+
+                const state =
+                    await getTicketSyncState();
+
+                if (
+                    !state.synced
+                    || !state.completedAt
+                ) {
+
+                    syncStatus.textContent =
+                        "No successful sync recorded";
+
+                    return;
+                }
+
+                const completed =
+                    new Date(
+                        state.completedAt
+                    );
+
+                syncStatus.textContent =
+                    `Last synced ${completed.toLocaleDateString()
+                    } at ${completed.toLocaleTimeString(
+                        [],
+                        {
+                            hour: "2-digit",
+                            minute: "2-digit"
+                        }
+                    )
+                    }`;
+
+            } catch (error) {
+
+                console.error(
+                    "Ticket sync state load failed:",
+                    error
+                );
+
+                syncStatus.textContent =
+                    "Sync status unavailable";
+            }
+        }
+
+        syncAllButton.addEventListener(
+            "click",
+            async () => {
+
+                const confirmed =
+                    window.confirm(
+                        "Sync all locally tracked tickets with Jira?\n\n"
+                        + "This will run tix sync --all and update "
+                        + "the local ticket records."
+                    );
+
+                if (!confirmed) {
+                    return;
+                }
+
+                syncAllButton.disabled = true;
+                syncAllButton.textContent =
+                    "Syncing...";
+
+                syncStatus.textContent =
+                    "Sync in progress...";
+
+                try {
+
+                    const result =
+                        await syncAllTickets();
+
+                    if (!result.success) {
+                        throw new Error(
+                            "Ticket sync did not complete."
+                        );
+                    }
+
+                    syncStatus.textContent =
+                        `Synced successfully at ${new Date(
+                            result.completedAt
+                        ).toLocaleTimeString(
+                            [],
+                            {
+                                hour: "2-digit",
+                                minute: "2-digit"
+                            }
+                        )
+                        }`;
+
+                    await loadTickets();
+
+                } catch (error) {
+
+                    console.error(
+                        "Ticket sync failed:",
+                        error
+                    );
+
+                    syncStatus.textContent =
+                        `Sync failed: ${error.message}`;
+
+                } finally {
+
+                    syncAllButton.disabled =
+                        false;
+
+                    syncAllButton.textContent =
+                        "Sync All Tickets";
+                }
+            }
         );
 
 

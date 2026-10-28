@@ -2,7 +2,9 @@ import re
 import shutil
 import subprocess
 
+from datetime import datetime
 from backend.config import NOC_ROOT
+
 
 
 SECTION_PATTERN = re.compile(
@@ -245,3 +247,143 @@ def generate_handover(
     return get_handover(
         shift_date
     )
+
+def regenerate_handover(
+    shift_date: str,
+) -> dict:
+
+    handover_dir = (
+        NOC_ROOT
+        / shift_date
+        / "handover"
+    )
+
+    handover_file = (
+        handover_dir
+        / f"handover-{shift_date}.md"
+    )
+
+    if (
+        not handover_file.is_file()
+        or handover_file.stat().st_size == 0
+    ):
+        raise FileNotFoundError(
+            (
+                "Existing handover not found: "
+                f"{handover_file}"
+            )
+        )
+
+    command = shutil.which(
+        "noc-handover"
+    )
+
+    if not command:
+        raise FileNotFoundError(
+            "noc-handover command not found"
+        )
+
+    archive_dir = (
+        handover_dir / "archive"
+    )
+
+    archive_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    timestamp = datetime.now().strftime(
+        "%Y%m%d-%H%M%S-%f"
+    )
+
+    archive_file = (
+        archive_dir
+        / (
+            f"handover-{shift_date}"
+            f"-{timestamp}.md"
+        )
+    )
+
+    shutil.copy2(
+        handover_file,
+        archive_file,
+    )
+
+    if (
+        not archive_file.is_file()
+        or archive_file.stat().st_size == 0
+    ):
+        raise RuntimeError(
+            "Handover archive verification failed."
+        )
+
+    try:
+        result = subprocess.run(
+            [
+                command,
+                "--date",
+                shift_date,
+                "--force",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=300,
+        )
+
+    except subprocess.TimeoutExpired:
+
+        shutil.copy2(
+            archive_file,
+            handover_file,
+        )
+
+        raise
+
+    if result.returncode != 0:
+
+        # Restore the archived version if
+        # regeneration fails.
+        shutil.copy2(
+            archive_file,
+            handover_file,
+        )
+
+        message = (
+            result.stderr.strip()
+            or result.stdout.strip()
+            or "Handover regeneration failed"
+        )
+
+        raise RuntimeError(
+            message
+        )
+
+    if (
+        not handover_file.is_file()
+        or handover_file.stat().st_size == 0
+    ):
+
+        shutil.copy2(
+            archive_file,
+            handover_file,
+        )
+
+        raise RuntimeError(
+            (
+                "Regeneration completed but "
+                "the new handover was not created. "
+                "The previous handover was restored."
+            )
+        )
+
+    handover = get_handover(
+        shift_date
+    )
+
+    handover["regenerated"] = True
+    handover["archivedFile"] = str(
+        archive_file
+    )
+
+    return handover

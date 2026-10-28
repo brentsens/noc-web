@@ -1,6 +1,9 @@
 from backend.config import NOC_ROOT
 from backend.services.health import get_health
 from backend.services.status import get_status
+from backend.services.ticket_sync import (
+    get_ticket_sync_state,
+)
 
 
 def get_end_shift_preflight(
@@ -26,6 +29,15 @@ def get_end_shift_preflight(
 
     health = get_health(
         shift_date
+    )
+
+    jira_sync = get_ticket_sync_state()
+
+    jira_synced = (
+        jira_sync["synced"]
+        and jira_sync["success"]
+        and jira_sync["completedAt"]
+        is not None
     )
 
 
@@ -94,6 +106,10 @@ def get_end_shift_preflight(
             )
         )
 
+    if not jira_synced:
+        blockers.append(
+            "A successful Jira sync is required."
+        )
 
     ready = (
         len(blockers) == 0
@@ -117,6 +133,17 @@ def get_end_shift_preflight(
         "notes": {
             "exists": notes_exist,
             "path": str(notes_file),
+        },
+
+        "jiraSync": {
+            "synced": jira_synced,
+            "state": (
+                "CHECKED"
+                if jira_synced
+                else "NOT CHECKED"
+            ),
+            "completedAt":
+                jira_sync["completedAt"],
         },
 
         "tickets": {

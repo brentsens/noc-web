@@ -253,3 +253,35 @@ export function sendHandoverDelivery(
   );
 
 }
+
+export function syncAllTickets() {
+
+  return apiRequest(
+    "/api/ticket-sync/sync",
+    {
+      method: "POST"
+    }
+  );
+
+}
+
+export function getTicketSyncState() {
+
+  return apiRequest(
+    "/api/ticket-sync/sync"
+  );
+
+}
+
+export function regenerateHandover(
+  shiftDate
+) {
+
+  return apiRequest(
+    `/api/shifts/${shiftDate}/handover/regenerate`,
+    {
+      method: "POST"
+    }
+  );
+
+}
