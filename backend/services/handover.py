@@ -1,4 +1,6 @@
 import re
+import shutil
+import subprocess
 
 from backend.config import NOC_ROOT
 
@@ -175,3 +177,71 @@ def get_handover(
         "content":
             content.strip(),
     }
+
+def generate_handover(
+    shift_date: str,
+) -> dict:
+
+    handover_file = (
+        NOC_ROOT
+        / shift_date
+        / "handover"
+        / f"handover-{shift_date}.md"
+    )
+
+    if (
+        handover_file.is_file()
+        and handover_file.stat().st_size > 0
+    ):
+        raise FileExistsError(
+            f"Handover already exists: {handover_file}"
+        )
+
+    command = shutil.which(
+        "noc-handover"
+    )
+
+    if not command:
+        raise FileNotFoundError(
+            "noc-handover command not found"
+        )
+
+    result = subprocess.run(
+        [
+            command,
+            "--date",
+            shift_date,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    if result.returncode != 0:
+
+        message = (
+            result.stderr.strip()
+            or result.stdout.strip()
+            or "noc-handover failed"
+        )
+
+        raise RuntimeError(
+            message
+        )
+
+    if (
+        not handover_file.is_file()
+        or handover_file.stat().st_size == 0
+    ):
+        raise RuntimeError(
+            (
+                "noc-handover completed but "
+                "the expected handover file "
+                "was not created."
+            )
+        )
+
+    return get_handover(
+        shift_date
+    )

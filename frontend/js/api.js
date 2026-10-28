@@ -195,3 +195,61 @@ export function executeStartShift(
   );
 
 }
+
+export function getEndShiftPreflight(
+  shiftDate
+) {
+
+  return apiRequest(
+    `/api/end-shift/${shiftDate}`
+  );
+
+}
+
+export function generateHandover(
+  shiftDate
+) {
+
+  return apiRequest(
+    `/api/shifts/${shiftDate}/handover`,
+    {
+      method: "POST"
+    }
+  );
+
+}
+
+export function previewHandoverDelivery(
+  shiftDate,
+  recipient = null
+) {
+
+  return apiRequest(
+    `/api/shifts/${shiftDate}/handover/preview`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        recipient
+      })
+    }
+  );
+
+}
+
+export function sendHandoverDelivery(
+  shiftDate,
+  recipient = null
+) {
+
+  return apiRequest(
+    `/api/shifts/${shiftDate}/handover/send`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        recipient,
+        confirmed: true
+      })
+    }
+  );
+
+}

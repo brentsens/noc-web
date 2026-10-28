@@ -215,7 +215,7 @@
 
                             <div class="readiness-row">
 
-                                <div class="readiness-icon warning-text">
+                                <div id="readiness-health-icon" class="readiness-icon warning-text">
                                     ○
                                 </div>
 
@@ -225,15 +225,16 @@
                                         Automation Health
                                     </strong>
 
-                                    <p>
-                                        Health check runs during noc-end.
+                                    <p id="readiness-health-copy">
+                                        Checking automation health...
                                     </p>
 
                                 </div>
 
-                                <span class="readiness-state warning-text">
-                                    NOT CHECKED
+                                <span id="readiness-health-state" class="readiness-state warning-text">
+                                    CHECKING
                                 </span>
+
                             </div>
 
 
@@ -499,57 +500,16 @@
 
                 <div>
                     <label>Subject</label>
-                    <span>
-                        NOC Shift Handover - 10/26/2026
+                    <span id="preview-subject">
+                        Checking...
                     </span>
                 </div>
 
             </div>
 
 
-            <div class="email-preview-body">
-
-                <h3>NOC Shift Handover</h3>
-
-                <p class="email-preview-date">
-                    October 26, 2026
-                </p>
-
-                <h4>Summary</h4>
-
-                <p>
-                    Shift included Jira ticket follow-up,
-                    monitoring changes, and review of the
-                    IR-16 Export memory investigation.
-                </p>
-
-
-                <h4>Open Tickets</h4>
-
-                <p>
-                    Five Jira tickets remain locally tracked.
-                    NOC-556 requires review because no Next
-                    Action is recorded.
-                </p>
-
-
-                <h4>Investigations</h4>
-
-                <p>
-                    IR-16 is validated and ready for handover.
-                    Controlled Export restart remains an
-                    outstanding follow-up.
-                </p>
-
-
-                <h4>Next Shift Actions</h4>
-
-                <p>
-                    Follow up on pending testing, development
-                    investigations, NOC-556 Next Action, and
-                    the IR-16 restart recommendation.
-                </p>
-
+            <div id="email-preview-body" class="email-preview-body">
+                Loading handover...
             </div>
 
 
@@ -585,10 +545,10 @@
 
         import {
             getHandover,
-            getDashboard,
-            getShiftNotes,
-            getTickets,
-            getInvestigations
+            getEndShiftPreflight,
+            generateHandover,
+            previewHandoverDelivery,
+            sendHandoverDelivery
         } from "./js/api.js";
 
         const readinessJiraIcon =
@@ -744,6 +704,16 @@
                 "#preview-recipient"
             );
 
+        const previewSubject =
+            document.querySelector(
+                "#preview-subject"
+            );
+
+        const previewBody =
+            document.querySelector(
+                "#email-preview-body"
+            );
+
         const closeEmailPreview =
             document.querySelector(
                 "#close-email-preview"
@@ -754,9 +724,26 @@
                 "#back-to-delivery"
             );
 
+        let previewedRecipient = null;
+
         const sendEmailButton =
             document.querySelector(
                 "#send-email"
+            );
+
+        const readinessHealthIcon =
+            document.querySelector(
+                "#readiness-health-icon"
+            );
+
+        const readinessHealthCopy =
+            document.querySelector(
+                "#readiness-health-copy"
+            );
+
+        const readinessHealthState =
+            document.querySelector(
+                "#readiness-health-state"
             );
 
         function getLocalDateString() {
@@ -874,6 +861,162 @@
 
         }
 
+        function renderEmailPreview(
+            handover
+        ) {
+
+            previewBody.innerHTML = "";
+
+            if (handover.intro) {
+
+                const intro =
+                    document.createElement(
+                        "div"
+                    );
+
+                intro.className =
+                    "email-preview-intro";
+
+                for (
+                    const line
+                    of handover.intro.split("\n")
+                ) {
+
+                    if (!line.trim()) {
+                        continue;
+                    }
+
+                    const paragraph =
+                        document.createElement(
+                            "p"
+                        );
+
+                    paragraph.textContent =
+                        line;
+
+                    intro.appendChild(
+                        paragraph
+                    );
+                }
+
+                previewBody.appendChild(
+                    intro
+                );
+            }
+
+
+            for (
+                const section
+                of handover.sections
+            ) {
+
+                const heading =
+                    document.createElement(
+                        "h4"
+                    );
+
+                heading.textContent =
+                    section.name;
+
+                previewBody.appendChild(
+                    heading
+                );
+
+
+                const lines =
+                    section.content.split("\n");
+
+                let list = null;
+
+                for (const rawLine of lines) {
+
+                    const line =
+                        rawLine.trim();
+
+                    if (!line) {
+                        continue;
+                    }
+
+                    if (line.startsWith("- ")) {
+
+                        if (!list) {
+
+                            list =
+                                document.createElement(
+                                    "ul"
+                                );
+
+                            previewBody.appendChild(
+                                list
+                            );
+                        }
+
+                        const item =
+                            document.createElement(
+                                "li"
+                            );
+
+                        item.textContent =
+                            line.slice(2);
+
+                        list.appendChild(
+                            item
+                        );
+
+                        continue;
+                    }
+
+                    list = null;
+
+                    const paragraph =
+                        document.createElement(
+                            "p"
+                        );
+
+                    paragraph.textContent =
+                        line;
+
+                    previewBody.appendChild(
+                        paragraph
+                    );
+                }
+            }
+
+
+            if (handover.closing) {
+
+                const closing =
+                    document.createElement(
+                        "div"
+                    );
+
+                closing.className =
+                    "email-preview-closing";
+
+                for (
+                    const line
+                    of handover.closing.split("\n")
+                ) {
+
+                    const paragraph =
+                        document.createElement(
+                            "p"
+                        );
+
+                    paragraph.textContent =
+                        line || "\u00a0";
+
+                    closing.appendChild(
+                        paragraph
+                    );
+                }
+
+                previewBody.appendChild(
+                    closing
+                );
+            }
+        }
+
         async function loadHandover() {
 
             try {
@@ -957,30 +1100,19 @@
 
         async function loadReadiness() {
 
+            generateButton.disabled = true;
+
             try {
 
-                const [
-                    tickets,
-                    notes,
-                    investigations,
-                    dashboard
-                ] = await Promise.all([
-                    getTickets(),
-                    getShiftNotes(
+                const preflight =
+                    await getEndShiftPreflight(
                         endShiftDate.value
-                    ),
-                    getInvestigations(
-                        endShiftDate.value
-                    ),
-                    getDashboard(
-                        endShiftDate.value
-                    )
-                ]);
+                    );
 
 
-                // Jira
+                // Jira / locally tracked tickets
                 readinessJiraCopy.textContent =
-                    `${tickets.tickets.length} locally tracked ticket${tickets.tickets.length === 1
+                    `${preflight.tickets.open} locally tracked ticket${preflight.tickets.open === 1
                         ? ""
                         : "s"
                     } loaded.`;
@@ -994,13 +1126,10 @@
 
 
                 // Shift Notes
-                if (notes.exists) {
+                if (preflight.notes.exists) {
 
                     readinessShiftCopy.textContent =
-                        `${notes.activity.length} shift note entr${notes.activity.length === 1
-                            ? "y"
-                            : "ies"
-                        } available.`;
+                        "Shift notes are available.";
 
                     setReadinessState(
                         readinessShiftIcon,
@@ -1012,23 +1141,20 @@
                 } else {
 
                     readinessShiftCopy.textContent =
-                        "No shift notes available for this date.";
+                        "Shift notes are missing.";
 
                     setReadinessState(
                         readinessShiftIcon,
                         readinessShiftState,
-                        "REVIEW",
+                        "BLOCKED",
                         false
                     );
-
                 }
 
 
                 // Review Gate
                 const needsReview =
-                    Number(
-                        dashboard.needsReview ?? 0
-                    );
+                    preflight.tickets.needsReview;
 
                 if (needsReview === 0) {
 
@@ -1056,15 +1182,37 @@
                         "REVIEW",
                         false
                     );
-
                 }
 
+                // Automation Health
+                const health =
+                    preflight.health;
+
+                const healthClear =
+                    health.failed === 0;
+
+                readinessHealthCopy.textContent =
+                    `${health.passed} checks passed, `
+                    + `${health.warnings} warning${health.warnings === 1 ? "" : "s"
+                    }, `
+                    + `${health.failed} failure${health.failed === 1 ? "" : "s"
+                    }.`;
+
+                setReadinessState(
+                    readinessHealthIcon,
+                    readinessHealthState,
+                    health.state,
+                    healthClear
+                );
 
                 // Investigations
-                if (investigations.count > 0) {
+                const investigationCount =
+                    preflight.investigations.count;
+
+                if (investigationCount > 0) {
 
                     readinessInvestigationsCopy.textContent =
-                        `${investigations.count} validated investigation${investigations.count === 1
+                        `${investigationCount} validated investigation${investigationCount === 1
                             ? ""
                             : "s"
                         } available for handover.`;
@@ -1087,16 +1235,18 @@
                         "NONE",
                         false
                     );
-
                 }
+
+
+                generateButton.disabled =
+                    !preflight.generation.enabled;
 
             } catch (error) {
 
                 console.error(
-                    "Readiness load failed:",
+                    "End Shift preflight failed:",
                     error
                 );
-
 
                 const checks = [
                     [
@@ -1115,20 +1265,23 @@
                         readinessReviewCopy
                     ],
                     [
+                        readinessHealthIcon,
+                        readinessHealthState,
+                        readinessHealthCopy
+                    ],
+                    [
                         readinessInvestigationsIcon,
                         readinessInvestigationsState,
                         readinessInvestigationsCopy
                     ]
                 ];
 
-
                 for (
                     const [
                         icon,
                         state,
                         copy
-                    ]
-                    of checks
+                    ] of checks
                 ) {
 
                     icon.textContent = "!";
@@ -1154,11 +1307,10 @@
 
                     copy.textContent =
                         "Data unavailable.";
-
                 }
 
+                generateButton.disabled = true;
             }
-
         }
 
         function showDeliveryModal() {
@@ -1247,15 +1399,73 @@
 
         sendEmailButton.addEventListener(
             "click",
-            () => {
+            async () => {
 
-                hideEmailPreview();
+                const recipientLabel =
+                    previewRecipient.textContent.trim();
 
+                const subject =
+                    previewSubject.textContent.trim();
 
-                alert(
-                    "Prototype only. No Microsoft 365 email was sent."
-                );
+                const confirmed =
+                    window.confirm(
+                        "Send this handover now?\n\n"
+                        + `To: ${recipientLabel}\n`
+                        + `Subject: ${subject}\n\n`
+                        + "This will send a real Microsoft 365 email."
+                    );
 
+                if (!confirmed) {
+                    return;
+                }
+
+                sendEmailButton.disabled = true;
+
+                const originalText =
+                    sendEmailButton.textContent;
+
+                sendEmailButton.textContent =
+                    "Sending...";
+
+                try {
+
+                    const result =
+                        await sendHandoverDelivery(
+                            endShiftDate.value,
+                            previewedRecipient
+                        );
+
+                    if (result.sent !== true) {
+                        throw new Error(
+                            "Microsoft 365 did not confirm the send."
+                        );
+                    }
+
+                    hideEmailPreview();
+
+                    window.alert(
+                        `Handover sent successfully to ${result.recipient}.`
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        "Handover email send failed:",
+                        error
+                    );
+
+                    window.alert(
+                        `Handover email send failed: ${error.message}`
+                    );
+
+                } finally {
+
+                    sendEmailButton.disabled =
+                        false;
+
+                    sendEmailButton.textContent =
+                        originalText;
+                }
             }
         );
 
@@ -1297,7 +1507,7 @@
 
         deliveryForm.addEventListener(
             "submit",
-            event => {
+            async event => {
 
                 event.preventDefault();
 
@@ -1326,50 +1536,148 @@
                     return;
                 }
 
+                let recipient = null;
 
                 if (
                     selectedDelivery.value === "other"
                 ) {
 
-                    const address =
+                    recipient =
                         recipientEmail.value.trim();
 
-
-                    if (!address) {
+                    if (!recipient) {
                         recipientEmail.focus();
                         return;
                     }
-
-
-                    previewRecipient.textContent =
-                        address;
-
-                } else {
-
-                    previewRecipient.textContent =
-                        "Signed-in Microsoft 365 mailbox";
-
                 }
 
+                try {
 
-                hideDeliveryModal();
+                    const preview =
+                        await previewHandoverDelivery(
+                            endShiftDate.value,
+                            recipient
+                        );
 
+                    if (preview.sent !== false) {
+                        throw new Error(
+                            "Preview safety check failed."
+                        );
+                    }
 
-                emailPreviewModal.classList.remove(
-                    "hidden"
-                );
+                    previewedRecipient =
+                        recipient;
+
+                    const handover =
+                        await getHandover(
+                            endShiftDate.value
+                        );
+
+                    if (!handover.exists) {
+                        window.alert(
+                            "No generated handover is available to preview."
+                        );
+
+                        return;
+                    }
+
+                    previewRecipient.textContent =
+                        preview.recipient;
+
+                    previewSubject.textContent =
+                        preview.subject;
+
+                    renderEmailPreview(
+                        handover
+                    );
+
+                    hideDeliveryModal();
+
+                    emailPreviewModal.classList.remove(
+                        "hidden"
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        "Email preview load failed:",
+                        error
+                    );
+
+                    window.alert(
+                        `Could not load handover preview: ${error.message}`
+                    );
+                }
 
             }
         );
 
         generateButton.addEventListener(
             "click",
-            () => {
+            async () => {
 
-                alert(
-                    "Prototype only. No handover was generated."
-                );
+                const shiftDate =
+                    endShiftDate.value;
 
+                if (!shiftDate) {
+                    return;
+                }
+
+                const confirmed =
+                    window.confirm(
+                        `Generate the handover for ${shiftDate}?\n\n`
+                        + "This will run noc-handover and use "
+                        + "Copilot to generate the handover.\n\n"
+                        + "No email will be sent."
+                    );
+
+                if (!confirmed) {
+                    return;
+                }
+
+                generateButton.disabled = true;
+
+                const originalText =
+                    generateButton.textContent;
+
+                generateButton.textContent =
+                    "Generating...";
+
+                handoverState.textContent =
+                    "GENERATING";
+
+                try {
+
+                    const handover =
+                        await generateHandover(
+                            shiftDate
+                        );
+
+                    renderHandover(
+                        handover
+                    );
+
+                    await loadReadiness();
+
+                } catch (error) {
+
+                    console.error(
+                        "Handover generation failed:",
+                        error
+                    );
+
+                    window.alert(
+                        `Handover generation failed: ${error.message}`
+                    );
+
+                    await loadHandover();
+                    await loadReadiness();
+
+                } finally {
+
+                    generateButton.textContent =
+                        originalText;
+                }
             }
         );
 

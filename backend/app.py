@@ -39,6 +39,14 @@ from backend.api.start_shift import (
     router as start_shift_router,
 )
 
+from backend.api.end_shift import (
+    router as end_shift_router,
+)
+
+from backend.api.handover_delivery import (
+    router as handover_delivery_router,
+)
+
 app = FastAPI(
     title="SES NOC Operations API",
     version="0.1.0",
@@ -87,6 +95,14 @@ app.include_router(
 
 app.include_router(
     start_shift_router
+)
+
+app.include_router(
+    end_shift_router
+)
+
+app.include_router(
+    handover_delivery_router
 )
 
 app.mount(
