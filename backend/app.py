@@ -51,6 +51,15 @@ from backend.api.ticket_sync import (
     router as ticket_sync_router,
 )
 
+from backend.api.jira_create import (
+    router as jira_create_router,
+)
+
+from backend.api.jira_discovery import (
+    router as jira_discovery_router,
+)
+
+
 app = FastAPI(
     title="SES NOC Operations API",
     version="0.1.0",
@@ -111,6 +120,14 @@ app.include_router(
 
 app.include_router(
     ticket_sync_router
+)
+
+app.include_router(
+    jira_create_router
+)
+
+app.include_router(
+    jira_discovery_router
 )
 
 

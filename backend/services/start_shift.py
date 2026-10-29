@@ -1,6 +1,9 @@
 import shutil
 
 from backend.config import NOC_ROOT
+from backend.services.jira_ticket_queue import (
+    refresh_jira_ticket_queue,
+)
 
 
 REQUIRED_TOOLS = (
@@ -100,7 +103,7 @@ def get_start_shift_preflight(
             "path": path,
         })
 
-        required_ready = all(
+    required_ready = all(
         tool["available"]
         for tool in required_tools
     )
@@ -285,12 +288,44 @@ def start_shift(
         ),
     })
 
+    # Refresh the current Jira queue.
+    # This is read-only and must not block
+    # the shift from starting.
+    jira_refresh = {
+        "success": False,
+        "count": 0,
+        "warning": None,
+    }
+
+    try:
+
+        jira_queue = (
+            refresh_jira_ticket_queue()
+)
+
+        jira_refresh = {
+            "success": True,
+            "count": jira_queue.get(
+                "count",
+                0,
+            ),
+            "warning": None,
+        }
+
+    except Exception as error:
+
+        jira_refresh = {
+            "success": False,
+            "count": 0,
+            "warning": str(error),
+        }
 
     return {
         "shiftDate": shift_date,
         "started": True,
         "workspace": str(shift_dir),
         "notes": str(notes_file),
+        "jiraQueue": jira_refresh,
         "actions": actions,
         "safety": {
             "existingNotesOverwritten": False,

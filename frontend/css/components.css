@@ -1897,3 +1897,59 @@ td {
 
     font-size: 10px;
 }
+
+#jira-create-modal .modal-card {
+    width: min(680px, calc(100vw - 32px));
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+#jira-create-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+#jira-create-form h3 {
+    margin-top: 12px;
+    margin-bottom: 0;
+}
+
+#jira-create-form .modal-actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--surface, #18212b);
+    padding-top: 12px;
+    padding-bottom: 4px;
+    z-index: 2;
+}
+
+.jira-preview-modal {
+    width: min(760px, calc(100vw - 32px));
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+}
+
+.jira-preview-description {
+    white-space: pre-wrap;
+
+    max-height: 420px;
+    overflow-y: auto;
+
+    padding: 15px;
+
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.muted-text {
+    color: var(--text-muted);
+    font-size: 11px;
+}

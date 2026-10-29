@@ -46,10 +46,10 @@ def noc_root(
             test_root,
         )
 
-        monkeypatch.setattr(
-    ticket_sync,
-    "SYNC_STATE_FILE",
-    test_root / ".ticket-sync-state.json",
-)
+    monkeypatch.setattr(
+        ticket_sync,
+        "SYNC_STATE_FILE",
+        test_root / ".ticket-sync-state.json",
+    )
 
     return test_root

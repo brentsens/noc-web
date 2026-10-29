@@ -285,3 +285,55 @@ export function regenerateHandover(
   );
 
 }
+
+export function previewJiraTicket(
+  ticket
+) {
+
+  return apiRequest(
+    "/api/jira/tickets/preview",
+    {
+      method: "POST",
+      body: JSON.stringify(
+        ticket
+      )
+    }
+  );
+
+}
+
+export function createJiraTicket(
+  ticket
+) {
+
+  return apiRequest(
+    "/api/jira/tickets/create",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...ticket,
+        confirmed: true
+      })
+    }
+  );
+
+}
+
+export function getJiraTicketQueue() {
+
+  return apiRequest(
+    "/api/jira/ticket-queue"
+  );
+
+}
+
+export function refreshJiraTicketQueue() {
+
+  return apiRequest(
+    "/api/jira/ticket-queue/refresh",
+    {
+      method: "POST"
+    }
+  );
+
+}

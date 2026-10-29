@@ -396,7 +396,8 @@
                     </button>
 
                     <p>
-                        Start Shift performs local workspace initialization only.
+                        Start Shift initializes the local workspace and performs
+                        a read-only refresh of the open Jira queue.
                         Existing non-empty shift notes are preserved.
                     </p>
 
@@ -940,7 +941,9 @@
                     `Start NOC shift for ${date}?\n\n`
                     + "This will initialize the local "
                     + "shift workspace, create shift notes "
-                    + "only if needed, and update ~/noc/today.\n\n"
+                    + "only if needed, update ~/noc/today, "
+                    + "and refresh the open Jira queue.\n\n"
+                    + "The Jira refresh is read-only. "
                     + "Existing non-empty notes will not "
                     + "be overwritten."
                 );
@@ -963,10 +966,34 @@
                         date
                     );
 
-                executionMessage.textContent =
-                    result.started
-                        ? "Shift workspace initialized successfully."
-                        : "Start Shift did not complete.";
+                if (result.started) {
+
+                    if (
+                        result.jiraQueue
+                        && result.jiraQueue.success
+                    ) {
+
+                        executionMessage.textContent =
+                            "Shift workspace initialized successfully. "
+                            + `Jira Queue: READY - ${result.jiraQueue.count
+                            } open tickets.`;
+
+                    } else {
+
+                        const warning =
+                            result.jiraQueue?.warning
+                            || "Jira refresh failed.";
+
+                        executionMessage.textContent =
+                            "Shift workspace initialized successfully. "
+                            + `Jira Queue: WARNING - ${warning}`;
+                    }
+
+                } else {
+
+                    executionMessage.textContent =
+                        "Start Shift did not complete.";
+                }
 
                 startButton.textContent =
                     "Start Shift";

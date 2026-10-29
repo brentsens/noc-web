@@ -127,7 +127,7 @@
                         <div id="open-ticket-count" class="metric-value teal">
                             -
                         </div>
-                        <div class="metric-subtitle">Tracked tickets</div>
+                        <div class="metric-subtitle">Open NOC Jira tickets</div>
                     </article>
 
                     <article class="metric-card">
@@ -316,7 +316,7 @@
 
         import {
             getDashboard,
-            getTickets,
+            getJiraTicketQueue,
             getShiftNotes
         } from "./js/api.js";
 
@@ -428,7 +428,10 @@
                     document.createElement("tr");
 
 
-                if (ticket.needsReview) {
+                if (
+                    ticket.tracked
+                    && ticket.needsReview
+                ) {
 
                     row.classList.add(
                         "ticket-review"
@@ -444,9 +447,12 @@
 
 
                 const nextAction =
-                    ticket.nextAction
-                        ? ticket.nextAction
-                        : '<span class="warning-text">No Next Action</span>';
+                    !ticket.tracked
+                        ? '<span class="muted-text">Jira only</span>'
+                        : (
+                            ticket.nextAction
+                            || '<span class="warning-text">No Next Action</span>'
+                        );
 
 
                 row.innerHTML = `
@@ -481,7 +487,7 @@
             try {
 
                 const response =
-                    await getTickets();
+                    await getJiraTicketQueue();
 
 
                 renderTicketTable(

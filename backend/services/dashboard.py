@@ -2,6 +2,10 @@ import json
 
 from backend.config import NOC_ROOT
 
+from backend.services.jira_ticket_queue import (
+    get_jira_ticket_queue,
+)
+
 
 CLOSED_JIRA_STATUSES = {
     "done",
@@ -13,6 +17,13 @@ CLOSED_JIRA_STATUSES = {
 def get_dashboard(shift_date: str) -> dict:
 
     shift_dir = NOC_ROOT / shift_date
+
+    jira_queue = get_jira_ticket_queue()
+
+    jira_tickets = jira_queue.get(
+        "tickets",
+        []
+    )
 
     ticket_dir = (
         NOC_ROOT
@@ -113,7 +124,7 @@ def get_dashboard(shift_date: str) -> dict:
         ),
 
         "openTickets":
-            len(ticket_files),
+            len(jira_tickets),
 
         "investigations":
             len(investigation_files),
@@ -127,47 +138,3 @@ def get_dashboard(shift_date: str) -> dict:
             else "pending"
         ),
     }
-
-from datetime import date
-
-from fastapi import (
-    APIRouter,
-    HTTPException,
-)
-
-from backend.services.dashboard import (
-    get_dashboard,
-)
-
-
-router = APIRouter(
-    prefix="/api/dashboard",
-    tags=["dashboard"],
-)
-
-
-@router.get("/{shift_date}")
-def dashboard(
-    shift_date: str,
-):
-
-    try:
-
-        date.fromisoformat(
-            shift_date
-        )
-
-    except ValueError:
-
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "shift_date must use "
-                "YYYY-MM-DD format"
-            ),
-        )
-
-
-    return get_dashboard(
-        shift_date
-    )

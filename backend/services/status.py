@@ -4,6 +4,10 @@ import shutil
 
 from backend.config import NOC_ROOT
 
+from backend.services.jira_ticket_queue import (
+    get_jira_ticket_queue,
+)
+
 
 CLOSED_JIRA_STATUSES = {
     "done",
@@ -54,6 +58,14 @@ def get_status(shift_date: str) -> dict:
             )
         except OSError:
             note_lines = 0
+
+    jira_queue = get_jira_ticket_queue()
+
+    jira_tickets = jira_queue.get(
+        "tickets",
+        []
+    )
+
 
     # Open tickets and needs-review checks
     tickets = []
@@ -244,8 +256,8 @@ def get_status(shift_date: str) -> dict:
         },
 
         "openTickets": {
-            "count": len(tickets),
-            "items": tickets,
+            "count": len(jira_tickets),
+            "items": jira_tickets,
         },
 
         "needsReview": {

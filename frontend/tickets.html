@@ -100,14 +100,8 @@
                     <div>
                         <h1>Jira Tickets</h1>
                         <p>
-                            Locally tracked NOC tickets backed by Jira through Atlas.
+                            Open NOC Jira tickets with local NOC operational tracking.
                         </p>
-                    </div>
-
-                    <div class="page-controls">
-                        <button class="button primary" type="button">
-                            + Add Ticket
-                        </button>
                     </div>
 
                 </div>
@@ -118,13 +112,16 @@
                     <select id="status-filter" class="filter-control">
                         <option value="">All Statuses</option>
                         <option value="Escalated">Escalated</option>
+                        <option value="Support Team">Support Team</option>
+                        <option value="Customer Feedback">Customer Feedback</option>
                         <option value="Re Open">Re Open</option>
                     </select>
 
-                    <select id="environment-filter" class="filter-control">
-                        <option value="">All Environments</option>
-                        <option value="EU">EU</option>
-                        <option value="USPRI">USPRI</option>
+                    <select id="tracking-filter" class="filter-control">
+                        <option value="">All Tickets</option>
+                        <option value="mine">My Tickets</option>
+                        <option value="tracked">Tracked</option>
+                        <option value="jira-only">Jira Only</option>
                     </select>
 
                     <label class="review-filter">
@@ -134,13 +131,28 @@
 
                     <div class="toolbar-spacer"></div>
 
-                    <button id="sync-all-tickets" class="button" type="button">
-                        Sync All Tickets
+                    <button id="refresh-jira" class="button" type="button">
+                        Refresh Jira
                     </button>
 
-                    <span id="ticket-sync-status">
-                        Not synced this session
-                    </span>
+                    <button id="sync-all-tickets" class="button" type="button">
+                        Sync NOC Tracking
+                    </button>
+
+                    <button id="create-jira-ticket" class="button primary" type="button">
+                        + Create Jira Ticket
+                    </button>
+
+                    <div class="ticket-sync-states">
+
+                        <span id="jira-refresh-status">
+                            Jira cache unavailable
+                        </span>
+
+                        <span id="ticket-sync-status">
+                            NOC tracking sync unknown
+                        </span>
+                    </div>
 
                 </section>
 
@@ -152,7 +164,7 @@
                         <div class="panel-header">
                             <h2>Open Tickets</h2>
                             <span id="ticket-count" class="count-badge">
-                                5 tickets
+                                Loading...
                             </span>
                         </div>
 
@@ -165,7 +177,8 @@
                                         <th>ID</th>
                                         <th>Summary</th>
                                         <th>Status</th>
-                                        <th>Environment</th>
+                                        <th>Reporter</th>
+                                        <th>Tracking</th>
                                         <th>Next Action</th>
                                     </tr>
                                 </thead>
@@ -270,6 +283,10 @@
 
                             <div class="ticket-actions">
 
+                                <a id="open-in-jira" class="button" href="#" target="_blank" rel="noopener noreferrer">
+                                    Open in Jira ↗
+                                </a>
+
                                 <button class="button">
                                     Update NOC Fields
                                 </button>
@@ -281,7 +298,6 @@
                                 <button class="button danger-outline">
                                     Close Ticket
                                 </button>
-
                             </div>
 
                         </div>
@@ -296,13 +312,201 @@
 
     </div>
 
+    <div id="jira-create-modal" class="modal-backdrop hidden">
+
+        <div class="modal-card">
+
+            <div class="modal-header">
+
+                <div>
+                    <h2>Create NOC Jira Ticket</h2>
+                    <p>
+                        Create a structured ticket in the NOC Jira project.
+                    </p>
+                </div>
+
+                <button id="close-jira-create" class="modal-close" type="button" aria-label="Close">
+                    ×
+                </button>
+
+            </div>
+
+
+            <form id="jira-create-form">
+
+                <label class="form-label" for="jira-summary">
+                    Jira Summary
+                </label>
+
+                <input id="jira-summary" class="form-control" type="text" required
+                    placeholder="Customer / environment - concise issue summary">
+
+
+                <h3>Customer Info</h3>
+
+                <label class="form-label" for="jira-tenant">
+                    Tenant
+                </label>
+
+                <input id="jira-tenant" class="form-control" type="text">
+
+
+                <label class="form-label" for="jira-customer">
+                    Customer
+                </label>
+
+                <input id="jira-customer" class="form-control" type="text">
+
+
+                <label class="form-label" for="jira-device">
+                    Device
+                </label>
+
+                <input id="jira-device" class="form-control" type="text">
+
+
+                <label class="form-label" for="jira-device-type">
+                    Device Type
+                </label>
+
+                <input id="jira-device-type" class="form-control" type="text">
+
+
+                <label class="form-label" for="jira-device-id">
+                    Device ID
+                </label>
+
+                <input id="jira-device-id" class="form-control" type="text">
+
+
+                <label class="form-label" for="jira-component">
+                    Component
+                </label>
+
+                <input id="jira-component" class="form-control" type="text">
+
+
+                <label class="form-label" for="jira-salesforce">
+                    Salesforce Ticket
+                </label>
+
+                <input id="jira-salesforce" class="form-control" type="text">
+
+
+                <h3>Summary of Request</h3>
+
+                <label class="form-label" for="jira-issue-details">
+                    Issue Details
+                </label>
+
+                <textarea id="jira-issue-details" class="form-control note-textarea" rows="5" required
+                    placeholder="Describe the issue, impact, and relevant context."></textarea>
+
+
+                <label class="form-label" for="jira-findings">
+                    Technical Findings
+                </label>
+
+                <textarea id="jira-findings" class="form-control note-textarea" rows="5"
+                    placeholder="Relevant logs, testing results, observations, and confirmed cause when known."></textarea>
+
+
+                <h3>Steps to Reproduce</h3>
+
+                <textarea id="jira-steps" class="form-control note-textarea" rows="6"
+                    placeholder="Enter one step per line."></textarea>
+
+
+                <div class="modal-actions">
+
+                    <button id="cancel-jira-create" class="button" type="button">
+                        Cancel
+                    </button>
+
+                    <button id="preview-jira-ticket" class="button primary" type="submit">
+                        Preview Jira Ticket
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+    <div id="jira-preview-modal" class="modal-backdrop hidden">
+
+        <div class="modal-card jira-preview-modal">
+
+            <div class="modal-header">
+
+                <div>
+                    <h2>Jira Ticket Preview</h2>
+                    <p>
+                        Review exactly what will be submitted to Jira.
+                    </p>
+                </div>
+
+                <button id="close-jira-preview" class="modal-close" type="button" aria-label="Close">
+                    ×
+                </button>
+
+            </div>
+
+            <div class="email-preview-metadata">
+
+                <div>
+                    <label>Project</label>
+                    <span id="jira-preview-project"></span>
+                </div>
+
+                <div>
+                    <label>Issue Type</label>
+                    <span id="jira-preview-type"></span>
+                </div>
+
+                <div>
+                    <label>Summary</label>
+                    <span id="jira-preview-summary"></span>
+                </div>
+
+            </div>
+
+            <div id="jira-preview-description" class="jira-preview-description"></div>
+
+            <div class="email-preview-warning">
+                <strong>Dry-run validated</strong>
+                <p>
+                    No Jira ticket has been created.
+                </p>
+            </div>
+
+            <div class="modal-actions">
+
+                <button id="back-to-jira-edit" class="button" type="button">
+                    Back to Edit
+                </button>
+
+                <button id="confirm-jira-create" class="button primary" type="button" disabled>
+                    Create Jira Ticket
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
 
     <script type="module">
 
         import {
-            getTickets,
+            getJiraTicketQueue,
+            refreshJiraTicketQueue,
             getTicketSyncState,
-            syncAllTickets
+            syncAllTickets,
+            previewJiraTicket,
+            createJiraTicket
         } from "./js/api.js";
 
 
@@ -321,21 +525,105 @@
         const statusFilter =
             document.querySelector("#status-filter");
 
-        const environmentFilter =
-            document.querySelector("#environment-filter");
+        const trackingFilter =
+            document.querySelector(
+                "#tracking-filter"
+            );
 
         const reviewFilter =
             document.querySelector("#review-filter");
+
+        const refreshJiraButton =
+            document.querySelector(
+                "#refresh-jira"
+            );
 
         const syncAllButton =
             document.querySelector(
                 "#sync-all-tickets"
             );
 
+        const jiraRefreshStatus =
+            document.querySelector(
+                "#jira-refresh-status"
+            );
+
         const syncStatus =
             document.querySelector(
                 "#ticket-sync-status"
             );
+
+        const createJiraButton =
+            document.querySelector(
+                "#create-jira-ticket"
+            );
+
+        const jiraCreateModal =
+            document.querySelector(
+                "#jira-create-modal"
+            );
+
+        const closeJiraCreate =
+            document.querySelector(
+                "#close-jira-create"
+            );
+
+        const cancelJiraCreate =
+            document.querySelector(
+                "#cancel-jira-create"
+            );
+
+        const jiraCreateForm =
+            document.querySelector(
+                "#jira-create-form"
+            );
+
+        const jiraPreviewModal =
+            document.querySelector(
+                "#jira-preview-modal"
+            );
+
+        const closeJiraPreview =
+            document.querySelector(
+                "#close-jira-preview"
+            );
+
+        const backToJiraEdit =
+            document.querySelector(
+                "#back-to-jira-edit"
+            );
+
+        const jiraPreviewProject =
+            document.querySelector(
+                "#jira-preview-project"
+            );
+
+        const jiraPreviewType =
+            document.querySelector(
+                "#jira-preview-type"
+            );
+
+        const jiraPreviewSummary =
+            document.querySelector(
+                "#jira-preview-summary"
+            );
+
+        const jiraPreviewDescription =
+            document.querySelector(
+                "#jira-preview-description"
+            );
+
+        const confirmJiraCreate =
+            document.querySelector(
+                "#confirm-jira-create"
+            );
+
+        const openInJira =
+            document.querySelector(
+                "#open-in-jira"
+            );
+
+        let previewedJiraTicket = null;
 
 
         function renderTickets() {
@@ -346,8 +634,8 @@
             const status =
                 statusFilter.value;
 
-            const environment =
-                environmentFilter.value;
+            const tracking =
+                trackingFilter.value;
 
 
             const filtered =
@@ -355,12 +643,14 @@
 
                     const searchable =
                         `
-          ${ticket.id}
-          ${ticket.summary}
-          ${ticket.status}
-          ${ticket.environment}
-          ${ticket.nextAction}
-        `.toLowerCase();
+                        ${ticket.id}
+                        ${ticket.summary}
+                        ${ticket.status}
+                        ${ticket.environment}
+                        ${ticket.nextAction}
+                        ${ticket.reporter}
+                        ${ticket.assignee}
+                    `.toLowerCase();
 
 
                     if (
@@ -378,25 +668,66 @@
                         return false;
                     }
 
+                    if (
+                        tracking === "mine"
+                        && ticket.reporter !== "Brentsen Smith"
+                    ) {
+                        return false;
+                    }
 
                     if (
-                        environment &&
-                        ticket.environment !== environment
+                        tracking === "tracked"
+                        && !ticket.tracked
+                    ) {
+                        return false;
+                    }
+
+                    if (
+                        tracking === "jira-only"
+                        && ticket.tracked
                     ) {
                         return false;
                     }
 
 
                     if (
-                        reviewFilter.checked &&
-                        !ticket.needsReview
+                        reviewFilter.checked && (
+                            !ticket.tracked
+                            || !ticket.needsReview)
                     ) {
                         return false;
                     }
 
 
                     return true;
-                });
+                })
+                    .sort((a, b) => {
+
+                        const aMine =
+                            a.reporter === "Brentsen Smith";
+
+                        const bMine =
+                            b.reporter === "Brentsen Smith";
+
+                        // My tickets first
+                        if (aMine !== bMine) {
+                            return aMine ? -1 : 1;
+                        }
+
+                        // Then locally tracked tickets
+                        if (a.tracked !== b.tracked) {
+                            return a.tracked ? -1 : 1;
+                        }
+
+                        // Then newest Jira activity
+                        const aUpdated =
+                            Date.parse(a.updated || "") || 0;
+
+                        const bUpdated =
+                            Date.parse(b.updated || "") || 0;
+
+                        return bUpdated - aUpdated;
+                    });
 
 
             ticketTable.innerHTML = "";
@@ -410,38 +741,58 @@
                 row.classList.add("selectable-row");
 
 
-                if (!ticket.nextAction) {
-                    row.classList.add("ticket-review");
+                if (
+                    ticket.tracked
+                    && ticket.needsReview
+                ) {
+                    row.classList.add(
+                        "ticket-review"
+                    );
                 }
 
 
                 row.innerHTML = `
-      <td>
-        <strong>${ticket.id}</strong>
-      </td>
+                    <td>
+                        <strong>${ticket.id}</strong>
+                    </td>
 
-      <td>${ticket.summary}</td>
+                    <td>
+                        ${ticket.summary}
+                    </td>
 
-      <td>
-        <span class="status ${(
-                        ticket.status === "Re Open" ||
-                        ticket.status === "Support Team"
+                    <td>
+                     <span class="status ${(
+                        ticket.status === "Re Open"
+                        || ticket.status === "Support Team"
                     )
                         ? "status-blue"
                         : "status-red"
                     }">
-          ${ticket.status}
-        </span>
-      </td>
+                        ${ticket.status}
+                    </span>
+                    </td>
 
-      <td>${ticket.environment}</td>
+                    <td>
+                        ${ticket.reporter || "—"}
+                    </td>
 
-      <td>
-        ${ticket.nextAction ||
-                    '<span class="warning-text">No Next Action</span>'
+                    <td>
+                        ${ticket.tracked
+                        ? '<span class="status status-blue">TRACKED</span>'
+                        : '<span class="muted-text">JIRA ONLY</span>'
                     }
-      </td>
-    `;
+                    </td>
+
+                    <td>
+                        ${!ticket.tracked
+                        ? '<span class="muted-text">—</span>'
+                        : (
+                            ticket.nextAction
+                            || '<span class="warning-text">No Next Action</span>'
+                        )
+                    }
+                    </td>
+                `;
 
 
                 row.addEventListener(
@@ -529,35 +880,347 @@
             ).textContent =
                 ticket.priority;
 
+            if (ticket.browseUrl) {
+
+                openInJira.href =
+                    ticket.browseUrl;
+
+                openInJira.classList.remove(
+                    "hidden"
+                );
+
+            } else {
+
+                openInJira.removeAttribute(
+                    "href"
+                );
+
+                openInJira.classList.add(
+                    "hidden"
+                );
+            }
+
 
             document.querySelector(
                 "#noc-environment"
-            ).textContent =
-                ticket.environment;
+            ).innerHTML =
+                ticket.tracked
+                    ? (
+                        ticket.environment
+                        || '<span class="muted-text">Not set</span>'
+                    )
+                    : '<span class="muted-text">Jira only</span>';
 
 
             document.querySelector(
                 "#noc-next-action"
             ).innerHTML =
-                ticket.nextAction ||
-                '<span class="warning-text">No Next Action recorded</span>';
+                ticket.tracked
+                    ? (
+                        ticket.nextAction
+                        || '<span class="warning-text">No Next Action recorded</span>'
+                    )
+                    : '<span class="muted-text">Not locally tracked</span>';
 
 
             document.querySelector(
                 "#noc-notes"
-            ).textContent =
-                ticket.notes;
+            ).innerHTML =
+                ticket.tracked
+                    ? (
+                        ticket.notes
+                        || '<span class="muted-text">No NOC notes</span>'
+                    )
+                    : '<span class="muted-text">Not locally tracked</span>';
         }
+
+        function showJiraCreateModal() {
+            jiraCreateModal.classList.remove(
+                "hidden"
+            );
+
+            document.querySelector(
+                "#jira-summary"
+            ).focus();
+        }
+
+
+        function hideJiraCreateModal() {
+            jiraCreateModal.classList.add(
+                "hidden"
+            );
+        }
+
+        createJiraButton.addEventListener(
+            "click",
+            showJiraCreateModal
+        );
+
+        closeJiraCreate.addEventListener(
+            "click",
+            hideJiraCreateModal
+        );
+
+        cancelJiraCreate.addEventListener(
+            "click",
+            hideJiraCreateModal
+        );
+
+        jiraCreateForm.addEventListener(
+            "submit",
+            async event => {
+
+                event.preventDefault();
+
+                const steps =
+                    document.querySelector(
+                        "#jira-steps"
+                    )
+                        .value
+                        .split("\n")
+                        .map(
+                            step => step.trim()
+                        )
+                        .filter(Boolean);
+
+                const ticket = {
+                    summary:
+                        document.querySelector(
+                            "#jira-summary"
+                        ).value.trim(),
+
+                    tenant:
+                        document.querySelector(
+                            "#jira-tenant"
+                        ).value.trim(),
+
+                    customer:
+                        document.querySelector(
+                            "#jira-customer"
+                        ).value.trim(),
+
+                    device:
+                        document.querySelector(
+                            "#jira-device"
+                        ).value.trim(),
+
+                    deviceType:
+                        document.querySelector(
+                            "#jira-device-type"
+                        ).value.trim(),
+
+                    deviceId:
+                        document.querySelector(
+                            "#jira-device-id"
+                        ).value.trim(),
+
+                    component:
+                        document.querySelector(
+                            "#jira-component"
+                        ).value.trim(),
+
+                    salesforceTicket:
+                        document.querySelector(
+                            "#jira-salesforce"
+                        ).value.trim(),
+
+                    issueDetails:
+                        document.querySelector(
+                            "#jira-issue-details"
+                        ).value.trim(),
+
+                    technicalFindings:
+                        document.querySelector(
+                            "#jira-findings"
+                        ).value.trim(),
+
+                    steps
+                };
+
+                try {
+
+                    const preview =
+                        await previewJiraTicket(
+                            ticket
+                        );
+
+                    jiraPreviewProject.textContent =
+                        preview.project;
+
+                    jiraPreviewType.textContent =
+                        preview.issueType;
+
+                    jiraPreviewSummary.textContent =
+                        preview.summary;
+
+                    jiraPreviewDescription.textContent =
+                        preview.description;
+
+                    hideJiraCreateModal();
+
+                    previewedJiraTicket =
+                        ticket;
+
+                    confirmJiraCreate.disabled =
+                        false;
+
+                    jiraPreviewModal.classList.remove(
+                        "hidden"
+                    );
+
+
+
+
+                } catch (error) {
+
+                    console.error(
+                        "Jira ticket preview failed:",
+                        error
+                    );
+
+                    window.alert(
+                        `Jira preview failed: ${error.message}`
+                    );
+                }
+            }
+        );
+
+        function hideJiraPreview() {
+
+            jiraPreviewModal.classList.add(
+                "hidden"
+            );
+        }
+
+
+        closeJiraPreview.addEventListener(
+            "click",
+            hideJiraPreview
+        );
+
+
+        backToJiraEdit.addEventListener(
+            "click",
+            () => {
+
+                previewedJiraTicket =
+                    null;
+
+                confirmJiraCreate.disabled =
+                    true;
+
+                hideJiraPreview();
+                showJiraCreateModal();
+            }
+        );
+
+
+        confirmJiraCreate.addEventListener(
+            "click",
+            async () => {
+
+                if (!previewedJiraTicket) {
+
+                    window.alert(
+                        "Run Preview Jira Ticket before creating."
+                    );
+
+                    return;
+                }
+
+                const confirmed =
+                    window.confirm(
+                        "Create this Jira ticket now?\n\n"
+                        + "Project: NOC\n"
+                        + "Issue Type: SES\n"
+                        + `Summary: ${previewedJiraTicket.summary}\n\n`
+                        + "This will create a real Jira ticket."
+                    );
+
+                if (!confirmed) {
+                    return;
+                }
+
+                confirmJiraCreate.disabled =
+                    true;
+
+                backToJiraEdit.disabled =
+                    true;
+
+                const originalText =
+                    confirmJiraCreate.textContent;
+
+                confirmJiraCreate.textContent =
+                    "Creating...";
+
+                try {
+
+                    const result =
+                        await createJiraTicket(
+                            previewedJiraTicket
+                        );
+
+                    if (
+                        result.created !== true
+                        || !result.key
+                    ) {
+                        throw new Error(
+                            "Jira did not confirm ticket creation."
+                        );
+                    }
+
+                    hideJiraPreview();
+                    hideJiraCreateModal();
+
+                    jiraCreateForm.reset();
+
+                    previewedJiraTicket =
+                        null;
+
+                    window.alert(
+                        `${result.key} created successfully.`
+                    );
+
+                    await loadTickets();
+
+                } catch (error) {
+
+                    console.error(
+                        "Jira ticket creation failed:",
+                        error
+                    );
+
+                    window.alert(
+                        `Jira ticket creation failed: ${error.message}`
+                    );
+
+                } finally {
+
+                    confirmJiraCreate.textContent =
+                        originalText;
+
+                    confirmJiraCreate.disabled =
+                        previewedJiraTicket === null;
+
+                    backToJiraEdit.disabled =
+                        false;
+                }
+            }
+        );
 
         async function loadTickets() {
 
             try {
 
                 const response =
-                    await getTickets();
+                    await getJiraTicketQueue();
 
                 tickets =
                     response.tickets;
+
+                showJiraRefreshTime(
+                    response.refreshedAt
+                );
 
                 renderTickets();
 
@@ -569,18 +1232,68 @@
                 );
 
                 ticketTable.innerHTML = `
-        <tr>
-            <td colspan="5">
-                Ticket data unavailable.
-            </td>
-        </tr>
-    `;
+                <tr>
+                    <td colspan="6">
+                        Ticket data unavailable.
+                    </td>
+                </tr>
+                `;
 
                 ticketCount.textContent =
                     "Unavailable";
+
+                throw error;
             }
 
         }
+
+        refreshJiraButton.addEventListener(
+            "click",
+            async () => {
+
+                refreshJiraButton.disabled =
+                    true;
+
+                const originalText =
+                    refreshJiraButton.textContent;
+
+                refreshJiraButton.textContent =
+                    "Refreshing...";
+
+                ticketCount.textContent =
+                    "Refreshing...";
+
+                try {
+
+                    const response =
+                        await refreshJiraTicketQueue();
+
+                    tickets =
+                        response.tickets;
+
+                    showJiraRefreshTime(
+                        response.refreshedAt
+                    );
+
+                    renderTickets();
+
+                } catch (error) {
+
+                    console.error(
+                        "Jira refresh failed:",
+                        error
+                    );
+
+                } finally {
+
+                    refreshJiraButton.disabled =
+                        false;
+
+                    refreshJiraButton.textContent =
+                        originalText;
+                }
+            }
+        );
 
         search.addEventListener(
             "input",
@@ -593,18 +1306,42 @@
             renderTickets
         );
 
-
-        environmentFilter.addEventListener(
+        trackingFilter.addEventListener(
             "change",
             renderTickets
         );
-
 
         reviewFilter.addEventListener(
             "change",
             renderTickets
         );
 
+        function showJiraRefreshTime(
+            refreshedAt
+        ) {
+
+            if (!refreshedAt) {
+
+                jiraRefreshStatus.textContent =
+                    "Jira cache unavailable";
+
+                return;
+            }
+
+            const refreshed =
+                new Date(refreshedAt);
+
+            jiraRefreshStatus.textContent =
+                `Jira last refreshed ${refreshed.toLocaleDateString()
+                } at ${refreshed.toLocaleTimeString(
+                    [],
+                    {
+                        hour: "2-digit",
+                        minute: "2-digit"
+                    }
+                )
+                }`;
+        }
         async function loadTicketSyncState() {
 
             try {
@@ -714,13 +1451,14 @@
                         false;
 
                     syncAllButton.textContent =
-                        "Sync All Tickets";
+                        "Sync NOC Tracking";
                 }
             }
         );
 
 
         loadTickets();
+        loadTicketSyncState();
 
     </script>
 

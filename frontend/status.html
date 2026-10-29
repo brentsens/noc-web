@@ -135,7 +135,7 @@
                         </div>
 
                         <div class="metric-subtitle">
-                            Locally tracked
+                            Open NOC Jira tickets
                         </div>
                     </article>
 
@@ -258,8 +258,8 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Status</th>
-                                <th>Environment</th>
-                                <th>Source</th>
+                                <th>Reporter</th>
+                                <th>Tracking</th>
                                 <th>Next Action</th>
                             </tr>
                         </thead>
@@ -500,17 +500,44 @@
             if (tickets.length === 0) {
 
                 ticketTable.innerHTML = `
-                    <tr>
-                        <td colspan="5">
-                            No open tickets found.
-                        </td>
-                    </tr>
-                `;
+            <tr>
+                <td colspan="5">
+                    No open tickets found.
+                </td>
+            </tr>
+        `;
 
                 return;
             }
 
-            tickets.forEach(
+            const sorted = [...tickets].sort(
+                (a, b) => {
+
+                    const aMine =
+                        a.reporter === "Brentsen Smith";
+
+                    const bMine =
+                        b.reporter === "Brentsen Smith";
+
+                    if (aMine !== bMine) {
+                        return aMine ? -1 : 1;
+                    }
+
+                    if (a.tracked !== b.tracked) {
+                        return a.tracked ? -1 : 1;
+                    }
+
+                    const aUpdated =
+                        Date.parse(a.updated || "") || 0;
+
+                    const bUpdated =
+                        Date.parse(b.updated || "") || 0;
+
+                    return bUpdated - aUpdated;
+                }
+            );
+
+            sorted.forEach(
                 ticket => {
 
                     const row =
@@ -518,37 +545,51 @@
                             "tr"
                         );
 
+                    if (
+                        ticket.tracked
+                        && ticket.needsReview
+                    ) {
+                        row.classList.add(
+                            "ticket-review"
+                        );
+                    }
+
+                    const tracking =
+                        ticket.tracked
+                            ? '<span class="status status-blue">TRACKED</span>'
+                            : '<span class="muted-text">JIRA ONLY</span>';
+
+                    const nextAction =
+                        !ticket.tracked
+                            ? '<span class="muted-text">—</span>'
+                            : (
+                                ticket.nextAction
+                                || '<span class="warning-text">No Next Action</span>'
+                            );
+
                     row.innerHTML = `
-                        <td>
-                            ${ticket.id}
-                        </td>
+                <td>
+                    ${ticket.id}
+                </td>
 
-                        <td>
-                            <span class="status ${getStatusClass(ticket.status)}">
-                                ${ticket.status
-                        || "Not recorded"
-                        }
-                            </span>
-                        </td>
+                <td>
+                    <span class="status ${getStatusClass(ticket.status)}">
+                        ${ticket.status || "Not recorded"}
+                    </span>
+                </td>
 
-                        <td>
-                            ${ticket.environment
-                        || "Not recorded"
-                        }
-                        </td>
+                <td>
+                    ${ticket.reporter || "—"}
+                </td>
 
-                        <td>
-                            ${ticket.source
-                        || "Not recorded"
-                        }
-                        </td>
+                <td>
+                    ${tracking}
+                </td>
 
-                        <td>
-                            ${ticket.nextAction
-                        || "No next action"
-                        }
-                        </td>
-                    `;
+                <td>
+                    ${nextAction}
+                </td>
+            `;
 
                     ticketTable.appendChild(
                         row

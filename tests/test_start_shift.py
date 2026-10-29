@@ -146,3 +146,66 @@ def test_started_state_detected(
         result["execution"]["enabled"]
         is False
     )
+
+def test_start_refreshes_jira_queue(
+    noc_root,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        start_shift,
+        "refresh_jira_ticket_queue",
+        lambda: {
+            "count": 28,
+            "tickets": [],
+        },
+    )
+
+    result = start_shift.start_shift(
+        SHIFT_DATE
+    )
+
+    assert result["started"] is True
+
+    assert result["jiraQueue"] == {
+        "success": True,
+        "count": 28,
+        "warning": None,
+    }
+
+
+def test_jira_failure_does_not_block_start(
+    noc_root,
+    monkeypatch,
+):
+    def fail_jira():
+        raise RuntimeError(
+            "Jira unavailable"
+        )
+
+    monkeypatch.setattr(
+        start_shift,
+        "refresh_jira_ticket_queue",
+        fail_jira,
+    )
+
+    result = start_shift.start_shift(
+        SHIFT_DATE
+    )
+
+    assert result["started"] is True
+
+    assert result["jiraQueue"] == {
+        "success": False,
+        "count": 0,
+        "warning": "Jira unavailable",
+    }
+
+    shift_dir = (
+        noc_root / SHIFT_DATE
+    )
+
+    assert shift_dir.is_dir()
+
+    assert (
+        shift_dir / "shift-notes.md"
+    ).is_file()
