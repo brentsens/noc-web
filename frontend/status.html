@@ -184,6 +184,21 @@
                         </div>
                     </article>
 
+
+                    <article class="metric-card">
+                        <div class="metric-label">
+                            Jira Cache
+                        </div>
+
+                        <div id="status-jira-cache" class="metric-value yellow small">
+                            Loading
+                        </div>
+
+                        <div id="status-jira-cache-details" class="metric-subtitle">
+                            Checking availability and refresh time
+                        </div>
+                    </article>
+
                 </section>
 
 
@@ -346,6 +361,16 @@
                 "#status-handover"
             );
 
+        const jiraCacheStatus =
+            document.querySelector(
+                "#status-jira-cache"
+            );
+
+        const jiraCacheDetails =
+            document.querySelector(
+                "#status-jira-cache-details"
+            );
+
         const shiftDirectory =
             document.querySelector(
                 "#status-shift-directory"
@@ -425,6 +450,43 @@
                 available
                     ? "var(--success)"
                     : "var(--warning)";
+        }
+
+
+        function renderJiraCache(
+            jiraCache
+        ) {
+
+            jiraCacheStatus.classList.remove(
+                "yellow",
+                "teal"
+            );
+
+            if (!jiraCache.available) {
+                jiraCacheStatus.textContent =
+                    "Unavailable";
+
+                jiraCacheStatus.classList.add(
+                    "yellow"
+                );
+
+                jiraCacheDetails.textContent =
+                    "Refresh time unavailable";
+
+                return;
+            }
+
+            jiraCacheStatus.textContent =
+                `Available — ${jiraCache.freshness}`;
+
+            jiraCacheStatus.classList.add(
+                jiraCache.freshness === "current"
+                    ? "teal"
+                    : "yellow"
+            );
+
+            jiraCacheDetails.textContent =
+                `Refreshed ${jiraCache.refreshedAt}`;
         }
 
 
@@ -740,6 +802,10 @@
                         : "yellow"
                 );
 
+                renderJiraCache(
+                    status.jiraCache
+                );
+
                 renderDependencies(
                     status.dependencies
                 );
@@ -767,6 +833,9 @@
                 investigationCount.textContent = "Error";
                 reviewCount.textContent = "Error";
                 handoverStatus.textContent = "Error";
+                jiraCacheStatus.textContent = "Error";
+                jiraCacheDetails.textContent =
+                    "Could not load cache health.";
 
                 reviewList.textContent =
                     error.message;

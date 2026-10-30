@@ -24,7 +24,7 @@ implemented and validated independently after the shared cache-health foundation
 
 **Purpose**: Establish a regression baseline before changing cache-health behavior.
 
-- [ ] T001 Run the existing pytest baseline from `tests/` and record any pre-existing failures before modifying `backend/services/jira_cache.py`.
+- [X] T001 Run the existing pytest baseline from `tests/` and record any pre-existing failures before modifying `backend/services/jira_cache.py`.
 
 ---
 
@@ -32,10 +32,10 @@ implemented and validated independently after the shared cache-health foundation
 
 **Purpose**: Build the read-only health projection required by every user story.
 
-- [ ] T002 [P] Add failing cache-health tests for valid timestamps, the `<30 minutes` current rule, the `>=30 minutes` stale boundary, invalid timestamps, unavailable cache data, and no-write behavior in `tests/test_jira_cache.py`.
-- [ ] T003 [P] Add failing Status aggregation contract tests for the additive `jiraCache` object and its `available`, `refreshedAt`, and `freshness` fields in `tests/test_status.py`.
-- [ ] T004 Implement the read-only Jira Cache Health projection in `backend/services/jira_cache.py`, enforcing: "`true` only when the existing cache reader returns structurally valid cache data", "`current`" below 30 minutes, "`stale`" at 30 minutes or longer, and "`unavailable`" for unreadable cache or invalid/missing timestamp.
-- [ ] T005 Aggregate the Jira Cache Health projection as the additive `jiraCache` object in `backend/services/status.py` without changing existing Status response fields or calling a Jira refresh path.
+- [X] T002 [P] Add failing cache-health tests for valid timestamps, the `<30 minutes` current rule, the `>=30 minutes` stale boundary, invalid timestamps, unavailable cache data, and no-write behavior in `tests/test_jira_cache.py`.
+- [X] T003 [P] Add failing Status aggregation contract tests for the additive `jiraCache` object and its `available`, `refreshedAt`, and `freshness` fields in `tests/test_status.py`.
+- [X] T004 Implement the read-only Jira Cache Health projection in `backend/services/jira_cache.py`, enforcing: "`true` only when the existing cache reader returns structurally valid cache data", "`current`" below 30 minutes, "`stale`" at 30 minutes or longer, and "`unavailable`" for unreadable cache or invalid/missing timestamp.
+- [X] T005 Aggregate the Jira Cache Health projection as the additive `jiraCache` object in `backend/services/status.py` without changing existing Status response fields or calling a Jira refresh path.
 
 **Checkpoint**: The Status service exposes a fully tested, read-only cache-health contract.
 
@@ -49,7 +49,7 @@ the existing Status page.
 **Independent Test**: With a valid current and a valid stale cache, an operator can load the Status
 page and identify all cache-health values from the single existing Status request.
 
-- [ ] T006 [US1] Render the `jiraCache` availability, refresh time, and `current` or `stale` freshness as an additional existing-style metric in `frontend/status.html`, using the existing Status request and preserving all existing page behavior.
+- [X] T006 [US1] Render the `jiraCache` availability, refresh time, and `current` or `stale` freshness as an additional existing-style metric in `frontend/status.html`, using the existing Status request and preserving all existing page behavior.
 
 **Checkpoint**: Current and stale cache health are visible in one read-only Status page view.
 
@@ -63,8 +63,8 @@ rest of the Status page.
 **Independent Test**: With missing, malformed, or invalid-timestamp cache data, an operator sees a
 clear unavailable state and the existing Status content remains visible.
 
-- [ ] T007 [US2] Extend unavailable-cache aggregation coverage in `tests/test_status.py` to assert `available: false`, `refreshedAt: null`, and `freshness: "unavailable"` without a healthy indication.
-- [ ] T008 [US2] Render an explicit unavailable cache-health state in `frontend/status.html` without replacing or redesigning unrelated Status page content.
+- [X] T007 [US2] Extend unavailable-cache aggregation coverage in `tests/test_status.py` to assert `available: false`, `refreshedAt: null`, and `freshness: "unavailable"` without a healthy indication.
+- [X] T008 [US2] Render an explicit unavailable cache-health state in `frontend/status.html` without replacing or redesigning unrelated Status page content.
 
 **Checkpoint**: An unreadable cache is never presented as healthy.
 
@@ -78,8 +78,8 @@ operational data.
 **Independent Test**: Exercising cache-health computation and Status aggregation leaves the cache
 file and tickets unchanged and does not invoke a Jira refresh.
 
-- [ ] T009 [US3] Add no-side-effect coverage in `tests/test_jira_cache.py` and `tests/test_status.py` proving health inspection neither writes the cache nor calls the Jira ticket-queue refresh operation.
-- [ ] T010 [US3] Verify `backend/services/status.py` obtains `jiraCache` only through the read-only cache-health projection and never invokes ticket-refresh or ticket-mutation operations.
+- [X] T009 [US3] Add no-side-effect coverage in `tests/test_jira_cache.py` and `tests/test_status.py` proving health inspection neither writes the cache nor calls the Jira ticket-queue refresh operation.
+- [X] T010 [US3] Verify `backend/services/status.py` obtains `jiraCache` only through the read-only cache-health projection and never invokes ticket-refresh or ticket-mutation operations.
 
 **Checkpoint**: Cache health is demonstrably read-only and stale status remains informational.
 
@@ -89,8 +89,8 @@ file and tickets unchanged and does not invoke a Jira refresh.
 
 **Purpose**: Validate the complete contract, operator display, and regression safety.
 
-- [ ] T011 Run focused cache-health and Status aggregation validation in `tests/test_jira_cache.py` and `tests/test_status.py`.
-- [ ] T012 Run the full regression suite in `tests/` and execute the operator scenarios in `specs/001-jira-cache-health/quickstart.md`.
+- [X] T011 Run focused cache-health and Status aggregation validation in `tests/test_jira_cache.py` and `tests/test_status.py`.
+- [X] T012 Run the full regression suite in `tests/` and execute the operator scenarios in `specs/001-jira-cache-health/quickstart.md`.
 
 ---
 

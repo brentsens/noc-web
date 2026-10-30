@@ -7,6 +7,9 @@ from backend.config import NOC_ROOT
 from backend.services.jira_ticket_queue import (
     get_jira_ticket_queue,
 )
+from backend.services.jira_cache import (
+    get_jira_cache_health,
+)
 
 
 CLOSED_JIRA_STATUSES = {
@@ -60,6 +63,7 @@ def get_status(shift_date: str) -> dict:
             note_lines = 0
 
     jira_queue = get_jira_ticket_queue()
+    jira_cache = get_jira_cache_health()
 
     jira_tickets = jira_queue.get(
         "tickets",
@@ -259,6 +263,8 @@ def get_status(shift_date: str) -> dict:
             "count": len(jira_tickets),
             "items": jira_tickets,
         },
+
+        "jiraCache": jira_cache,
 
         "needsReview": {
             "count": len(needs_review),

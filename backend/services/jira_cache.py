@@ -1,11 +1,15 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from backend.config import NOC_ROOT
 
 
 CACHE_FILE = (
     NOC_ROOT / ".jira-open-tickets.json"
+)
+
+CURRENT_CACHE_AGE = timedelta(
+    minutes=30,
 )
 
 
@@ -68,3 +72,53 @@ def read_jira_cache() -> dict | None:
         return None
 
     return cache
+
+
+def get_jira_cache_health() -> dict:
+    unavailable = {
+        "available": False,
+        "refreshedAt": None,
+        "freshness": "unavailable",
+    }
+
+    cache = read_jira_cache()
+
+    if cache is None:
+        return unavailable
+
+    refreshed_at = cache.get(
+        "refreshedAt"
+    )
+
+    if not isinstance(refreshed_at, str):
+        return unavailable
+
+    try:
+        refreshed_at_datetime = (
+            datetime.fromisoformat(
+                refreshed_at
+            )
+        )
+    except ValueError:
+        return unavailable
+
+    if (
+        refreshed_at_datetime.tzinfo is None
+        or refreshed_at_datetime.utcoffset() is None
+    ):
+        return unavailable
+
+    age = (
+        datetime.now(timezone.utc)
+        - refreshed_at_datetime
+    )
+
+    return {
+        "available": True,
+        "refreshedAt": refreshed_at,
+        "freshness": (
+            "current"
+            if age < CURRENT_CACHE_AGE
+            else "stale"
+        ),
+    }
