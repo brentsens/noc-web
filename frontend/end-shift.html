@@ -1545,7 +1545,8 @@
                     const result =
                         await sendHandoverDelivery(
                             endShiftDate.value,
-                            previewedRecipient
+                            previewedRecipient,
+                            true
                         );
 
                     if (result.sent !== true) {
@@ -1763,7 +1764,8 @@
 
                     const handover =
                         await generateHandover(
-                            shiftDate
+                            shiftDate,
+                            true
                         );
 
                     renderHandover(
@@ -1849,7 +1851,8 @@
 
                     const handover =
                         await regenerateHandover(
-                            shiftDate
+                            shiftDate,
+                            true
                         );
 
                     if (

@@ -16,8 +16,10 @@ After implementation, run:
 
 Expected: all tests pass, including false/missing Start Shift confirmation, existing ticket
 confirmation behavior, cache read-only behavior, and preservation of valid local work when another
-source is unavailable. Add the focused frontend test command used by the repository if static-page
-behavior is given a test harness.
+source is unavailable. Include focused investigation tests for `noc-inv`/Copilot MCP provenance,
+read-only evidence failures/no-result, advisory-versus-reviewed state, and reviewed-only
+propagation with no raw evidence. Add the focused frontend test command used by the repository if
+static-page behavior is given a test harness.
 
 The shared workflow module can be parsed as an ES module without starting the app:
 
@@ -42,6 +44,14 @@ node --input-type=module --check < frontend/js/workflow-context.js
 6. Attempt each visible state-changing action. Cancel its confirmation and verify no network
    mutation/no artifact change; confirm and verify only the stated local or Jira effect. Include
    Start Shift and verify its POST includes `{ "confirmed": true }`.
+7. Open an investigation with `noc-inv` or Copilot MCP evidence. Verify it identifies the source as
+   read-only, does not make a direct Datadog request, and labels AI analysis advisory. Simulate an
+   evidence failure/no-result; verify its source state is actionable while the rest of the workflow
+   remains visible.
+8. Leave an advisory unreviewed and verify it appears in none of notes, Dashboard, Status, End
+   Shift, or handover. Review a concise finding through its confirmation gate, then verify only
+   that finding/state is propagated. Inspect each destination and confirm raw notebook/log/MCP
+   evidence and Jira-ticket investigation material are absent.
 
 Refer to [data-model.md](data-model.md) for state and confirmation semantics and
 [operational-workflow.md](contracts/operational-workflow.md) for compatibility requirements.

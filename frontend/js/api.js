@@ -64,38 +64,38 @@ export async function apiRequest(
   
   }
 
-  export function createLocalTracking(ticket) {
+  export function createLocalTracking(ticket, confirmed = false) {
     return apiRequest("/api/tickets/tracking", {
       method: "POST",
-      body: JSON.stringify({ ...ticket, confirmed: true })
+      body: JSON.stringify({ ...ticket, confirmed })
     });
   }
 
-  export function updateLocalTracking(ticketId, context) {
+  export function updateLocalTracking(ticketId, context, confirmed = false) {
     return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking`, {
       method: "PATCH",
-      body: JSON.stringify({ ...context, confirmed: true })
+      body: JSON.stringify({ ...context, confirmed })
     });
   }
 
-  export function syncLocalTracking(ticketId) {
+  export function syncLocalTracking(ticketId, confirmed = false) {
     return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking/sync`, {
       method: "POST",
-      body: JSON.stringify({ confirmed: true })
+      body: JSON.stringify({ confirmed })
     });
   }
 
-  export function closeLocalTracking(ticketId) {
+  export function closeLocalTracking(ticketId, confirmed = false) {
     return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking/close`, {
       method: "POST",
-      body: JSON.stringify({ confirmed: true })
+      body: JSON.stringify({ confirmed })
     });
   }
 
-  export function reactivateLocalTracking(ticketId) {
+  export function reactivateLocalTracking(ticketId, confirmed = false) {
     return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking/reactivate`, {
       method: "POST",
-      body: JSON.stringify({ confirmed: true })
+      body: JSON.stringify({ confirmed })
     });
   }
 
@@ -152,6 +152,36 @@ export function getInvestigation(
       }`
   );
 
+}
+
+export function reviewInvestigation(
+  shiftDate,
+  investigationName,
+  finding,
+  state,
+  confirmed = false
+) {
+  return apiRequest(
+    `/api/shifts/${shiftDate}/investigations/${encodeURIComponent(investigationName)}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        confirmed,
+        finding,
+        state
+      })
+    }
+  );
+}
+
+export function rejectInvestigation(shiftDate, investigationName, confirmed = false) {
+  return apiRequest(
+    `/api/shifts/${shiftDate}/investigations/${encodeURIComponent(investigationName)}/reject`,
+    {
+      method: "POST",
+      body: JSON.stringify({ confirmed })
+    }
+  );
 }
 
 export function getAiReports(
@@ -219,14 +249,15 @@ export function getStartShiftPreflight(
 }
 
 export function executeStartShift(
-  shiftDate
+  shiftDate,
+  confirmed = false
 ) {
 
   return apiRequest(
     `/api/start-shift/${shiftDate}`,
     {
       method: "POST",
-      body: JSON.stringify({ confirmed: true })
+      body: JSON.stringify({ confirmed })
     }
   );
 
@@ -247,13 +278,15 @@ export function getEndShiftPreflight(
 }
 
 export function generateHandover(
-  shiftDate
+shiftDate,
+confirmed = false
 ) {
 
   return apiRequest(
     `/api/shifts/${shiftDate}/handover`,
     {
-      method: "POST"
+      method: "POST",
+      body: JSON.stringify({ confirmed })
     }
   );
 
@@ -278,7 +311,8 @@ export function previewHandoverDelivery(
 
 export function sendHandoverDelivery(
   shiftDate,
-  recipient = null
+recipient = null,
+confirmed = false
 ) {
 
   return apiRequest(
@@ -287,7 +321,7 @@ export function sendHandoverDelivery(
       method: "POST",
       body: JSON.stringify({
         recipient,
-        confirmed: true
+        confirmed
       })
     }
   );
@@ -314,13 +348,15 @@ export function getTicketSyncState() {
 }
 
 export function regenerateHandover(
-  shiftDate
+shiftDate,
+confirmed = false
 ) {
 
   return apiRequest(
     `/api/shifts/${shiftDate}/handover/regenerate`,
     {
-      method: "POST"
+      method: "POST",
+      body: JSON.stringify({ confirmed })
     }
   );
 
@@ -343,7 +379,8 @@ export function previewJiraTicket(
 }
 
 export function createJiraTicket(
-  ticket
+ticket,
+confirmed = false
 ) {
 
   return apiRequest(
@@ -352,7 +389,7 @@ export function createJiraTicket(
       method: "POST",
       body: JSON.stringify({
         ...ticket,
-        confirmed: true
+        confirmed
       })
     }
   );

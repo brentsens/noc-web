@@ -1,7 +1,17 @@
 from backend.services import end_shift
+from backend.app import app
+from fastapi.testclient import TestClient
 
 
 SHIFT_DATE = "2099-12-31"
+
+
+def test_handover_api_requires_explicit_confirmation_before_preflight(noc_root):
+    client = TestClient(app)
+
+    response = client.post(f"/api/shifts/{SHIFT_DATE}/handover")
+
+    assert response.status_code == 422
 
 
 def create_workspace(

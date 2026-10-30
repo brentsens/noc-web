@@ -19,7 +19,7 @@ link. It is not stored in local tracking, shift artifacts, or Jira cache.
 
 | Field | Values/rules |
 |---|---|
-| `source` | `jira-cache`, `local-tracking`, `investigations`, or page request. |
+| `source` | `jira-cache`, `local-tracking`, `investigations`, `noc-inv`, `copilot-mcp`, or page request. |
 | `kind` | `current`, `stale`, `unavailable`, `error`, `read-only`. |
 | `message` | Operator-facing meaning and safe next action; no sensitive backend detail. |
 | `updatedAt` | Display when supplied by existing source; otherwise omitted. |
@@ -28,6 +28,43 @@ link. It is not stored in local tracking, shift artifacts, or Jira cache.
 Mapping: Jira cache `freshness=current` maps to current, `freshness=stale` maps to stale, and
 missing/invalid cache maps to unavailable. A failed HTTP request maps to error. Read-only annotates
 an inspection path and may coexist with a source state.
+
+## EvidenceSource
+
+| Field | Source/rules |
+|---|---|
+| `path` | One of existing `noc-inv` or Copilot MCP; no direct Datadog path is valid. |
+| `access` | Always `read-only`; NOC Web does not issue source writes, retries, or queries. |
+| `availability` | `available`, `unavailable`, `error`, or `no-result`, presented independently of other workflow data. |
+| `reference` | Optional existing source/notebook reference; identifies provenance without copying source content. |
+
+Relationship: an investigation may reference an EvidenceSource. The source evidence, raw logs,
+notebook body, MCP response, and prompt/output are not NOC Web entities and must not be persisted
+or returned by the workflow contract.
+
+## AdvisoryFinding
+
+| Field | Rules |
+|---|---|
+| `summary` | Concise AI-generated candidate conclusion; displayed as advisory, never as operational state. |
+| `sourcePath` | `noc-inv` or `copilot-mcp`, retained as provenance only. |
+| `reviewState` | `unreviewed`, `reviewed`, or `rejected`; only an operator transition may leave `unreviewed`. |
+
+Transitions: `unreviewed → reviewed` or `unreviewed → rejected` require an immediate explicit
+confirmation. `unreviewed` and `rejected` findings never propagate to operational summaries.
+
+## ReviewedFinding
+
+| Field | Rules |
+|---|---|
+| `finding` | Concise operator-reviewed operational conclusion or state; no raw evidence. |
+| `state` | Current concise investigation state suitable for operational views. |
+| `reviewedAt` / `reviewedBy` | Review traceability fields when the existing lifecycle supports them. |
+| `destinations` | Notes, Dashboard, Status, End Shift, and handover only. |
+
+Relationship: a ReviewedFinding is NOC Web-owned context linked to an investigation lifecycle and
+may be projected to destinations. It must not include Jira-ticket investigation content, Datadog
+records, raw notebook/log text, or unreviewed AI analysis.
 
 ## ConfirmationGate
 

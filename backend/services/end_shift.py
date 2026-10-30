@@ -5,6 +5,7 @@ from backend.services.ticket_sync import (
     get_ticket_sync_state,
 )
 from backend.services.tickets import get_operational_work_summary
+from backend.services.investigations import get_reviewed_findings
 
 
 def get_end_shift_preflight(
@@ -204,4 +205,5 @@ def get_end_shift_preflight(
         },
 
         "localWork": local_work,
+        "reviewedFindings": get_reviewed_findings(shift_date),
     }

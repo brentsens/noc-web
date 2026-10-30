@@ -6,9 +6,12 @@
 
 Unify Start Shift, Dashboard, Tickets, Investigations, Status, and End Shift around a URL-backed
 `shift` context. A shared frontend workflow shell will preserve that context in every navigation
-link, show the current operational step and source state, and keep inspection read-only. Existing
+link, show the current operational step and source state, and keep inspection read-only. Evidence
+is obtained only through the existing `noc-inv` and Copilot MCP path: it remains read-only, AI
+analysis remains advisory, and only concise operator-reviewed findings can be shared. Existing
 FastAPI read contracts, the Jira cache, local tracking, and handover remain authoritative; only an
-additive Start Shift confirmation request field is required to make its execution gate explicit.
+additive Start Shift confirmation request field and additive reviewed-finding presentation are
+permitted.
 
 ## Technical Context
 
@@ -16,8 +19,9 @@ additive Start Shift confirmation request field is required to make its executio
 
 **Primary Dependencies**: FastAPI, Pydantic, Starlette static files; pytest
 
-**Storage**: Existing local NOC workspace, shift artifacts, local ticket-tracking files, and Jira
-cache (`.jira-open-tickets.json`)
+**Storage**: Existing local NOC workspace, shift artifacts, local ticket-tracking files, Jira
+cache (`.jira-open-tickets.json`), and existing investigation lifecycle/reviewed-context fields;
+never raw Datadog evidence or Copilot output
 
 **Testing**: pytest with temporary NOC roots; focused static-UI/JS tests where established
 
@@ -29,8 +33,10 @@ cache (`.jira-open-tickets.json`)
 refresh; each view uses its existing read request(s) only.
 
 **Constraints**: `shift` is an ISO `YYYY-MM-DD` query parameter; absent means browser-local today;
-invalid values never call shift APIs; read-only views never refresh Jira or mutate local data;
-state changes require an immediately preceding explicit confirmation.
+invalid values never call shift APIs; read-only views never refresh Jira, mutate local data, or
+write to evidence sources; state changes require an immediately preceding explicit confirmation.
+Datadog evidence is accessed solely through existing `noc-inv` and Copilot MCP behavior—never a
+direct Datadog client/API—and is not used to investigate Jira tickets.
 
 **Scale/Scope**: Six existing workflow views, their shared links/context presentation, existing
 backend contracts, and focused regression coverage.
@@ -45,12 +51,12 @@ backend contracts, and focused regression coverage.
 | II. Fail Safely and Explain Failures | Render source-specific current/stale/unavailable/error/read-only states; retain independent data. | PASS |
 | III. Maintain API and UI Contract Consistency | Preserve all existing reads and document the only additive Start Shift confirmation body. | PASS |
 | IV. Test Operational Workflows | Add isolated API/service and frontend behavior coverage for URL context, failures, and confirmation cancellation. | PASS |
-| V. Prefer Simple, Observable Changes | Reuse current routers, services, client, static pages, cache-health response, and local-work projection. | PASS |
-| VI. Require Deliberate Operational Execution | Make Start Shift confirmation explicit; preserve existing confirmed bodies for tracking/Jira/handover delivery and never mutate during reads. | PASS |
+| V. Prefer Simple, Observable Changes | Reuse current routers, services, client, static pages, cache-health response, local-work projection, and existing `noc-inv`/Copilot MCP evidence path; add no Datadog integration. | PASS |
+| VI. Require Deliberate Operational Execution | Make Start Shift confirmation explicit; preserve existing confirmed bodies for tracking/Jira/handover delivery, keep evidence reads read-only, and require operator review before an advisory finding becomes shareable context. | PASS |
 
-**Post-design re-check**: PASS. No exception is required: the design neither introduces an external
-integration nor changes data ownership, and its sole contract addition makes an existing mutation
-safer and observable.
+**Post-design re-check**: PASS. No exception is required: the design adds neither an external
+integration nor source-evidence storage, preserves noc-web ownership only of lifecycle and reviewed
+context, and makes existing mutation/review gates observable.
 
 ## Project Structure
 
@@ -104,8 +110,10 @@ tests/
 
 **Structure Decision**: Add a small shared frontend workflow-context/navigation module (and shared
 CSS component where needed), then have the six pages initialize it before their existing view
-loader. Keep aggregation and persistence inside existing backend services; no workflow database,
-new router, or cache is introduced.
+loader. Keep aggregation and persistence inside existing backend services. Investigation services
+retain only lifecycle, source reference, advisory/review state, and concise reviewed findings; no
+workflow database, raw-evidence cache, direct Datadog client, or Jira-ticket investigation flow is
+introduced.
 
 ## Implementation Outline
 
@@ -120,16 +128,22 @@ new router, or cache is introduced.
 3. Standardize source panels: current (timestamp/normal), stale (data remains usable with age),
    unavailable (source did not provide data), error (request/action failed with retry or safe next
    step), and read-only (no mutation/refresh occurred). Dashboard, Tickets, and Status identify
-   Jira cache separately from local work; investigations identifies its own unavailable/error state.
+   Jira cache separately from local work; investigations identifies its own unavailable/error
+   state, read-only `noc-inv`/Copilot MCP evidence provenance, and advisory versus reviewed state.
+   It neither calls Datadog directly nor presents source evidence as noc-web data.
 4. Remove page-local duplicate date/navigation/action controls only after the shared bar supplies
    their information. Keep Jira-managed ticket fields out of local-work summaries and retain
    existing handover content/links.
 5. Route every mutating control through an immediate modal/dialog that names the exact local or
    Jira effect. Cancel closes without a request; confirm sends the existing `confirmed: true` body.
    Change Start Shift POST to require the same explicit boolean body and return existing error
-   semantics; no read endpoint gets a mutation or refresh.
+   semantics; review/publish controls explicitly identify the concise local context that will be
+   retained or propagated. No read endpoint gets a mutation, refresh, or source-evidence write.
 6. Add focused tests for date/query propagation and invalid dates, state rendering, confirmation
    cancel/confirm behavior, Start Shift missing/false confirmation, and no-write read paths.
+   Cover `noc-inv`/Copilot MCP-only provenance, source failure/no-result handling, advisory findings
+   excluded before review, and reviewed propagation containing no raw evidence or Jira-ticket
+   investigation content.
 
 ## Complexity Tracking
 

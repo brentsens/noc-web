@@ -51,3 +51,37 @@
   `freshness`, and the specification prohibits an unavailable source from masking other data.
 - **Alternatives considered**: A whole-page failure overlay and automatic retry/refresh were
   rejected because both obscure healthy context or create hidden work.
+
+## Evidence access and provenance
+
+- **Decision**: Obtain Datadog evidence only through the existing `noc-inv` workflow and Copilot
+  MCP. NOC Web consumes the resulting investigation context as read-only source material; it adds
+  no Datadog SDK, API client, credential, query endpoint, retry, or source write.
+- **Rationale**: The repository already recognizes `noc-inv` and intentionally avoids executing
+  Copilot/Datadog MCP network calls in standard health checks. Reusing that boundary prevents
+  duplicate integrations, credentials, and unobservable source-side effects.
+- **Alternatives considered**: Calling Datadog from FastAPI or browser JavaScript, embedding raw
+  MCP output, and automatic source retries were rejected because they create a direct integration,
+  risk mutation or disclosure, and violate read-only inspection.
+
+## Advisory and reviewed investigation context
+
+- **Decision**: Model AI analysis as an advisory finding that has no operational authority until an
+  operator explicitly reviews it. NOC Web owns the investigation lifecycle and concise reviewed
+  context only; source evidence remains with `noc-inv`/Copilot MCP and may be represented solely
+  by provenance/reference and source availability.
+- **Rationale**: This preserves human accountability required by the constitution while allowing a
+  reviewer to turn a concise, relevant conclusion into operational context.
+- **Alternatives considered**: Treating AI output as current operational state or publishing it
+  automatically was rejected because neither records a human decision.
+
+## Reviewed-finding propagation
+
+- **Decision**: Only a concise operator-reviewed finding and its review/state metadata may be
+  included in notes, Dashboard, Status, End Shift, and handover. Propagation is display/summary
+  composition from reviewed context, not a copy of the evidence or an extension of `noc-inv`.
+- **Rationale**: These downstream operator views need actionable state, not raw logs, notebook
+  content, prompts, MCP responses, or a duplicate source record.
+- **Alternatives considered**: Copying raw evidence to artifacts, exposing it in response payloads,
+  or using `noc-inv` to investigate Jira tickets was rejected for violating data ownership,
+  disclosure boundaries, and feature scope.

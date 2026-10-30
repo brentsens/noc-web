@@ -9,7 +9,7 @@
 
 ### Session 2026-10-29
 
-- Q: How should the selected shift persist when an operator navigates between daily workflow views? → A: Keep the selected shift in the URL; default to today when absent.
+- Decisions: Keep the selected shift in the URL (default to today when absent); obtain Datadog evidence only through existing noc-inv and Copilot MCP, read it without mutation, and treat AI output as operator-reviewed advice. noc-web owns the lifecycle and reviewed context—not source evidence—and may publish only concise reviewed findings and state to notes, Dashboard, Status, End Shift, and handover; it must not duplicate raw evidence or expand noc-inv into Jira-ticket investigations.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -49,6 +49,9 @@ view clearly communicates the condition while retaining unrelated available info
 Tickets, or Status, **Then** the condition and its operational meaning are explicit.
 2. **Given** an operational request fails, **When** an operator remains on the view, **Then** the
 failure is actionable and existing valid state remains visible.
+3. **Given** Datadog evidence is retrieved through the existing noc-inv and Copilot MCP path,
+**When** an operator reviews it, **Then** the workflow identifies it as read-only source evidence
+and AI advice as non-authoritative until the operator reviews it.
 
 ---
 
@@ -78,6 +81,11 @@ local or Jira state changes.
   context unambiguous before a state-changing action.
 - Local tracking data, Jira cache data, or an investigation is unavailable; the view distinguishes
   the failed source and does not present it as current.
+- Datadog evidence retrieval through noc-inv or Copilot MCP fails or returns no result; the view
+  identifies the source condition, retains other available information, and neither retries through
+  a direct Datadog integration nor writes to the source.
+- AI advice is unavailable, unreviewed, or rejected; it is not shown as operational state and no
+  finding is propagated to notes, Dashboard, Status, End Shift, or handover.
 - Existing handover and API consumers continue to receive their existing information.
 
 ## Requirements *(mandatory)*
@@ -104,6 +112,15 @@ local or Jira state changes.
 - **FR-009**: The system MUST retain unrelated available information when one operational source
   is stale, unavailable, or fails.
 - **FR-010**: The system MUST preserve existing handover and API consumer compatibility.
+- **FR-011**: The system MUST obtain Datadog evidence only through the existing noc-inv and
+  Copilot MCP paths; it MUST NOT add a direct Datadog integration.
+- **FR-012**: Retrieved evidence MUST be read-only. AI-generated analysis MUST be labeled advisory
+  and remain distinct from operator-reviewed operational state.
+- **FR-013**: noc-web MUST own the lifecycle and reviewed context for an investigation, but not
+  the source evidence. It MUST NOT duplicate raw evidence or extend noc-inv into Jira-ticket
+  investigations.
+- **FR-014**: Only concise, operator-reviewed findings and state MAY flow to notes, Dashboard,
+  Status, End Shift, and handover; raw source evidence MUST NOT flow to those destinations.
 
 ### Key Entities
 
@@ -112,6 +129,12 @@ local or Jira state changes.
 - **Operational Data State**: The current, stale, unavailable, error, or read-only condition
   communicated for an information source.
 - **Confirmation Gate**: The explicit operator decision immediately before a state-changing action.
+- **Evidence Source**: Read-only Datadog evidence supplied through existing noc-inv and Copilot
+  MCP paths; noc-web references it without becoming its source of record.
+- **Advisory Finding**: AI-generated analysis that becomes workflow context only after operator
+  review; it is distinct from source evidence and operational state.
+- **Reviewed Finding**: A concise operator-reviewed finding or state that may be shared with
+  notes, Dashboard, Status, End Shift, and handover.
 
 ## Success Criteria *(mandatory)*
 
@@ -127,6 +150,11 @@ local or Jira state changes.
   changing Jira or local operational data.
 - **SC-005**: Representative operators complete the daily shift workflow with at least 20% fewer
   navigation steps than the prior workflow, without losing required information.
+- **SC-006**: In 100% of tested evidence-review flows, evidence is obtained only through noc-inv
+  or Copilot MCP, no source mutation occurs, and unreviewed AI advice is not presented as
+  operational state.
+- **SC-007**: In 100% of tested publishing flows, only concise operator-reviewed findings or
+  state reach notes, Dashboard, Status, End Shift, or handover; raw evidence is absent.
 
 ## Assumptions
 
@@ -135,4 +163,6 @@ local or Jira state changes.
   browser-session state.
 - An additive display contract is preferred over a breaking API change.
 - Jira updates remain separate, deliberate operator actions.
+- noc-inv and Copilot MCP remain the existing evidence-access paths; neither is extended to
+  investigate Jira tickets as part of this feature.
 - The feature improves existing in-scope views and does not add a new operational workflow.

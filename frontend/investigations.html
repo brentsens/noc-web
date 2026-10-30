@@ -126,7 +126,7 @@
                         </h1>
 
                         <p>
-                            Reviewed Datadog Notebook investigations for the selected shift.
+                            Read-only noc-inv and Copilot MCP investigation context for the selected shift.
                         </p>
 
                     </div>
@@ -135,9 +135,6 @@
 
                         <input id="investigation-date" class="date-control" type="date">
 
-                        <button id="new-investigation" class="button primary" type="button">
-                            + New Investigation
-                        </button>
 
                     </div>
 
@@ -155,7 +152,7 @@
                         <div class="panel-header">
 
                             <h2>
-                                Reviewed Investigations
+                                Investigation Lifecycle
                             </h2>
 
                             <span id="investigation-count" class="count-badge">
@@ -189,8 +186,8 @@
                             </h2>
 
                             <p>
-                                Choose an investigation to view its validated findings,
-                                status, next actions, and handover summary.
+                                Choose an investigation to view its read-only provenance,
+                                advisory analysis, and operator-reviewed context.
                             </p>
 
                         </div>
@@ -234,7 +231,7 @@
 
                             <section class="investigation-section">
 
-                                <h3>Summary</h3>
+                                <h3>Evidence provenance</h3>
 
                                 <p id="investigation-summary"></p>
 
@@ -243,33 +240,30 @@
 
                             <section class="investigation-section">
 
-                                <h3>Confirmed Findings</h3>
+                                <h3>AI advisory</h3>
 
-                                <div id="investigation-findings"></div>
+                                <p id="investigation-status">
+                                    AI analysis is advisory and never operational state until reviewed.
+                                </p>
                             </section>
 
 
                             <section class="investigation-section">
 
-                                <h3>Current Status</h3>
-
-                                <p id="investigation-status"></p>
-                            </section>
-
-
-                            <section class="investigation-section">
-
-                                <h3>Next Actions</h3>
-
-                                <div id="investigation-actions"></div>
-                            </section>
-
-
-                            <section class="investigation-section">
-
-                                <h3>Handover Summary</h3>
+                                <h3>Operator-reviewed context</h3>
 
                                 <p id="investigation-handover"></p>
+
+                                <textarea id="reviewed-finding" class="form-control" rows="2"
+                                    placeholder="Concise operator-reviewed finding"></textarea>
+                                <input id="reviewed-state" class="form-control" type="text"
+                                    placeholder="Current concise state">
+                                <button id="publish-reviewed-finding" class="button" type="button">
+                                    Review and publish local context
+                                </button>
+                                <button id="reject-advisory" class="button" type="button">
+                                    Reject advisory
+                                </button>
                             </section>
 
                         </div>
@@ -283,90 +277,18 @@
 
     </div>
 
-    <!-- NEW INVESTIGATION MODAL -->
-
-    <div id="investigation-modal" class="modal-backdrop hidden">
-
-        <div class="modal-card">
-
-            <div class="modal-header">
-
-                <div>
-                    <h2>New Investigation</h2>
-
-                    <p>
-                        Create an investigation from a FINAL reviewed
-                        Datadog Notebook.
-                    </p>
-                </div>
-
-                <button id="close-investigation-modal" class="modal-close" type="button" aria-label="Close">
-                    ×
-                </button>
-
-            </div>
-
-
-            <form id="investigation-form">
-
-                <label class="form-label" for="new-investigation-name">
-                    Investigation Name
-                </label>
-
-                <input id="new-investigation-name" class="form-control" type="text"
-                    placeholder="Export-memory-working-set-high-IR-16">
-
-
-                <label class="form-label" for="notebook-url">
-                    Final Datadog Notebook URL
-                </label>
-
-                <input id="notebook-url" class="form-control" type="url"
-                    placeholder="https://app.datadoghq.com/notebook/...">
-
-
-                <div class="investigation-warning">
-
-                    <strong>
-                        Final Notebook only
-                    </strong>
-
-                    <p>
-                        Complete the investigation, validation,
-                        contradiction review, and Notebook updates
-                        before submitting the FINAL Datadog Notebook.
-                    </p>
-
-                </div>
-
-
-                <div class="modal-actions">
-
-                    <button id="cancel-investigation" class="button" type="button">
-                        Cancel
-                    </button>
-
-                    <button class="button primary" type="submit">
-                        Create Investigation
-                    </button>
-
-                </div>
-
-            </form>
-
-        </div>
-
-    </div>
-
     <script type="module">
 
         import {
             getInvestigation,
-            getInvestigations
+            getInvestigations,
+            reviewInvestigation,
+            rejectInvestigation
         } from "./js/api.js";
         import { initializeWorkflow, renderStatePanel, renderStatePanels } from "./js/workflow-context.js";
 
         let investigations = [];
+        let selectedInvestigation = null;
 
 
         const investigationDate =
@@ -401,63 +323,10 @@
             document.querySelector(
                 "#investigation-count"
             );
-
-        const newInvestigationButton =
-            document.querySelector(
-                "#new-investigation"
-            );
-
-        const modal =
-            document.querySelector(
-                "#investigation-modal"
-            );
-
-        const closeModalButton =
-            document.querySelector(
-                "#close-investigation-modal"
-            );
-
-        const cancelInvestigationButton =
-            document.querySelector(
-                "#cancel-investigation"
-            );
-
-        const investigationForm =
-            document.querySelector(
-                "#investigation-form"
-            );
-
-        const investigationName =
-            document.querySelector(
-                "#new-investigation-name"
-            );
-
-        const notebookUrl =
-            document.querySelector(
-                "#notebook-url"
-            );
-
-
-        function showInvestigationModal() {
-
-            modal.classList.remove(
-                "hidden"
-            );
-
-            investigationName.focus();
-
-        }
-
-
-        function hideInvestigationModal() {
-
-            modal.classList.add(
-                "hidden"
-            );
-
-            investigationForm.reset();
-
-        }
+        const reviewedFindingInput = document.querySelector("#reviewed-finding");
+        const reviewedStateInput = document.querySelector("#reviewed-state");
+        const publishReviewedFinding = document.querySelector("#publish-reviewed-finding");
+        const rejectAdvisory = document.querySelector("#reject-advisory");
 
         function getLocalDateString() {
 
@@ -499,8 +368,7 @@
                             `
                 ${investigation.name}
                 ${investigation.title}
-                ${investigation.status}
-                ${investigation.summary}
+                ${investigation.lifecycle.state}
                 `
                                 .toLowerCase();
 
@@ -572,7 +440,7 @@
         </div>
 
         <div class="investigation-card-meta">
-            ${investigation.status}
+            ${investigation.lifecycle.state}
         </div>
     `;
 
@@ -610,6 +478,7 @@
                         investigationDate.value,
                         investigationName
                     );
+                selectedInvestigation = investigation;
 
 
                 document
@@ -656,45 +525,33 @@
                 document.querySelector(
                     "#investigation-source"
                 ).textContent =
-                    investigation.source ||
-                    "Not recorded";
+                    investigation.evidence.provenance || "Unavailable";
 
 
                 document.querySelector(
                     "#investigation-capture"
                 ).textContent =
-                    investigation.captureMethod ||
-                    "Not recorded";
+                    `${investigation.evidence.availability} · ${investigation.evidence.access}`;
 
 
                 document.querySelector(
                     "#investigation-summary"
                 ).textContent =
-                    investigation.summary;
-
-
-                document.querySelector(
-                    "#investigation-findings"
-                ).textContent =
-                    investigation.confirmedFindings;
+                    investigation.evidence.reference || "No source reference is available.";
 
 
                 document.querySelector(
                     "#investigation-status"
                 ).textContent =
-                    investigation.currentStatus;
-
-
-                document.querySelector(
-                    "#investigation-actions"
-                ).textContent =
-                    investigation.nextActions;
+                    investigation.advisory.label;
 
 
                 document.querySelector(
                     "#investigation-handover"
                 ).textContent =
-                    investigation.handoverSummary;
+                    investigation.reviewedFinding
+                        ? `${investigation.reviewedFinding.finding} (${investigation.reviewedFinding.state})`
+                        : "No operator-reviewed context has been published.";
 
             } catch (error) {
 
@@ -778,6 +635,71 @@
             renderInvestigations
         );
 
+        publishReviewedFinding.addEventListener("click", async () => {
+            if (!selectedInvestigation) {
+                return;
+            }
+            const finding = reviewedFindingInput.value.trim();
+            const state = reviewedStateInput.value.trim();
+            if (!finding || !state) {
+                renderStatePanel(sourceStates, {
+                    source: "Reviewed context",
+                    kind: "error",
+                    message: "Enter a concise finding and state before publishing."
+                });
+
+                rejectAdvisory.addEventListener("click", async () => {
+                    if (!selectedInvestigation || !window.confirm(
+                        "Reject this advisory in local NOC context?\n\n"
+                        + "This does not modify evidence, Datadog, or Jira."
+                    )) {
+                        return;
+                    }
+                    try {
+                        selectedInvestigation = await rejectInvestigation(
+                            investigationDate.value, selectedInvestigation.name, true
+                        );
+                        document.querySelector("#investigation-status").textContent =
+                            "The advisory was rejected and is not operational context.";
+                    } catch (error) {
+                        renderStatePanel(sourceStates, {
+                            source: "Reviewed context", kind: "error", message: error.message
+                        });
+                    }
+                });
+                return;
+            }
+            if (!window.confirm(
+                "Publish this concise reviewed finding to local NOC context and operational summaries?\n\n"
+                + "This does not modify evidence, Datadog, or Jira."
+            )) {
+                return;
+            }
+            try {
+                const reviewed = await reviewInvestigation(
+                    investigationDate.value,
+                    selectedInvestigation.name,
+                    finding,
+                    state,
+                    true
+                );
+                selectedInvestigation = reviewed;
+                document.querySelector("#investigation-handover").textContent =
+                    `${reviewed.reviewedFinding.finding} (${reviewed.reviewedFinding.state})`;
+                renderStatePanel(sourceStates, {
+                    source: "Reviewed context",
+                    kind: "current",
+                    message: "Concise local reviewed context was published."
+                });
+            } catch (error) {
+                renderStatePanel(sourceStates, {
+                    source: "Reviewed context",
+                    kind: "error",
+                    message: error.message
+                });
+            }
+        });
+
 
         investigationDate.addEventListener(
             "change",
@@ -788,94 +710,6 @@
         investigationDate.value =
             getLocalDateString();
 
-
-        newInvestigationButton.addEventListener(
-            "click",
-            showInvestigationModal
-        );
-
-
-        closeModalButton.addEventListener(
-            "click",
-            hideInvestigationModal
-        );
-
-
-        cancelInvestigationButton.addEventListener(
-            "click",
-            hideInvestigationModal
-        );
-
-        modal.addEventListener(
-            "click",
-            event => {
-
-                if (
-                    event.target === modal
-                ) {
-
-                    hideInvestigationModal();
-
-                }
-
-            }
-        );
-
-        document.addEventListener(
-            "keydown",
-            event => {
-
-                if (
-                    event.key === "Escape" &&
-                    !modal.classList.contains(
-                        "hidden"
-                    )
-                ) {
-
-                    hideInvestigationModal();
-
-                }
-
-            }
-        );
-
-        investigationForm.addEventListener(
-            "submit",
-            event => {
-
-                event.preventDefault();
-
-
-                const name =
-                    document
-                        .querySelector(
-                            "#new-investigation-name"
-                        )
-                        .value
-                        .trim();
-
-
-                const notebookUrlValue =
-                    notebookUrl.value.trim();
-
-
-                if (
-                    !name ||
-                    !notebookUrlValue
-                ) {
-                    return;
-                }
-
-
-                hideInvestigationModal();
-
-
-                alert(
-                    "Prototype only. No investigation was created."
-                );
-
-            }
-        );
 
         const workflowContext = initializeWorkflow({
             step: "investigations",

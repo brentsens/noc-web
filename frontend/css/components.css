@@ -1284,6 +1284,64 @@ td {
     line-height: 1.5;
 }
 
+.workflow-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 18px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+}
+
+.workflow-context,
+.workflow-read-only {
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.workflow-step,
+.workflow-next {
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-decoration: none;
+}
+
+.workflow-step-active,
+.workflow-next {
+    color: var(--ses-purple);
+    font-weight: 700;
+}
+
+.workflow-next {
+    margin-left: auto;
+}
+
+.workflow-state {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-left: 3px solid var(--text-muted);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.workflow-state-current,
+.workflow-state-read-only {
+    border-left-color: var(--success);
+}
+
+.workflow-state-stale,
+.workflow-state-unavailable {
+    border-left-color: var(--warning);
+}
+
+.workflow-state-error {
+    border-left-color: var(--danger);
+}
+
 @media (max-width: 1050px) {
 
     .ai-context-grid {

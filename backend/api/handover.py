@@ -6,6 +6,7 @@ from fastapi import (
     APIRouter,
     HTTPException,
 )
+from pydantic import BaseModel, StrictBool
 
 from backend.services.handover import (
     generate_handover,
@@ -22,6 +23,9 @@ router = APIRouter(
     prefix="/api/shifts",
     tags=["handover"],
 )
+
+class HandoverActionRequest(BaseModel):
+    confirmed: StrictBool
 
 
 @router.get("/{shift_date}/handover")
@@ -51,7 +55,10 @@ def handover(
 @router.post("/{shift_date}/handover")
 def create_handover(
     shift_date: str,
+    request: HandoverActionRequest,
 ):
+    if request.confirmed is not True:
+        raise HTTPException(status_code=422, detail="This operation requires confirmed: true.")
     try:
         date.fromisoformat(
             shift_date
@@ -119,7 +126,10 @@ def create_handover(
 )
 def regenerate_existing_handover(
     shift_date: str,
+    request: HandoverActionRequest,
 ):
+    if request.confirmed is not True:
+        raise HTTPException(status_code=422, detail="This operation requires confirmed: true.")
     try:
         date.fromisoformat(
             shift_date

@@ -1018,7 +1018,7 @@
                     jiraKey: selectedTicket.id,
                     nextAction: nocNextAction.value.trim(),
                     nocNotes: nocNotes.value.trim()
-                }));
+                }, true));
             }
         );
 
@@ -1038,7 +1038,8 @@
                     {
                         nextAction: nocNextAction.value.trim(),
                         nocNotes: nocNotes.value.trim()
-                    }
+                    },
+                    true
                 ));
             }
         );
@@ -1055,7 +1056,8 @@
                     return;
                 }
                 completeLocalAction(() => syncLocalTracking(
-                    selectedTicket.id
+                    selectedTicket.id,
+                    true
                 ));
             }
         );
@@ -1072,7 +1074,8 @@
                     return;
                 }
                 completeLocalAction(() => closeLocalTracking(
-                    selectedTicket.id
+                    selectedTicket.id,
+                    true
                 ));
             }
         );
@@ -1089,7 +1092,8 @@
                     return;
                 }
                 completeLocalAction(() => reactivateLocalTracking(
-                    selectedTicket.id
+                    selectedTicket.id,
+                    true
                 ));
             }
         );
@@ -1317,7 +1321,8 @@
 
                     const result =
                         await createJiraTicket(
-                            previewedJiraTicket
+                            previewedJiraTicket,
+                            true
                         );
 
                     if (

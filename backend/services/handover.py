@@ -5,6 +5,7 @@ import subprocess
 from datetime import datetime
 from backend.config import NOC_ROOT
 from backend.services.tickets import get_operational_work_summary
+from backend.services.investigations import get_reviewed_findings
 
 
 
@@ -14,6 +15,9 @@ SECTION_PATTERN = re.compile(
 
 LOCAL_WORK_SECTION_PATTERN = re.compile(
     r"(?ms)^## Active Local NOC Work\s*$.*?(?=^##\s|\Z)"
+)
+REVIEWED_FINDINGS_SECTION_PATTERN = re.compile(
+    r"(?ms)^## Reviewed Investigation Context\s*$.*?(?=^##\s|\Z)"
 )
 
 
@@ -47,6 +51,23 @@ def _append_active_local_work(handover_file, summary: dict) -> None:
     )
 
 
+def _append_reviewed_findings(handover_file, findings: list[dict]) -> None:
+    if not findings:
+        return
+    lines = ["## Reviewed Investigation Context", ""]
+    for finding in findings:
+        lines.extend((
+            f"- {finding['investigation']}: {finding['finding']}",
+            f"  - State: {finding['state']}",
+        ))
+    content = REVIEWED_FINDINGS_SECTION_PATTERN.sub(
+        "", handover_file.read_text(encoding="utf-8")
+    ).rstrip()
+    handover_file.write_text(
+        f"{content}\n\n{chr(10).join(lines)}\n", encoding="utf-8"
+    )
+
+
 def get_handover(
     shift_date: str,
 ) -> dict:
@@ -70,6 +91,7 @@ def get_handover(
             "closing": "",
             "content": "",
             "localWork": get_operational_work_summary(),
+            "reviewedFindings": get_reviewed_findings(shift_date),
         }
 
 
@@ -216,6 +238,7 @@ def get_handover(
             content.strip(),
 
         "localWork": get_operational_work_summary(),
+        "reviewedFindings": get_reviewed_findings(shift_date),
     }
 
 def generate_handover(
@@ -285,6 +308,7 @@ def generate_handover(
         )
 
     _append_active_local_work(handover_file, local_work)
+    _append_reviewed_findings(handover_file, get_reviewed_findings(shift_date))
     return get_handover(
         shift_date
     )
@@ -422,6 +446,7 @@ def regenerate_handover(
 
     try:
         _append_active_local_work(handover_file, local_work)
+        _append_reviewed_findings(handover_file, get_reviewed_findings(shift_date))
     except OSError:
         shutil.copy2(archive_file, handover_file)
         raise

@@ -24,6 +24,7 @@ def noc_root(
         status,
         health,
         jira_cache,
+        investigations,
         ticket_sync,
         tickets,
     )
@@ -38,6 +39,7 @@ def noc_root(
         status,
         health,
         jira_cache,
+        investigations,
         ticket_sync,
         tickets,
     )

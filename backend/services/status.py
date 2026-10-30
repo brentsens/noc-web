@@ -11,6 +11,7 @@ from backend.services.jira_cache import (
     get_jira_cache_health,
 )
 from backend.services.tickets import get_operational_work_summary
+from backend.services.investigations import get_reviewed_findings
 
 
 CLOSED_JIRA_STATUSES = {
@@ -286,4 +287,5 @@ def get_status(shift_date: str) -> dict:
         "readOnly": True,
 
         "localWork": get_operational_work_summary(),
+        "reviewedFindings": get_reviewed_findings(shift_date),
     }

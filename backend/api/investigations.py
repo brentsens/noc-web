@@ -4,10 +4,13 @@ from fastapi import (
     APIRouter,
     HTTPException,
 )
+from pydantic import BaseModel, StrictBool
 
 from backend.services.investigations import (
     get_investigation,
     get_investigations,
+    reject_investigation,
+    review_investigation,
 )
 
 
@@ -15,6 +18,16 @@ router = APIRouter(
     prefix="/api/shifts",
     tags=["investigations"],
 )
+
+class ReviewInvestigationRequest(BaseModel):
+    confirmed: StrictBool
+    finding: str
+    state: str
+    reviewedBy: str | None = None
+
+
+class _ConfirmedRequest(BaseModel):
+    confirmed: StrictBool
 
 
 def validate_shift_date(
@@ -97,3 +110,58 @@ def investigation(
 
 
     return result
+
+
+@router.post(
+    "/{shift_date}/investigations/"
+    "{investigation_name}/review"
+)
+def review(
+    shift_date: str,
+    investigation_name: str,
+    request: ReviewInvestigationRequest,
+):
+    validate_shift_date(shift_date)
+    if request.confirmed is not True:
+        raise HTTPException(
+            status_code=422,
+            detail="This operation requires confirmed: true.",
+        )
+    try:
+        return review_investigation(
+            shift_date,
+            investigation_name,
+            request.finding,
+            request.state,
+            request.reviewedBy,
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail="Investigation not found",
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        )
+
+
+@router.post(
+    "/{shift_date}/investigations/"
+    "{investigation_name}/reject"
+)
+def reject(
+    shift_date: str,
+    investigation_name: str,
+    request: _ConfirmedRequest,
+):
+    validate_shift_date(shift_date)
+    if request.confirmed is not True:
+        raise HTTPException(status_code=422, detail="This operation requires confirmed: true.")
+    try:
+        return reject_investigation(shift_date, investigation_name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))

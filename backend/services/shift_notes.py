@@ -2,6 +2,7 @@ import re
 
 from backend.config import NOC_ROOT
 from backend.services.tickets import get_operational_work_summary
+from backend.services.investigations import get_reviewed_findings
 
 from datetime import datetime
 
@@ -33,6 +34,7 @@ def get_shift_notes(
             "sections": [],
             "activity": [],
             "localWork": get_operational_work_summary(),
+            "reviewedFindings": get_reviewed_findings(shift_date),
         }
 
 
@@ -159,6 +161,7 @@ def get_shift_notes(
         "sections": sections,
         "activity": activity,
         "localWork": get_operational_work_summary(),
+        "reviewedFindings": get_reviewed_findings(shift_date),
     }
 
 def add_shift_note(

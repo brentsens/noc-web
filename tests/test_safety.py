@@ -50,4 +50,23 @@ def test_visible_workflow_mutations_are_confirmation_gated():
         ).read_text(encoding="utf-8")
 
     api = (frontend / "js" / "api.js").read_text(encoding="utf-8")
-    assert 'JSON.stringify({ confirmed: true })' in api
+    assert "confirmed = false" in api
+    assert "body: JSON.stringify({ confirmed })" in api
+
+
+def test_investigations_use_only_reviewed_context_and_no_direct_datadog():
+    from pathlib import Path
+
+    frontend = Path(__file__).parents[1] / "frontend"
+    investigation_page = (frontend / "investigations.html").read_text(
+        encoding="utf-8"
+    )
+    investigation_service = (
+        Path(__file__).parents[1] / "backend" / "services" / "investigations.py"
+    ).read_text(encoding="utf-8")
+
+    assert "AI analysis is advisory" in investigation_page
+    assert "Review and publish local context" in investigation_page
+    assert "This does not modify evidence, Datadog, or Jira." in investigation_page
+    assert "datadog" not in investigation_service.casefold()
+    assert "get_reviewed_findings" in investigation_service
