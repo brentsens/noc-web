@@ -135,10 +135,6 @@
                         Refresh Jira
                     </button>
 
-                    <button id="sync-all-tickets" class="button" type="button">
-                        Sync NOC Tracking
-                    </button>
-
                     <button id="create-jira-ticket" class="button primary" type="button">
                         + Create Jira Ticket
                     </button>
@@ -149,9 +145,7 @@
                             Jira cache unavailable
                         </span>
 
-                        <span id="ticket-sync-status">
-                            NOC tracking sync unknown
-                        </span>
+                        <span id="ticket-sync-status">Select a ticket to manage local tracking</span>
                     </div>
 
                 </section>
@@ -268,12 +262,12 @@
 
                                     <div class="detail-field full">
                                         <label>Next Action</label>
-                                        <div id="noc-next-action"></div>
+                                        <textarea id="noc-next-action" class="form-control" rows="2"></textarea>
                                     </div>
 
                                     <div class="detail-field full">
                                         <label>NOC Notes</label>
-                                        <div id="noc-notes"></div>
+                                        <textarea id="noc-notes" class="form-control" rows="3"></textarea>
                                     </div>
 
                                 </div>
@@ -287,16 +281,24 @@
                                     Open in Jira ↗
                                 </a>
 
-                                <button class="button">
-                                    Update NOC Fields
+                                <button id="start-local-tracking" class="button primary" type="button">
+                                    Start Local Tracking
                                 </button>
 
-                                <button class="button">
+                                <button id="save-local-context" class="button" type="button">
+                                    Save NOC Context
+                                </button>
+
+                                <button id="sync-local-ticket" class="button" type="button">
                                     Sync Ticket
                                 </button>
 
-                                <button class="button danger-outline">
-                                    Close Ticket
+                                <button id="close-local-tracking" class="button danger-outline" type="button">
+                                    Close Local Tracking
+                                </button>
+
+                                <button id="reactivate-local-tracking" class="button hidden" type="button">
+                                    Reactivate Local Tracking
                                 </button>
                             </div>
 
@@ -503,14 +505,18 @@
         import {
             getJiraTicketQueue,
             refreshJiraTicketQueue,
-            getTicketSyncState,
-            syncAllTickets,
+            createLocalTracking,
+            updateLocalTracking,
+            syncLocalTracking,
+            closeLocalTracking,
+            reactivateLocalTracking,
             previewJiraTicket,
             createJiraTicket
         } from "./js/api.js";
 
 
         let tickets = [];
+        let selectedTicket = null;
 
 
         const ticketTable =
@@ -536,11 +542,6 @@
         const refreshJiraButton =
             document.querySelector(
                 "#refresh-jira"
-            );
-
-        const syncAllButton =
-            document.querySelector(
-                "#sync-all-tickets"
             );
 
         const jiraRefreshStatus =
@@ -621,6 +622,41 @@
         const openInJira =
             document.querySelector(
                 "#open-in-jira"
+            );
+
+        const startLocalTracking =
+            document.querySelector(
+                "#start-local-tracking"
+            );
+
+        const saveLocalContext =
+            document.querySelector(
+                "#save-local-context"
+            );
+
+        const syncLocalTicket =
+            document.querySelector(
+                "#sync-local-ticket"
+            );
+
+        const closeLocalTrackingButton =
+            document.querySelector(
+                "#close-local-tracking"
+            );
+
+        const reactivateLocalTrackingButton =
+            document.querySelector(
+                "#reactivate-local-tracking"
+            );
+
+        const nocNextAction =
+            document.querySelector(
+                "#noc-next-action"
+            );
+
+        const nocNotes =
+            document.querySelector(
+                "#noc-notes"
             );
 
         let previewedJiraTicket = null;
@@ -777,10 +813,12 @@
                     </td>
 
                     <td>
-                        ${ticket.tracked
-                        ? '<span class="status status-blue">TRACKED</span>'
-                        : '<span class="muted-text">JIRA ONLY</span>'
-                    }
+                        ${ticket.trackingState === "closed"
+                        ? '<span class="muted-text">CLOSED LOCAL</span>'
+                        : ticket.tracked
+                            ? '<span class="status status-blue">ACTIVE LOCAL</span>'
+                            : '<span class="muted-text">JIRA ONLY</span>'
+                        }
                     </td>
 
                     <td>
@@ -812,6 +850,7 @@
 
 
         function showDetails(ticket, activeRow) {
+            selectedTicket = ticket;
 
             document
                 .querySelectorAll(".selectable-row")
@@ -903,36 +942,153 @@
 
             document.querySelector(
                 "#noc-environment"
-            ).innerHTML =
+            ).textContent =
                 ticket.tracked
                     ? (
                         ticket.environment
-                        || '<span class="muted-text">Not set</span>'
+                        || "Not set"
                     )
-                    : '<span class="muted-text">Jira only</span>';
+                    : "Jira only";
 
 
-            document.querySelector(
-                "#noc-next-action"
-            ).innerHTML =
-                ticket.tracked
-                    ? (
-                        ticket.nextAction
-                        || '<span class="warning-text">No Next Action recorded</span>'
-                    )
-                    : '<span class="muted-text">Not locally tracked</span>';
+            nocNextAction.value = ticket.nextAction || "";
+            nocNotes.value = ticket.notes || "";
 
+            const active =
+                ticket.trackingState === "active";
 
-            document.querySelector(
-                "#noc-notes"
-            ).innerHTML =
-                ticket.tracked
-                    ? (
-                        ticket.notes
-                        || '<span class="muted-text">No NOC notes</span>'
-                    )
-                    : '<span class="muted-text">Not locally tracked</span>';
+            nocNextAction.disabled = !active;
+            nocNotes.disabled = !active;
+            startLocalTracking.classList.toggle(
+                "hidden",
+                ticket.trackingState !== "jira-only"
+            );
+            saveLocalContext.classList.toggle(
+                "hidden",
+                !active
+            );
+            syncLocalTicket.classList.toggle(
+                "hidden",
+                !active
+            );
+            closeLocalTrackingButton.classList.toggle(
+                "hidden",
+                !active
+            );
+            reactivateLocalTrackingButton.classList.toggle(
+                "hidden",
+                ticket.trackingState !== "closed"
+            );
+
+            syncStatus.textContent =
+                ticket.trackingState === "jira-only"
+                    ? "Jira-only: local tracking has not started."
+                    : `Local tracking is ${ticket.trackingState}. Jira fields are read-only.`;
         }
+
+        async function completeLocalAction(action) {
+            try {
+                const updated = await action();
+                syncStatus.textContent =
+                    `Local tracking updated: ${updated.trackingState}.`;
+                await loadTickets();
+            } catch (error) {
+                console.error("Local tracking action failed:", error);
+                syncStatus.textContent =
+                    `Local tracking action failed: ${error.message}`;
+            }
+        }
+
+        startLocalTracking.addEventListener(
+            "click",
+            () => {
+                if (!selectedTicket) {
+                    return;
+                }
+                if (!window.confirm(
+                    `Start local NOC tracking for ${selectedTicket.id}?`
+                )) {
+                    return;
+                }
+                completeLocalAction(() => createLocalTracking({
+                    jiraKey: selectedTicket.id,
+                    nextAction: nocNextAction.value.trim(),
+                    nocNotes: nocNotes.value.trim()
+                }));
+            }
+        );
+
+        saveLocalContext.addEventListener(
+            "click",
+            () => {
+                if (!selectedTicket) {
+                    return;
+                }
+                if (!window.confirm(
+                    `Save local NOC context for ${selectedTicket.id}?`
+                )) {
+                    return;
+                }
+                completeLocalAction(() => updateLocalTracking(
+                    selectedTicket.id,
+                    {
+                        nextAction: nocNextAction.value.trim(),
+                        nocNotes: nocNotes.value.trim()
+                    }
+                ));
+            }
+        );
+
+        syncLocalTicket.addEventListener(
+            "click",
+            () => {
+                if (!selectedTicket) {
+                    return;
+                }
+                if (!window.confirm(
+                    `Refresh the Jira snapshot for ${selectedTicket.id}?`
+                )) {
+                    return;
+                }
+                completeLocalAction(() => syncLocalTracking(
+                    selectedTicket.id
+                ));
+            }
+        );
+
+        closeLocalTrackingButton.addEventListener(
+            "click",
+            () => {
+                if (!selectedTicket) {
+                    return;
+                }
+                if (!window.confirm(
+                    `Close local tracking for ${selectedTicket.id}? Jira will not be closed.`
+                )) {
+                    return;
+                }
+                completeLocalAction(() => closeLocalTracking(
+                    selectedTicket.id
+                ));
+            }
+        );
+
+        reactivateLocalTrackingButton.addEventListener(
+            "click",
+            () => {
+                if (!selectedTicket) {
+                    return;
+                }
+                if (!window.confirm(
+                    `Reactivate local tracking for ${selectedTicket.id}?`
+                )) {
+                    return;
+                }
+                completeLocalAction(() => reactivateLocalTracking(
+                    selectedTicket.id
+                ));
+            }
+        );
 
         function showJiraCreateModal() {
             jiraCreateModal.classList.remove(
@@ -1342,123 +1498,7 @@
                 )
                 }`;
         }
-        async function loadTicketSyncState() {
-
-            try {
-
-                const state =
-                    await getTicketSyncState();
-
-                if (
-                    !state.synced
-                    || !state.completedAt
-                ) {
-
-                    syncStatus.textContent =
-                        "No successful sync recorded";
-
-                    return;
-                }
-
-                const completed =
-                    new Date(
-                        state.completedAt
-                    );
-
-                syncStatus.textContent =
-                    `Last synced ${completed.toLocaleDateString()
-                    } at ${completed.toLocaleTimeString(
-                        [],
-                        {
-                            hour: "2-digit",
-                            minute: "2-digit"
-                        }
-                    )
-                    }`;
-
-            } catch (error) {
-
-                console.error(
-                    "Ticket sync state load failed:",
-                    error
-                );
-
-                syncStatus.textContent =
-                    "Sync status unavailable";
-            }
-        }
-
-        syncAllButton.addEventListener(
-            "click",
-            async () => {
-
-                const confirmed =
-                    window.confirm(
-                        "Sync all locally tracked tickets with Jira?\n\n"
-                        + "This will run tix sync --all and update "
-                        + "the local ticket records."
-                    );
-
-                if (!confirmed) {
-                    return;
-                }
-
-                syncAllButton.disabled = true;
-                syncAllButton.textContent =
-                    "Syncing...";
-
-                syncStatus.textContent =
-                    "Sync in progress...";
-
-                try {
-
-                    const result =
-                        await syncAllTickets();
-
-                    if (!result.success) {
-                        throw new Error(
-                            "Ticket sync did not complete."
-                        );
-                    }
-
-                    syncStatus.textContent =
-                        `Synced successfully at ${new Date(
-                            result.completedAt
-                        ).toLocaleTimeString(
-                            [],
-                            {
-                                hour: "2-digit",
-                                minute: "2-digit"
-                            }
-                        )
-                        }`;
-
-                    await loadTickets();
-
-                } catch (error) {
-
-                    console.error(
-                        "Ticket sync failed:",
-                        error
-                    );
-
-                    syncStatus.textContent =
-                        `Sync failed: ${error.message}`;
-
-                } finally {
-
-                    syncAllButton.disabled =
-                        false;
-
-                    syncAllButton.textContent =
-                        "Sync NOC Tracking";
-                }
-            }
-        );
-
-
         loadTickets();
-        loadTicketSyncState();
 
     </script>
 

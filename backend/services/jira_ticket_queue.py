@@ -6,6 +6,7 @@ from backend.services.jira_discovery import (
     get_open_jira_tickets,
 )
 from backend.services.tickets import (
+    get_closed_tickets,
     get_open_tickets,
 )
 
@@ -14,7 +15,10 @@ def _merge_ticket_queue(
     jira_result: dict,
 ) -> dict:
 
-    local_tickets = get_open_tickets()
+    local_tickets = (
+        get_open_tickets()
+        + get_closed_tickets()
+    )
 
     local_by_id = {
         ticket["id"]: ticket
@@ -37,6 +41,25 @@ def _merge_ticket_queue(
             **jira_ticket,
             "tracked":
                 local_ticket is not None,
+
+            "trackingState":
+                (
+                    local_ticket.get(
+                        "trackingState",
+                        "active",
+                    )
+                    if local_ticket
+                    else "jira-only"
+                ),
+
+            "localTracking":
+                (
+                    local_ticket.get(
+                        "localTracking"
+                    )
+                    if local_ticket
+                    else None
+                ),
 
             "environment":
                 (

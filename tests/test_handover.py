@@ -3,6 +3,7 @@ import subprocess
 import pytest
 
 from backend.services import handover
+from backend.services import tickets
 
 
 SHIFT_DATE = "2099-12-31"
@@ -251,3 +252,29 @@ def test_timeout_restores_original(
     assert handover_file.read_text(
         encoding="utf-8"
     ) == "Original timeout-safe version\n"
+
+
+def test_closed_local_tracking_is_excluded_from_open_ticket_consumers(
+    noc_root,
+):
+    ticket_dir = noc_root / "tickets" / "open"
+    ticket_dir.mkdir(parents=True)
+    (ticket_dir / "NOC-123.json").write_text(
+        """{
+  "id": "NOC-123",
+  "jira": {"summary": "Handover-compatible"},
+  "noc": {"next_action": "Continue", "notes": "Retain context"}
+}
+""",
+        encoding="utf-8",
+    )
+
+    assert tickets.get_open_tickets()[0]["localTracking"]["nocNotes"] == (
+        "Retain context"
+    )
+    tickets.close_tracking("NOC-123", True)
+
+    assert tickets.get_open_tickets() == []
+    closed = tickets.get_ticket("NOC-123")
+    assert closed["trackingState"] == "closed"
+    assert closed["localTracking"]["nocNotes"] == "Retain context"

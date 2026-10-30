@@ -64,6 +64,41 @@ export async function apiRequest(
   
   }
 
+  export function createLocalTracking(ticket) {
+    return apiRequest("/api/tickets/tracking", {
+      method: "POST",
+      body: JSON.stringify({ ...ticket, confirmed: true })
+    });
+  }
+
+  export function updateLocalTracking(ticketId, context) {
+    return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking`, {
+      method: "PATCH",
+      body: JSON.stringify({ ...context, confirmed: true })
+    });
+  }
+
+  export function syncLocalTracking(ticketId) {
+    return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking/sync`, {
+      method: "POST",
+      body: JSON.stringify({ confirmed: true })
+    });
+  }
+
+  export function closeLocalTracking(ticketId) {
+    return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking/close`, {
+      method: "POST",
+      body: JSON.stringify({ confirmed: true })
+    });
+  }
+
+  export function reactivateLocalTracking(ticketId) {
+    return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking/reactivate`, {
+      method: "POST",
+      body: JSON.stringify({ confirmed: true })
+    });
+  }
+
   export function getShiftNotes(
     shiftDate
 ) {

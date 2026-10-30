@@ -3,6 +3,7 @@ import subprocess
 import pytest
 
 from backend.services import ticket_sync
+from backend.services import jira_cache, tickets
 
 
 def test_missing_tix_command(
@@ -133,3 +134,69 @@ def test_failed_sync_does_not_write_state(
     state = ticket_sync.get_ticket_sync_state()
 
     assert state["synced"] is False
+
+
+def test_local_ticket_sync_requires_confirmation_and_no_subprocess(
+    noc_root,
+    monkeypatch,
+):
+    jira_cache.write_jira_cache({
+        "tickets": [{
+            "id": "NOC-123",
+            "summary": "Before refresh",
+            "status": "Support Team",
+        }],
+    })
+    tickets.create_tracking(
+        "NOC-123",
+        "Keep this action",
+        "Keep these notes",
+        True,
+    )
+    jira_cache.write_jira_cache({
+        "tickets": [{
+            "id": "NOC-123",
+            "summary": "Refreshed Jira summary",
+            "status": "Escalated",
+        }],
+    })
+    monkeypatch.setattr(
+        ticket_sync.subprocess,
+        "run",
+        lambda *args, **kwargs: pytest.fail(
+            "Local sync must not invoke a subprocess."
+        ),
+    )
+
+    with pytest.raises(ValueError):
+        ticket_sync.sync_local_ticket("NOC-123", False)
+
+    refreshed = ticket_sync.sync_local_ticket(
+        "NOC-123",
+        True,
+    )
+
+    assert refreshed["summary"] == "Refreshed Jira summary"
+    assert refreshed["localTracking"]["nextAction"] == (
+        "Keep this action"
+    )
+    assert refreshed["localTracking"]["nocNotes"] == (
+        "Keep these notes"
+    )
+
+
+def test_local_ticket_sync_failure_preserves_context(
+    noc_root,
+):
+    jira_cache.write_jira_cache({
+        "tickets": [{"id": "NOC-123", "summary": "Available"}],
+    })
+    tickets.create_tracking("NOC-123", "Action", "Notes", True)
+    (noc_root / ".jira-open-tickets.json").unlink()
+
+    with pytest.raises(LookupError):
+        ticket_sync.sync_local_ticket("NOC-123", True)
+
+    preserved = tickets.get_ticket("NOC-123")
+    assert preserved["localTracking"]["nextAction"] == "Action"
+    assert preserved["localTracking"]["nocNotes"] == "Notes"

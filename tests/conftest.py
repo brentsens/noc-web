@@ -23,7 +23,9 @@ def noc_root(
         start_shift,
         status,
         health,
+        jira_cache,
         ticket_sync,
+        tickets,
     )
 
     modules = (
@@ -35,7 +37,9 @@ def noc_root(
         start_shift,
         status,
         health,
+        jira_cache,
         ticket_sync,
+        tickets,
     )
 
     for module in modules:
@@ -50,6 +54,12 @@ def noc_root(
         ticket_sync,
         "SYNC_STATE_FILE",
         test_root / ".ticket-sync-state.json",
+    )
+
+    monkeypatch.setattr(
+        jira_cache,
+        "CACHE_FILE",
+        test_root / ".jira-open-tickets.json",
     )
 
     return test_root
