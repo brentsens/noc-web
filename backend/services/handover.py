@@ -21,34 +21,18 @@ REVIEWED_FINDINGS_SECTION_PATTERN = re.compile(
 )
 
 
-def _active_local_work_section(summary: dict) -> str:
+def _validate_local_work(summary: dict) -> None:
     if not summary["available"]:
         raise ValueError(summary["error"])
-    if not summary["items"]:
-        return ""
 
-    lines = ["## Active Local NOC Work", ""]
-    for item in summary["items"]:
-        lines.extend((
-            f"- {item['jiraKey']}",
-            f"  - Next Action: {item['nextAction']}",
-            f"  - NOC Notes: {item['nocNotes']}",
-        ))
-    return "\n".join(lines)
-
-
-def _append_active_local_work(handover_file, summary: dict) -> None:
-    section = _active_local_work_section(summary)
-    if not section:
-        return
-    content = LOCAL_WORK_SECTION_PATTERN.sub(
-        "",
-        handover_file.read_text(encoding="utf-8"),
-    ).rstrip()
-    handover_file.write_text(
-        f"{content}\n\n{section}\n",
-        encoding="utf-8",
-    )
+def _remove_active_local_work_section(handover_file) -> None:
+    original = handover_file.read_text(encoding="utf-8")
+    content = LOCAL_WORK_SECTION_PATTERN.sub("", original)
+    if content != original:
+        handover_file.write_text(
+            f"{content.rstrip()}\n" if content.strip() else "",
+            encoding="utf-8",
+        )
 
 
 def _append_reviewed_findings(handover_file, findings: list[dict]) -> None:
@@ -245,7 +229,7 @@ def generate_handover(
     shift_date: str,
 ) -> dict:
     local_work = get_operational_work_summary()
-    _active_local_work_section(local_work)
+    _validate_local_work(local_work)
 
     handover_file = (
         NOC_ROOT
@@ -307,7 +291,7 @@ def generate_handover(
             )
         )
 
-    _append_active_local_work(handover_file, local_work)
+    _remove_active_local_work_section(handover_file)
     _append_reviewed_findings(handover_file, get_reviewed_findings(shift_date))
     return get_handover(
         shift_date
@@ -317,7 +301,7 @@ def regenerate_handover(
     shift_date: str,
 ) -> dict:
     local_work = get_operational_work_summary()
-    _active_local_work_section(local_work)
+    _validate_local_work(local_work)
 
     handover_dir = (
         NOC_ROOT
@@ -445,7 +429,7 @@ def regenerate_handover(
         )
 
     try:
-        _append_active_local_work(handover_file, local_work)
+        _remove_active_local_work_section(handover_file)
         _append_reviewed_findings(handover_file, get_reviewed_findings(shift_date))
     except OSError:
         shutil.copy2(archive_file, handover_file)

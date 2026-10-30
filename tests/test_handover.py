@@ -78,7 +78,13 @@ def test_regeneration_archives_original(
 
     def fake_run(*args, **kwargs):
         handover_file.write_text(
-            "Regenerated handover\n",
+            """Regenerated handover
+
+## Active Local NOC Work
+
+- NOC-123
+  - Next Action: Duplicate local output
+""",
             encoding="utf-8",
         )
 
@@ -280,42 +286,79 @@ def test_closed_local_tracking_is_excluded_from_open_ticket_consumers(
     assert closed["localTracking"]["nocNotes"] == "Retain context"
 
 
-def test_generated_handover_includes_one_local_work_section(noc_root, monkeypatch):
+def test_generated_handover_uses_local_context_without_standalone_section(
+    noc_root,
+    monkeypatch,
+):
     handover_file = (
         noc_root / SHIFT_DATE / "handover" / f"handover-{SHIFT_DATE}.md"
     )
     ticket_dir = noc_root / "tickets" / "open"
     ticket_dir.mkdir(parents=True)
     (ticket_dir / "NOC-123.json").write_text(
-        """{"id":"NOC-123","noc":{"next_action":"Collect logs","notes":"Local"},
-        "tracking":{"jira_key":"NOC-123","state":"active"}}""",
+        """{"id":"NOC-556","noc":{"next_action":"","notes":"Awaiting reviewer confirmation"},
+        "tracking":{"jira_key":"NOC-556","state":"active"}}""",
         encoding="utf-8",
     )
     monkeypatch.setattr(handover.shutil, "which", lambda command: "/mock/handover")
     monkeypatch.setattr(
-        handover.subprocess,
-        "run",
-        lambda args, **kwargs: (
-            handover_file.parent.mkdir(parents=True, exist_ok=True),
-            handover_file.write_text(
-                """Base handover
-
-## Active Local NOC Work
-
-- Old local work
-""",
-                encoding="utf-8",
-            ),
-            subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr=""),
-        )[-1],
+        handover,
+        "get_reviewed_findings",
+        lambda shift_date: [{
+            "investigation": "Datadog latency review",
+            "finding": "Elevated latency was operator-confirmed.",
+            "state": "confirmed",
+        }],
     )
 
-    handover.generate_handover(SHIFT_DATE)
+    base_handover = """Shift handover
+
+## Summary
+NOC-556 remains open. Operator context: Awaiting reviewer confirmation.
+
+## Open Jira Tickets
+- NOC-556 — Review required
+
+## Next Shift Actions
+- NOC-556: Next Action not recorded; confirm with the operator.
+
+## Salesforce Context
+- Salesforce case SF-77 is awaiting an owner.
+
+Regards,
+NOC Operator
+
+## Active Local NOC Work
+- NOC-556
+  - Next Action:
+  - NOC Notes: Awaiting reviewer confirmation
+"""
+
+    def fake_run(args, **kwargs):
+        handover_file.parent.mkdir(parents=True, exist_ok=True)
+        handover_file.write_text(base_handover, encoding="utf-8")
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        handover.subprocess,
+        "run",
+        fake_run,
+    )
+
+    result = handover.generate_handover(SHIFT_DATE)
 
     content = handover_file.read_text(encoding="utf-8")
-    assert content.count("## Active Local NOC Work") == 1
-    assert "Next Action: Collect logs" in content
-    assert "summary" not in content
+    assert "## Active Local NOC Work" not in content
+    assert "NOC Notes:" not in content
+    assert "NOC-556" in content
+    assert "Next Action not recorded" in content
+    assert "Awaiting reviewer confirmation" in content
+    assert "## Open Jira Tickets" in content
+    assert "## Next Shift Actions" in content
+    assert "Salesforce case SF-77 is awaiting an owner." in content
+    assert "## Reviewed Investigation Context" in content
+    assert "Elevated latency was operator-confirmed." in content
+    assert result["localWork"]["items"][0]["jiraKey"] == "NOC-556"
 
 
 def test_malformed_local_work_does_not_overwrite_handover(noc_root):

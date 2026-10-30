@@ -2062,19 +2062,171 @@ td {
 .workflow-state-unavailable,
 .workflow-state-error { border-color: var(--danger, #ef4444); }
 .workflow-state-read-only { border-color: var(--primary, #0f766e); }
-/* Bounded assistant results remain distinct from operational workflow content. */
-.assistant-disclosure,
+/* Bounded assistant content uses the same dark, advisory panels as AI Actions. */
+.assistant-page-controls {
+    flex-wrap: wrap;
+}
+
+.assistant-interaction {
+    margin-bottom: 16px;
+}
+
+.assistant-intro {
+    margin: 0 0 14px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.assistant-question-input {
+    min-height: 150px;
+    line-height: 1.55;
+}
+
+.assistant-question-help {
+    display: block;
+    margin-top: 6px;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.assistant-disclosure {
+    margin: 16px 0 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.assistant-provider-acknowledgement {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin: 12px 0 16px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.assistant-provider-acknowledgement input {
+    margin: 2px 0 0;
+    accent-color: var(--ses-teal);
+}
+
+.assistant-submit:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.assistant-shift-guidance {
+    padding: 12px 14px;
+    border: 1px solid var(--border-soft);
+    border-left: 3px solid var(--warning);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+.assistant-shift-guidance a,
+.assistant-result a {
+    color: var(--ses-teal);
+}
+
 .assistant-result {
-    border: 1px solid var(--border-color, #b8c2cc);
-    border-radius: 4px;
-    margin: 1rem 0;
-    padding: 1rem;
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    margin: 16px 0;
 }
 
 .assistant-result section {
-    margin: 1rem 0;
+    min-width: 0;
+    margin: 0;
+    padding: 14px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    overflow-wrap: anywhere;
+}
+
+.assistant-result section h2 {
+    margin: 0 0 9px;
+    font-size: 14px;
+}
+
+.assistant-result section ul {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.assistant-result section p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.assistant-provider-provenance {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.assistant-provider-detail {
+    display: grid;
+    align-content: start;
+    gap: 7px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+}
+
+.assistant-provider-label {
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+}
+
+.assistant-provider-detail strong {
+    overflow-wrap: anywhere;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.assistant-provider-status[data-status="success"] strong {
+    color: var(--success);
+}
+
+.assistant-provider-status[data-status="unavailable"] strong,
+.assistant-provider-status[data-status="invalid"] strong {
+    color: var(--danger);
+}
+
+.assistant-provider-status[data-status="timeout"] strong {
+    color: var(--warning);
 }
 
 .assistant-limitation {
-    color: var(--danger-color, #8b1e1e);
+    color: var(--danger);
+}
+
+.assistant-result section.assistant-limitation {
+    color: var(--text-secondary);
+}
+
+@media (max-width: 650px) {
+    .assistant-provider-provenance {
+        grid-template-columns: 1fr;
+    }
+
+    .assistant-question-input {
+        min-height: 125px;
+    }
 }

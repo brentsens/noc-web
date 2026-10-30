@@ -3,36 +3,113 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NOC Assistant</title>
-  <link rel="stylesheet" href="./css/style.css">
-  <link rel="stylesheet" href="./css/components.css">
+  <title>SES NOC Operations - Assistant</title>
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
 </head>
 <body>
-  <main class="content">
-    <h1>Bounded NOC Assistant</h1>
-    <p>Advisory only. It reviews only the visible selected shift and never takes operational actions.</p>
-    <p id="assistant-shift-guidance" hidden>
-      Select a shift in Dashboard or Tickets, then return to the Assistant from that shift.
-      <a href="./index.html">Open Dashboard</a>
-    </p>
-    <form id="assistant-form">
-      <label for="assistant-shift">Selected shift</label>
-      <input id="assistant-shift" type="date" readonly>
-      <label for="assistant-question">Question</label>
-      <textarea id="assistant-question" required maxlength="1000"></textarea>
-      <div class="assistant-disclosure">
-        NOC Web does not persist or log your prompt, supplied context, response, or derived assistant context.
-        GitHub Copilot CLI or another configured inference provider may apply its own handling or retention; NOC Web cannot claim it is absent.
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-name">SESAMI</div>
+        <div class="brand-subtitle">NOC OPERATIONS</div>
       </div>
-      <label>
-        <input id="provider-disclosure" type="checkbox">
-        I acknowledge the provider-handling disclosure.
-      </label>
-      <button id="assistant-submit" type="submit" disabled>Review selected shift</button>
-    </form>
-    <div id="assistant-state" aria-live="polite"></div>
-    <div id="assistant-result" class="assistant-result" hidden></div>
-  </main>
+      <nav class="nav" aria-label="Main navigation">
+        <a class="nav-item" href="index.html">Dashboard</a>
+        <a class="nav-item" href="shift-notes.html">Shift Notes</a>
+        <a class="nav-item" href="tickets.html">Tickets</a>
+        <a class="nav-item" href="investigations.html">Investigations</a>
+        <a class="nav-item ai" href="ai-actions.html">AI Actions</a>
+        <a class="nav-item ai active" href="assistant.html" aria-current="page">Assistant</a>
+        <div class="nav-divider"></div>
+        <a class="nav-item" href="start-shift.html">Start Shift</a>
+        <a class="nav-item" href="status.html">Status</a>
+        <a class="nav-item" href="health.html">Health</a>
+        <a class="nav-item" href="end-shift.html">End Shift</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="nav-item">Settings</div>
+        <div class="version">noc-web v0.1.0</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="ai-page-label">COPILOT ASSISTANCE</div>
+        <div class="profile">
+          <div class="avatar">BS</div>
+          <div>
+            <div class="profile-name">NOC Engineer</div>
+            <div class="profile-subtitle">Local Workstation</div>
+          </div>
+        </div>
+      </header>
+
+      <section class="content">
+        <div class="page-header">
+          <div>
+            <h1>Bounded NOC Assistant</h1>
+            <p>Advisory-only analysis of the selected shift. The Assistant never takes operational actions.</p>
+          </div>
+          <div class="page-controls assistant-page-controls">
+            <input id="assistant-shift" class="date-control" type="date" aria-label="Selected shift" readonly>
+            <span class="ai-badge">READ ONLY</span>
+          </div>
+        </div>
+
+        <p id="assistant-shift-guidance" class="assistant-shift-guidance" hidden>
+          Select a shift in Dashboard or Tickets, then return to the Assistant from that shift.
+          <a href="./index.html">Open Dashboard</a>
+        </p>
+
+        <article class="panel assistant-interaction">
+          <div class="panel-header">
+            <h2>Ask the Assistant</h2>
+            <span class="ai-badge">BOUNDED CONTEXT</span>
+          </div>
+          <p class="assistant-intro">
+            Ask a question about this shift. Responses separate source-grounded facts from advisory AI analysis.
+          </p>
+          <form id="assistant-form">
+            <label class="form-label" for="assistant-question">Your question</label>
+            <textarea
+              id="assistant-question"
+              class="form-control note-textarea assistant-question-input"
+              placeholder="What would you like the Assistant to review about this shift?"
+              aria-describedby="assistant-question-help"
+              required
+              maxlength="1000"></textarea>
+            <span id="assistant-question-help" class="assistant-question-help">
+              The question is sent with bounded context for the selected shift.
+            </span>
+            <div class="assistant-disclosure">
+              NOC Web does not persist or log your prompt, supplied context, response, or derived assistant context.
+              GitHub Copilot CLI or another configured inference provider may apply its own handling or retention; NOC Web cannot claim it is absent.
+            </div>
+            <label class="assistant-provider-acknowledgement">
+              <input id="provider-disclosure" type="checkbox">
+              <span>I acknowledge the provider-handling disclosure.</span>
+            </label>
+            <button id="assistant-submit" class="button primary assistant-submit" type="submit" disabled>
+              Review selected shift
+            </button>
+          </form>
+        </article>
+
+        <div id="assistant-state" aria-live="polite"></div>
+        <article id="assistant-result" class="panel assistant-result" aria-live="polite" hidden></article>
+
+        <section class="ai-safety-notice">
+          <div class="ai-safety-icon">◆</div>
+          <div>
+            <strong>Human-controlled AI</strong>
+            <p>Assistant output is advisory. It does not modify tickets, shift notes, investigations, handovers, Datadog, or Microsoft 365.</p>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
   <script type="module">
     import { askAssistant, requestErrorMessage } from "./js/api.js";
     import { initializeWorkflow, renderStatePanel } from "./js/workflow-context.js";
@@ -90,19 +167,31 @@
     function renderProviderProvenance(response) {
       const section = document.createElement("section");
       section.className = "assistant-provider-provenance";
-      const engine = document.createElement("p");
-      engine.textContent = "AI Engine: GitHub Copilot CLI";
-      const invoked = document.createElement("p");
-      invoked.textContent = `Provider Invoked: ${response.providerInvoked ? "YES" : "NO"}`;
       const statuses = {
         success: "COMPLETE",
         unavailable: "UNAVAILABLE",
         timeout: "TIMEOUT",
         invalid: "INVALID"
       };
-      const status = document.createElement("p");
-      status.textContent = `Provider Status: ${statuses[response.providerStatus]}`;
-      section.append(engine, invoked, status);
+      const details = [
+        ["AI ENGINE", "GitHub Copilot CLI", "assistant-provider-engine"],
+        ["PROVIDER INVOKED", response.providerInvoked ? "YES" : "NO", "assistant-provider-invoked"],
+        ["PROVIDER STATUS", statuses[response.providerStatus], `assistant-provider-status status-${response.providerStatus}`]
+      ];
+      details.forEach(([label, value, className]) => {
+        const detail = document.createElement("div");
+        detail.className = `assistant-provider-detail ${className}`;
+        if (className.includes("assistant-provider-status")) {
+          detail.dataset.status = response.providerStatus;
+        }
+        const heading = document.createElement("span");
+        heading.className = "assistant-provider-label";
+        heading.textContent = label;
+        const content = document.createElement("strong");
+        content.textContent = value;
+        detail.append(heading, content);
+        section.append(detail);
+      });
       result.append(section);
     }
 

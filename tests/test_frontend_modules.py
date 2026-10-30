@@ -167,14 +167,44 @@ def test_assistant_api_rejects_malformed_and_shift_changing_routes():
 
 
 def test_assistant_pages_render_provider_provenance_and_empty_success_notice():
-    for filename in ("assistant.html", "ai-actions.html"):
-        page = (FRONTEND / filename).read_text(encoding="utf-8")
-        assert "response.providerInvoked" in page
-        assert "response.providerStatus" in page
-        assert "AI Engine: GitHub Copilot CLI" in page
-        assert "Provider Invoked:" in page
-        assert "Provider Status:" in page
-        assert "no AI-generated observations or recommendations" in page
+    assistant = (FRONTEND / "assistant.html").read_text(encoding="utf-8")
+    assert "response.providerInvoked" in assistant
+    assert "response.providerStatus" in assistant
+    assert '"AI ENGINE", "GitHub Copilot CLI"' in assistant
+    assert '"PROVIDER STATUS"' in assistant
+    assert "assistant-provider-status" in assistant
+    assert "no AI-generated observations or recommendations" in assistant
+
+    ai_actions = (FRONTEND / "ai-actions.html").read_text(encoding="utf-8")
+    assert "response.providerInvoked" in ai_actions
+    assert "response.providerStatus" in ai_actions
+    assert "AI Engine: GitHub Copilot CLI" in ai_actions
+    assert "Provider Invoked:" in ai_actions
+    assert "Provider Status:" in ai_actions
+    assert "no AI-generated observations or recommendations" in ai_actions
+
+
+def test_assistant_uses_shared_sesami_shell_and_responsive_components():
+    page = (FRONTEND / "assistant.html").read_text(encoding="utf-8")
+    components = (FRONTEND / "css" / "components.css").read_text(encoding="utf-8")
+    workflow_context = (FRONTEND / "js" / "workflow-context.js").read_text(encoding="utf-8")
+
+    assert 'href="css/theme.css"' in page
+    assert 'href="css/layout.css"' in page
+    assert 'href="css/components.css"' in page
+    assert 'class="app-shell"' in page
+    assert 'class="sidebar"' in page
+    assert 'class="topbar"' in page
+    assert 'class="content"' in page
+    assert 'class="panel assistant-interaction"' in page
+    assert 'class="form-control note-textarea assistant-question-input"' in page
+    assert 'class="button primary assistant-submit"' in page
+    assert ".workflow-bar {" in components
+    assert 'bar.className = "workflow-bar"' in workflow_context
+    assert "initializeWorkflow({" in page
+    assert 'requireExplicitShift: true' in page
+    assert "assistant-provider-provenance" in components
+    assert "@media (max-width: 650px)" in components
 
 
 def test_html_module_scripts_have_valid_es_module_syntax_and_resolved_named_imports():
