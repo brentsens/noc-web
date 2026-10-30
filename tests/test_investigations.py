@@ -99,6 +99,37 @@ def test_rejected_advisory_is_not_propagated(noc_root):
     assert investigations.get_reviewed_findings(SHIFT_DATE) == []
 
 
+def test_corrupt_investigations_return_unavailable_projections_without_changing_files(noc_root):
+    _investigation(noc_root)
+    corrupt_context = noc_root / SHIFT_DATE / "investigations" / "corrupt-context"
+    corrupt_context.mkdir()
+    (corrupt_context / "investigation.md").write_text(
+        "# Investigation: Context validation\n- Status: active\n",
+        encoding="utf-8",
+    )
+    context_file = corrupt_context / "reviewed-context.json"
+    context_file.write_text("{not json", encoding="utf-8")
+    corrupt_investigation = noc_root / SHIFT_DATE / "investigations" / "corrupt-investigation"
+    corrupt_investigation.mkdir()
+    (corrupt_investigation / "investigation.md").write_text(
+        "- Status: active\n", encoding="utf-8"
+    )
+
+    results = {result["name"]: result for result in investigations.get_investigations(SHIFT_DATE)}
+
+    assert results["memory"]["evidence"]["availability"] == "available"
+    assert results["corrupt-context"]["lifecycle"]["reviewState"] == "unavailable"
+    assert results["corrupt-context"]["error"]["code"] == "reviewed-context-unavailable"
+    assert results["corrupt-context"]["reviewedFinding"] is None
+    assert results["corrupt-context"]["advisory"]["available"] is False
+    assert results["corrupt-investigation"]["evidence"]["availability"] == "unavailable"
+    assert results["corrupt-investigation"]["error"]["code"] == "investigation-unavailable"
+    assert context_file.read_text(encoding="utf-8") == "{not json"
+
+    detail = investigations.get_investigation(SHIFT_DATE, "corrupt-investigation")
+    assert detail["error"]["code"] == "investigation-unavailable"
+
+
 def test_only_reviewed_context_reaches_operational_projections(noc_root, monkeypatch):
     _investigation(noc_root)
     investigations.review_investigation(

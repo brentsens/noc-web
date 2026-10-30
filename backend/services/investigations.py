@@ -55,46 +55,70 @@ def _context_file(investigation_dir: Path) -> Path:
     return investigation_dir / "reviewed-context.json"
 
 
-def _read_reviewed_context(investigation_dir: Path) -> dict | None:
+def _read_reviewed_context(investigation_dir: Path) -> tuple[dict | None, str]:
+    context_file = _context_file(investigation_dir)
+    if not context_file.is_file():
+        return None, "unreviewed" if not context_file.exists() else "unavailable"
     try:
-        context = json.loads(_context_file(investigation_dir).read_text(encoding="utf-8"))
+        context = json.loads(context_file.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
-        return None
+        return None, "unavailable"
     if not isinstance(context, dict):
-        return None
+        return None, "unavailable"
+    if context.get("reviewState") == "rejected":
+        return None, "rejected"
     finding, state = context.get("finding"), context.get("state")
     if not isinstance(finding, str) or not isinstance(state, str):
-        return None
+        return None, "unavailable"
     return {
         "finding": finding[:MAX_FINDING_LENGTH],
         "state": state[:MAX_FINDING_LENGTH],
         "reviewedAt": context.get("reviewedAt"),
         "reviewedBy": context.get("reviewedBy"),
+    }, "reviewed"
+
+
+def _unavailable_projection(
+    investigation_file: Path,
+    *,
+    title: str,
+    code: str,
+    message: str,
+) -> dict:
+    return {
+        "name": investigation_file.parent.name,
+        "title": title,
+        "lifecycle": {
+            "state": "unavailable",
+            "reviewState": "unavailable",
+        },
+        "evidence": {
+            "provenance": None,
+            "availability": "unavailable",
+            "access": "read-only",
+            "reference": None,
+        },
+        "advisory": {
+            "available": False,
+            "label": "Investigation data is unavailable and cannot be reviewed.",
+        },
+        "reviewedFinding": None,
+        "error": {"code": code, "message": message},
     }
-
-
-def _review_state(investigation_dir: Path, reviewed: dict | None) -> str:
-    if reviewed:
-        return "reviewed"
-    try:
-        context = json.loads(_context_file(investigation_dir).read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return "unreviewed"
-    return "rejected" if context.get("reviewState") == "rejected" else "unreviewed"
 
 
 def _project(investigation_file: Path) -> dict:
     investigation_dir = investigation_file.parent
     title, metadata = _read_metadata(investigation_file)
     provenance = _provenance(investigation_dir, metadata)
-    reviewed = _read_reviewed_context(investigation_dir)
+    reviewed, review_state = _read_reviewed_context(investigation_dir)
     availability = "available" if provenance else "unavailable"
-    return {
+    projection = {
         "name": investigation_dir.name,
         "title": title,
         "lifecycle": {
             "state": metadata.get("Status", "status not recorded"),
-            "reviewState": _review_state(investigation_dir, reviewed),
+            "reviewState": review_state,
         },
         "evidence": {
             "provenance": provenance,
@@ -103,11 +127,17 @@ def _project(investigation_file: Path) -> dict:
             "reference": _source_reference(investigation_dir, metadata),
         },
         "advisory": {
-            "available": provenance is not None and reviewed is None,
+            "available": provenance is not None and review_state == "unreviewed",
             "label": "AI analysis is advisory and is not operational state until reviewed.",
         },
         "reviewedFinding": reviewed,
     }
+    if review_state == "unavailable":
+        projection["error"] = {
+            "code": "reviewed-context-unavailable",
+            "message": "Operator-reviewed context is unavailable.",
+        }
+    return projection
 
 
 def get_investigations(shift_date: str) -> list[dict]:
@@ -119,7 +149,12 @@ def get_investigations(shift_date: str) -> list[dict]:
         try:
             results.append(_project(investigation_file))
         except (OSError, UnicodeError, ValueError):
-            continue
+            results.append(_unavailable_projection(
+                investigation_file,
+                title="Investigation unavailable",
+                code="investigation-unavailable",
+                message="Investigation metadata is unavailable.",
+            ))
     return results
 
 
@@ -130,7 +165,12 @@ def get_investigation(shift_date: str, investigation_name: str) -> dict | None:
     try:
         return _project(investigation_file)
     except (OSError, UnicodeError, ValueError):
-        return None
+        return _unavailable_projection(
+            investigation_file,
+            title="Investigation unavailable",
+            code="investigation-unavailable",
+            message="Investigation metadata is unavailable.",
+        )
 
 
 def review_investigation(
