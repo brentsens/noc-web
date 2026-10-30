@@ -513,6 +513,7 @@
             previewJiraTicket,
             createJiraTicket
         } from "./js/api.js?v=local-noc-tracking";
+        import { initializeWorkflow, renderStatePanel, renderStatePanels } from "./js/workflow-context.js";
 
 
         let tickets = [];
@@ -521,6 +522,9 @@
 
         const ticketTable =
             document.querySelector("#ticket-table");
+        const sourceStates = document.createElement("div");
+        sourceStates.id = "ticket-source-states";
+        document.querySelector(".page-header").after(sourceStates);
 
         const ticketCount =
             document.querySelector("#ticket-count");
@@ -1379,6 +1383,17 @@
                 );
 
                 renderTickets();
+                renderStatePanels(sourceStates, [{
+                    source: "Jira cache",
+                    kind: response.cacheAvailable ? "current" : "unavailable",
+                    message: response.cacheAvailable
+                        ? "Ticket cache was inspected without a refresh."
+                        : "Unavailable; local tracking controls remain separate."
+                }, {
+                    source: "Local tracking",
+                    kind: "read-only",
+                    message: "Local NOC context is distinct from Jira-managed fields."
+                }]);
 
             } catch (error) {
 
@@ -1397,6 +1412,11 @@
 
                 ticketCount.textContent =
                     "Unavailable";
+                renderStatePanels(sourceStates, [{
+                    source: "Tickets request",
+                    kind: "error",
+                    message: error.message
+                }]);
 
                 throw error;
             }
@@ -1406,6 +1426,11 @@
         refreshJiraButton.addEventListener(
             "click",
             async () => {
+                if (!window.confirm(
+                    "Refresh the Jira cache now? This is a deliberate Jira read."
+                )) {
+                    return;
+                }
 
                 refreshJiraButton.disabled =
                     true;
@@ -1498,7 +1523,16 @@
                 )
                 }`;
         }
-        loadTickets();
+        const workflowContext = initializeWorkflow({
+            step: "tickets",
+            onInvalid: () => renderStatePanel(
+                document.querySelector(".content"),
+                { source: "Tickets", kind: "error", message: "Choose a valid shift before managing tickets." }
+            )
+        });
+        if (workflowContext.valid) {
+            loadTickets();
+        }
 
     </script>
 

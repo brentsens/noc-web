@@ -416,6 +416,7 @@
             getStartShiftPreflight,
             executeStartShift
         } from "./js/api.js";
+        import { initializeWorkflow, renderStatePanel } from "./js/workflow-context.js";
 
 
         const shiftDate =
@@ -1018,8 +1019,14 @@
         }
 
 
-        shiftDate.value =
-            getDefaultShiftDate();
+        const workflowContext = initializeWorkflow({
+            step: "start-shift",
+            dateInput: shiftDate,
+            onInvalid: () => renderStatePanel(
+                document.querySelector(".content"),
+                { source: "Start Shift", kind: "error", message: "Preflight was not loaded." }
+            )
+        });
 
 
         shiftDate.addEventListener(
@@ -1033,7 +1040,9 @@
         );
 
 
-        loadPreflight();
+        if (workflowContext.valid) {
+            loadPreflight();
+        }
 
     </script>
 

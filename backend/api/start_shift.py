@@ -1,6 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, StrictBool
 
 from backend.services.start_shift import (
     get_start_shift_preflight,
@@ -12,6 +13,10 @@ router = APIRouter(
     prefix="/api/start-shift",
     tags=["start-shift"],
 )
+
+
+class StartShiftRequest(BaseModel):
+    confirmed: StrictBool
 
 
 @router.get("/{shift_date}")
@@ -39,7 +44,13 @@ def start_shift_preflight(
 @router.post("/{shift_date}")
 def execute_start_shift(
     shift_date: str,
+    request: StartShiftRequest,
 ):
+    if request.confirmed is not True:
+        raise HTTPException(
+            status_code=422,
+            detail="This operation requires confirmed: true.",
+        )
     try:
         date.fromisoformat(
             shift_date

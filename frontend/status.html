@@ -347,12 +347,16 @@
         import {
             getStatus
         } from "./js/api.js";
+        import { initializeWorkflow, renderStatePanel, renderStatePanels } from "./js/workflow-context.js";
 
 
         const statusDate =
             document.querySelector(
                 "#status-date"
             );
+        const sourceStates = document.createElement("div");
+        sourceStates.id = "status-source-states";
+        document.querySelector(".page-header").after(sourceStates);
 
         const ticketCount =
             document.querySelector(
@@ -798,6 +802,22 @@
                     await getStatus(
                         shiftDate
                     );
+                renderStatePanels(sourceStates, [
+                    {
+                        source: "Jira cache",
+                        kind: status.jiraCache?.freshness || "unavailable",
+                        message: status.jiraCache?.available
+                            ? "Cached status is shown; no refresh was performed."
+                            : "Unavailable; local work remains visible."
+                    },
+                    {
+                        source: "Local tracking",
+                        kind: status.localWork?.available ? "read-only" : "unavailable",
+                        message: status.localWork?.available
+                            ? "Local NOC context is read-only."
+                            : (status.localWork?.error || "Unavailable.")
+                    }
+                ]);
 
                 ticketCount.textContent =
                     status.openTickets.count;
@@ -875,6 +895,11 @@
                     "Status load failed:",
                     error
                 );
+                renderStatePanels(sourceStates, [{
+                    source: "Status request",
+                    kind: "error",
+                    message: error.message
+                }]);
 
                 ticketCount.textContent = "Error";
                 investigationCount.textContent = "Error";
@@ -896,15 +921,22 @@
         }
 
 
-        statusDate.value =
-            getDefaultShiftDate();
-
         statusDate.addEventListener(
             "change",
             loadStatus
         );
 
-        loadStatus();
+        const workflowContext = initializeWorkflow({
+            step: "status",
+            dateInput: statusDate,
+            onInvalid: () => renderStatePanel(
+                document.querySelector(".content"),
+                { source: "Status", kind: "error", message: "Status requests were not made." }
+            )
+        });
+        if (workflowContext.valid) {
+            loadStatus();
+        }
 
     </script>
 

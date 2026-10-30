@@ -364,6 +364,7 @@
             getInvestigation,
             getInvestigations
         } from "./js/api.js";
+        import { initializeWorkflow, renderStatePanel, renderStatePanels } from "./js/workflow-context.js";
 
         let investigations = [];
 
@@ -372,6 +373,9 @@
             document.querySelector(
                 "#investigation-date"
             );
+        const sourceStates = document.createElement("div");
+        sourceStates.id = "investigation-source-states";
+        document.querySelector(".page-header").after(sourceStates);
 
         const emptyState =
             document.querySelector(
@@ -715,6 +719,17 @@
 
                 investigations =
                     response.investigations;
+                renderStatePanels(sourceStates, [{
+                    source: "Investigations",
+                    kind: response.count > 0 ? "current" : "unavailable",
+                    message: response.count > 0
+                        ? "Available investigations were loaded without generating new work."
+                        : "No investigations are available for this shift."
+                }, {
+                    source: "View mode",
+                    kind: "read-only",
+                    message: "Inspection does not create or regenerate investigations."
+                }]);
 
 
                 emptyState.classList.remove(
@@ -748,6 +763,11 @@
             Investigation data unavailable.
         </div>
     `;
+                renderStatePanels(sourceStates, [{
+                    source: "Investigations request",
+                    kind: "error",
+                    message: error.message
+                }]);
 
             }
 
@@ -857,7 +877,17 @@
             }
         );
 
-        loadInvestigations();
+        const workflowContext = initializeWorkflow({
+            step: "investigations",
+            dateInput: investigationDate,
+            onInvalid: () => renderStatePanel(
+                document.querySelector(".content"),
+                { source: "Investigations", kind: "error", message: "Investigation requests were not made." }
+            )
+        });
+        if (workflowContext.valid) {
+            loadInvestigations();
+        }
 
     </script>
 

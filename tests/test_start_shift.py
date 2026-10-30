@@ -1,4 +1,7 @@
 from backend.services import start_shift
+from backend.api import start_shift as start_shift_api
+from backend.app import app
+from fastapi.testclient import TestClient
 
 
 SHIFT_DATE = "2099-12-31"
@@ -209,3 +212,37 @@ def test_jira_failure_does_not_block_start(
     assert (
         shift_dir / "shift-notes.md"
     ).is_file()
+
+
+def test_start_shift_api_requires_explicit_confirmation_before_service(
+    noc_root,
+    monkeypatch,
+):
+    client = TestClient(app)
+    calls = []
+
+    monkeypatch.setattr(
+        start_shift_api,
+        "get_start_shift_preflight",
+        lambda shift_date: {"ready": True},
+    )
+    monkeypatch.setattr(
+        start_shift_api,
+        "start_shift",
+        lambda shift_date: calls.append(shift_date) or {"started": True},
+    )
+
+    assert client.post(f"/api/start-shift/{SHIFT_DATE}").status_code == 422
+    assert client.post(
+        f"/api/start-shift/{SHIFT_DATE}",
+        json={"confirmed": False},
+    ).status_code == 422
+    assert calls == []
+
+    response = client.post(
+        f"/api/start-shift/{SHIFT_DATE}",
+        json={"confirmed": True},
+    )
+
+    assert response.status_code == 200
+    assert calls == [SHIFT_DATE]

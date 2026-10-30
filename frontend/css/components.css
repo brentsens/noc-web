@@ -1953,3 +1953,54 @@ td {
     color: var(--text-muted);
     font-size: 11px;
 }
+/* Shared, non-mutating workflow context and source-state presentation. */
+.workflow-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border, #334155);
+    border-radius: 0.5rem;
+}
+
+.workflow-context,
+.workflow-read-only {
+    font-size: 0.8rem;
+    color: var(--text-muted, #94a3b8);
+}
+
+.workflow-step {
+    padding: 0.35rem 0.55rem;
+    border-radius: 0.3rem;
+    color: inherit;
+    text-decoration: none;
+}
+
+.workflow-step-active {
+    background: var(--primary, #0f766e);
+    color: white;
+}
+
+.workflow-next {
+    margin-left: auto;
+    color: var(--primary, #0f766e);
+    font-weight: 600;
+}
+
+.workflow-nav-redundant {
+    display: none;
+}
+
+.workflow-state {
+    width: 100%;
+    padding: 0.7rem;
+    border-left: 3px solid var(--warning, #eab308);
+}
+
+.workflow-state-current { border-color: var(--success, #14b8a6); }
+.workflow-state-stale { border-color: var(--warning, #eab308); }
+.workflow-state-unavailable,
+.workflow-state-error { border-color: var(--danger, #ef4444); }
+.workflow-state-read-only { border-color: var(--primary, #0f766e); }

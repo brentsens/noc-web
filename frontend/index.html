@@ -330,6 +330,7 @@
             getJiraTicketQueue,
             getShiftNotes
         } from "./js/api.js";
+        import { initializeWorkflow, renderStatePanel, renderStatePanels } from "./js/workflow-context.js";
 
         const dashboardDate =
             document.querySelector(
@@ -372,6 +373,9 @@
 
         const localWorkList =
             document.querySelector("#local-work-list");
+        const sourceStates = document.createElement("div");
+        sourceStates.id = "dashboard-source-states";
+        document.querySelector(".page-header").after(sourceStates);
 
         function renderLocalWork(localWork) {
             localWorkList.innerHTML = "";
@@ -688,6 +692,22 @@
                     dashboard.needsReview;
 
                 renderLocalWork(dashboard.localWork);
+                renderStatePanels(sourceStates, [
+                    {
+                        source: "Jira cache",
+                        kind: dashboard.jiraCache?.freshness || "unavailable",
+                        message: dashboard.jiraCache?.available
+                            ? "Cached ticket data is available; no refresh was performed."
+                            : "Unavailable; local work remains available."
+                    },
+                    {
+                        source: "Local tracking",
+                        kind: dashboard.localWork?.available ? "read-only" : "unavailable",
+                        message: dashboard.localWork?.available
+                            ? "Local NOC context was inspected without changes."
+                            : (dashboard.localWork?.error || "Unavailable.")
+                    }
+                ]);
 
 
                 if (
@@ -770,6 +790,11 @@
 
                 localWorkList.textContent =
                     "Local tracking data unavailable.";
+                renderStatePanels(sourceStates, [{
+                    source: "Dashboard request",
+                    kind: "error",
+                    message: error.message
+                }]);
 
             }
 
@@ -785,9 +810,19 @@
             }
         );
 
-        loadDashboard();
-        loadTickets();
-        loadActivity();
+        const workflowContext = initializeWorkflow({
+            step: "dashboard",
+            dateInput: dashboardDate,
+            onInvalid: () => renderStatePanel(
+                document.querySelector(".content"),
+                { source: "Dashboard", kind: "error", message: "Date-scoped dashboard requests were not made." }
+            )
+        });
+        if (workflowContext.valid) {
+            loadDashboard();
+            loadTickets();
+            loadActivity();
+        }
 
     </script>
 

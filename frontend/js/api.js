@@ -225,10 +225,15 @@ export function executeStartShift(
   return apiRequest(
     `/api/start-shift/${shiftDate}`,
     {
-      method: "POST"
+      method: "POST",
+      body: JSON.stringify({ confirmed: true })
     }
   );
 
+}
+
+export function requestErrorMessage(error) {
+  return error instanceof Error ? error.message : "Request failed.";
 }
 
 export function getEndShiftPreflight(

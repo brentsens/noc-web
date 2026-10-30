@@ -49,3 +49,21 @@ def test_dashboard_reports_unavailable_local_tracking_without_jira_fallback(
 
     assert result["localWork"]["available"] is False
     assert result["localWork"]["items"] == []
+
+
+def test_dashboard_adds_read_only_jira_cache_health(
+    noc_root,
+    monkeypatch,
+):
+    monkeypatch.setattr(dashboard, "get_jira_ticket_queue", lambda: {
+        "tickets": [],
+    })
+    monkeypatch.setattr(dashboard, "get_jira_cache_health", lambda: {
+        "available": True,
+        "freshness": "stale",
+        "refreshedAt": "2026-10-29T00:00:00+00:00",
+    })
+
+    result = dashboard.get_dashboard(SHIFT_DATE)
+
+    assert result["jiraCache"]["freshness"] == "stale"

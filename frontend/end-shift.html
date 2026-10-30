@@ -566,6 +566,7 @@
             previewHandoverDelivery,
             sendHandoverDelivery
         } from "./js/api.js";
+        import { initializeWorkflow, renderStatePanel } from "./js/workflow-context.js";
 
         const readinessJiraIcon =
             document.querySelector(
@@ -1111,8 +1112,18 @@
             "change",
             () => {
 
-                loadHandover();
-                loadReadiness();
+                const workflowContext = initializeWorkflow({
+                    step: "end-shift",
+                    dateInput: endShiftDate,
+                    onInvalid: () => renderStatePanel(
+                        document.querySelector(".content"),
+                        { source: "End Shift", kind: "error", message: "Preflight requests were not made." }
+                    )
+                });
+                if (workflowContext.valid) {
+                    loadHandover();
+                    loadReadiness();
+                }
 
             }
         );
