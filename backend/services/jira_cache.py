@@ -45,13 +45,17 @@ def write_jira_cache(
 
 
 def read_jira_cache() -> dict | None:
+    return read_jira_cache_from(CACHE_FILE)
 
-    if not CACHE_FILE.is_file():
+
+def read_jira_cache_from(cache_file) -> dict | None:
+
+    if not cache_file.is_file():
         return None
 
     try:
         cache = json.loads(
-            CACHE_FILE.read_text(
+            cache_file.read_text(
                 encoding="utf-8"
             )
         )

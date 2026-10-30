@@ -238,6 +238,10 @@ export function getHealth(
 
 }
 
+export function getReadiness(shiftDate) {
+  return apiRequest(`/api/readiness/${shiftDate}`);
+}
+
 export function getStartShiftPreflight(
   shiftDate
 ) {

@@ -59,6 +59,9 @@ from backend.api.jira_discovery import (
     router as jira_discovery_router,
 )
 
+from backend.api.readiness import (
+    router as readiness_router,
+)
 
 app = FastAPI(
     title="SES NOC Operations API",
@@ -128,6 +131,10 @@ app.include_router(
 
 app.include_router(
     jira_discovery_router
+)
+
+app.include_router(
+    readiness_router
 )
 
 
