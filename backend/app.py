@@ -62,11 +62,24 @@ from backend.api.jira_discovery import (
 from backend.api.readiness import (
     router as readiness_router,
 )
+from backend.api.assistant import (
+    router as assistant_router,
+)
+from backend.services.copilot_cli import answer_with_copilot_cli
+from backend.services.copilot_mcp import CopilotProvider
 
 app = FastAPI(
     title="SES NOC Operations API",
     version="0.1.0",
 )
+app.state.assistant_provider = answer_with_copilot_cli
+
+
+def configure_assistant_provider(provider: CopilotProvider | None) -> None:
+    """Inject a provider, or restore the default local Copilot CLI adapter."""
+    app.state.assistant_provider = (
+        answer_with_copilot_cli if provider is None else provider
+    )
 
 
 @app.get("/api/health")
@@ -137,6 +150,10 @@ app.include_router(
     readiness_router
 )
 
+app.include_router(
+    assistant_router
+)
+
 
 app.mount(
     "/",
@@ -146,4 +163,3 @@ app.mount(
     ),
     name="frontend",
 )
-

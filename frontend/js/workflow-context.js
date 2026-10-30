@@ -4,6 +4,7 @@ const STEPS = [
     ["tickets", "Tickets", "tickets.html"],
     ["investigations", "Investigations", "investigations.html"],
     ["status", "Status", "status.html"],
+    ["assistant", "Assistant", "assistant.html"],
     ["end-shift", "End Shift", "end-shift.html"]
 ];
 
@@ -23,11 +24,14 @@ function localToday() {
     return new Date(now.getTime() - offset).toISOString().slice(0, 10);
 }
 
-export function getWorkflowContext() {
+export function getWorkflowContext({ requireExplicitShift = false } = {}) {
     const url = new URL(window.location.href);
     const supplied = url.searchParams.get("shift");
 
     if (supplied === null) {
+        if (requireExplicitShift) {
+            return { shift: null, valid: false, error: "Select a shift from a NOC workflow before using the Assistant." };
+        }
         const shift = localToday();
         url.searchParams.set("shift", shift);
         window.history.replaceState({}, "", url);
@@ -71,8 +75,8 @@ export function renderStatePanels(container, states) {
     });
 }
 
-export function initializeWorkflow({ step, dateInput, onInvalid }) {
-    const context = getWorkflowContext();
+export function initializeWorkflow({ step, dateInput, onInvalid, requireExplicitShift = false }) {
+    const context = getWorkflowContext({ requireExplicitShift });
     const content = document.querySelector(".content");
     const bar = document.createElement("nav");
     bar.className = "workflow-bar";

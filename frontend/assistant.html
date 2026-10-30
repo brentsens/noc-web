@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NOC Assistant</title>
+  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/components.css">
+</head>
+<body>
+  <main class="content">
+    <h1>Bounded NOC Assistant</h1>
+    <p>Advisory only. It reviews only the visible selected shift and never takes operational actions.</p>
+    <p id="assistant-shift-guidance" hidden>
+      Select a shift in Dashboard or Tickets, then return to the Assistant from that shift.
+      <a href="./index.html">Open Dashboard</a>
+    </p>
+    <form id="assistant-form">
+      <label for="assistant-shift">Selected shift</label>
+      <input id="assistant-shift" type="date" readonly>
+      <label for="assistant-question">Question</label>
+      <textarea id="assistant-question" required maxlength="1000"></textarea>
+      <div class="assistant-disclosure">
+        NOC Web does not persist or log your prompt, supplied context, response, or derived assistant context.
+        GitHub Copilot CLI or another configured inference provider may apply its own handling or retention; NOC Web cannot claim it is absent.
+      </div>
+      <label>
+        <input id="provider-disclosure" type="checkbox">
+        I acknowledge the provider-handling disclosure.
+      </label>
+      <button id="assistant-submit" type="submit" disabled>Review selected shift</button>
+    </form>
+    <div id="assistant-state" aria-live="polite"></div>
+    <div id="assistant-result" class="assistant-result" hidden></div>
+  </main>
+  <script type="module">
+    import { askAssistant, requestErrorMessage } from "./js/api.js";
+    import { initializeWorkflow, renderStatePanel } from "./js/workflow-context.js";
+
+    const form = document.querySelector("#assistant-form");
+    const question = document.querySelector("#assistant-question");
+    const acknowledgement = document.querySelector("#provider-disclosure");
+    const submit = document.querySelector("#assistant-submit");
+    const result = document.querySelector("#assistant-result");
+    const state = document.querySelector("#assistant-state");
+    const shiftInput = document.querySelector("#assistant-shift");
+    const shiftGuidance = document.querySelector("#assistant-shift-guidance");
+    const context = initializeWorkflow({
+      step: "assistant",
+      dateInput: shiftInput,
+      requireExplicitShift: true,
+      onInvalid: () => { submit.disabled = true; }
+    });
+    shiftGuidance.hidden = context.valid;
+
+    function clearTransientDom() {
+      question.value = "";
+      acknowledgement.checked = false;
+      result.replaceChildren();
+      result.hidden = true;
+    }
+
+    function renderItems(title, items, formatter = item => item.text) {
+      const section = document.createElement("section");
+      const heading = document.createElement("h2");
+      heading.textContent = title;
+      section.append(heading);
+      if (!items.length) {
+        const empty = document.createElement("p");
+        empty.textContent = "None.";
+        section.append(empty);
+      } else {
+        const list = document.createElement("ul");
+        items.forEach(item => {
+          const entry = document.createElement("li");
+          entry.textContent = formatter(item);
+          if (item.route) {
+            const link = document.createElement("a");
+            link.href = item.route.href;
+            link.textContent = ` ${item.route.label}`;
+            entry.append(link);
+          }
+          list.append(entry);
+        });
+        section.append(list);
+      }
+      result.append(section);
+    }
+
+    function renderProviderProvenance(response) {
+      const section = document.createElement("section");
+      section.className = "assistant-provider-provenance";
+      const engine = document.createElement("p");
+      engine.textContent = "AI Engine: GitHub Copilot CLI";
+      const invoked = document.createElement("p");
+      invoked.textContent = `Provider Invoked: ${response.providerInvoked ? "YES" : "NO"}`;
+      const statuses = {
+        success: "COMPLETE",
+        unavailable: "UNAVAILABLE",
+        timeout: "TIMEOUT",
+        invalid: "INVALID"
+      };
+      const status = document.createElement("p");
+      status.textContent = `Provider Status: ${statuses[response.providerStatus]}`;
+      section.append(engine, invoked, status);
+      result.append(section);
+    }
+
+    function renderResponse(response) {
+      result.replaceChildren();
+      renderProviderProvenance(response);
+      if (
+        response.providerStatus === "success" &&
+        response.aiObservations.length === 0 &&
+        response.recommendations.length === 0
+      ) {
+        const emptyResult = document.createElement("p");
+        emptyResult.className = "assistant-empty-ai-result";
+        emptyResult.textContent =
+          "Copilot CLI completed successfully but returned no AI-generated observations or recommendations.";
+        result.append(emptyResult);
+      }
+      renderItems("Source-grounded facts", response.facts);
+      renderItems("Operator-reviewed investigation findings", response.reviewedFindings,
+        item => `${item.text} (state: ${item.state})`);
+      renderItems("AI-generated observations (advisory)", response.aiObservations);
+      renderItems("Recommendations", response.recommendations);
+      renderItems("Evidence", response.evidence,
+        item => `${item.kind} (${item.id}; ${item.provenance}): ${item.availability}${item.freshness ? `; freshness: ${item.freshness}` : ""}${item.reference ? `; reference: ${item.reference}` : ""}`);
+      const limitations = document.createElement("section");
+      limitations.className = "assistant-limitation";
+      const heading = document.createElement("h2");
+      heading.textContent = "Limitations";
+      limitations.append(heading);
+      const list = document.createElement("ul");
+      response.limitations.forEach(message => {
+        const item = document.createElement("li");
+        item.textContent = message;
+        list.append(item);
+      });
+      limitations.append(list);
+      result.append(limitations);
+      result.hidden = false;
+      renderStatePanel(state, {
+        source: "Assistant",
+        kind: response.status === "complete" ? "success" : response.status === "limited" ? "warning" : "error",
+        message: response.status === "complete"
+          ? "Advisory answer ready."
+          : response.status === "limited"
+            ? "Only limited selected-shift context is available."
+            : "Assistant analysis is unavailable."
+      });
+    }
+
+    acknowledgement.addEventListener("change", () => {
+      submit.disabled = !context.valid || !acknowledgement.checked;
+    });
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!context.valid || !acknowledgement.checked) return;
+      submit.disabled = true;
+      result.replaceChildren();
+      result.hidden = true;
+      state.replaceChildren();
+      try {
+        renderResponse(await askAssistant(context.shift, question.value, true));
+      } catch (error) {
+        renderStatePanel(state, { source: "Assistant", kind: "error", message: requestErrorMessage(error) });
+      } finally {
+        submit.disabled = !context.valid || !acknowledgement.checked;
+      }
+    });
+    window.addEventListener("pagehide", clearTransientDom, { once: true });
+  </script>
+</body>
+</html>

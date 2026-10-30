@@ -2,7 +2,7 @@ export async function apiRequest(
     path,
     options = {}
   ) {
-  
+
     const response =
       await fetch(
         path,
@@ -14,46 +14,46 @@ export async function apiRequest(
           ...options
         }
       );
-  
-  
+
+
     if (!response.ok) {
-  
+
       let message =
         `Request failed: ${response.status}`;
-  
-  
+
+
       try {
-  
+
         const error =
           await response.json();
-  
-  
+
+
         if (error.detail) {
           message = error.detail;
         }
-  
+
       } catch {
         // Keep default error message.
       }
-  
-  
+
+
       throw new Error(message);
-  
+
     }
-  
-  
+
+
     return response.json();
   }
-  
-  
+
+
   export function getDashboard(
     shiftDate
   ) {
-  
+
     return apiRequest(
       `/api/dashboard/${shiftDate}`
     );
-  
+
   }
 
   export function getTickets() {
@@ -61,7 +61,7 @@ export async function apiRequest(
     return apiRequest(
       "/api/tickets"
     );
-  
+
   }
 
   export function createLocalTracking(ticket, confirmed = false) {
@@ -240,6 +240,210 @@ export function getHealth(
 
 export function getReadiness(shiftDate) {
   return apiRequest(`/api/readiness/${shiftDate}`);
+}
+
+const ASSISTANT_STATUSES = new Set(["complete", "limited", "unavailable"]);
+const ASSISTANT_PROVIDERS = new Set(["github-copilot-cli"]);
+const ASSISTANT_PROVIDER_STATUSES = new Set([
+  "success",
+  "unavailable",
+  "timeout",
+  "invalid"
+]);
+const ASSISTANT_AVAILABILITY = new Set([
+  "available",
+  "unavailable",
+  "stale",
+  "malformed",
+  "conflicting"
+]);
+const ASSISTANT_ROUTES = new Map([
+  ["tickets.html", { label: "Open Tickets", requiresConfirmation: true }],
+  ["investigations.html", { label: "Open Investigations", requiresConfirmation: true }],
+  ["status.html", { label: "Open Status", requiresConfirmation: false }],
+  ["index.html", { label: "Open Dashboard", requiresConfirmation: false }],
+  ["end-shift.html", { label: "Open End Shift", requiresConfirmation: true }]
+]);
+const ASSISTANT_ACTIONS = new Map([
+  ["analysis", { reportSlug: "shift-analysis", title: "Analyze Entire Shift" }],
+  ["summary", { reportSlug: "shift-summary", title: "Summarize Current Shift" }],
+  ["followups", { reportSlug: "followups", title: "Identify Follow-ups" }],
+  ["handover", { reportSlug: "handover-review", title: "Review Handover Draft" }]
+]);
+const REPORT_SAVE_WARNING =
+  "Analysis completed, but its advisory report could not be saved.";
+
+function isAssistantItem(item, evidence, {
+  reviewed = false,
+  route = false,
+  shiftDate,
+  allowUnlinked = false
+} = {}) {
+  const allowedKeys = new Set([
+    "text",
+    "evidenceIds",
+    ...(reviewed ? ["state"] : []),
+    ...(route ? ["route"] : [])
+  ]);
+  if (!item || typeof item !== "object"
+      || Object.keys(item).some(key => !allowedKeys.has(key))
+      || typeof item.text !== "string"
+      || !Array.isArray(item.evidenceIds)
+      || (item.evidenceIds.length === 0 && !(route && allowUnlinked && item.route))
+      || item.evidenceIds.some(id => !evidence.has(id))) {
+    return false;
+  }
+  if (reviewed && typeof item.state !== "string") {
+    return false;
+  }
+  if (route && item.route !== undefined) {
+    if (!item.route || typeof item.route !== "object"
+        || typeof item.route.href !== "string"
+        || typeof item.route.requiresConfirmation !== "boolean") {
+      return false;
+    }
+    let href;
+    try {
+      href = new URL(item.route.href, "https://noc-web.invalid");
+    } catch {
+      return false;
+    }
+    const file = href.pathname.slice(1);
+    const expectedRoute = ASSISTANT_ROUTES.get(file);
+    if (href.origin !== "https://noc-web.invalid"
+        || !expectedRoute
+        || [...href.searchParams.entries()].length !== 1
+        || href.searchParams.get("shift") !== shiftDate) {
+      return false;
+    }
+    if (item.route.label !== expectedRoute.label
+        || item.route.requiresConfirmation !== expectedRoute.requiresConfirmation) {
+      return false;
+    }
+    if (file === "investigations.html"
+        && !item.evidenceIds.some(id => {
+          const source = evidence.get(id);
+          return source?.kind === "investigation"
+            && ["noc-inv", "copilot-mcp"].includes(source.provenance)
+            && source.availability === "available";
+        })) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validateAssistantResponse(response, shiftDate) {
+  if (!response || typeof response !== "object"
+      || response.shiftDate !== shiftDate
+      || !ASSISTANT_STATUSES.has(response.status)
+      || !ASSISTANT_PROVIDERS.has(response.provider)
+      || typeof response.providerInvoked !== "boolean"
+      || !ASSISTANT_PROVIDER_STATUSES.has(response.providerStatus)
+      || (response.providerStatus === "success" && !response.providerInvoked)
+      || (["timeout", "invalid"].includes(response.providerStatus) && !response.providerInvoked)
+      || !Array.isArray(response.evidence)
+      || !Array.isArray(response.limitations)
+      || response.limitations.some(item => typeof item !== "string")) {
+    return false;
+  }
+  const evidence = new Map();
+  for (const item of response.evidence) {
+    if (!item || typeof item.id !== "string"
+        || typeof item.kind !== "string"
+        || typeof item.provenance !== "string"
+        || !ASSISTANT_AVAILABILITY.has(item.availability)
+        || !(item.reference === null || typeof item.reference === "string")
+        || (item.freshness !== undefined
+          && !["current", "stale", "unavailable", "malformed"].includes(item.freshness))
+        || evidence.has(item.id)) {
+      return false;
+    }
+    evidence.set(item.id, item);
+  }
+  const categories = [
+    ["facts", { shiftDate }],
+    ["reviewedFindings", { reviewed: true, shiftDate }],
+    ["aiObservations", { shiftDate }],
+    ["recommendations", { route: true, shiftDate }]
+  ];
+  return categories.every(([name, options]) =>
+    Array.isArray(response[name])
+    && response[name].every(item =>
+      isAssistantItem(item, evidence, {
+        ...options,
+        allowUnlinked: name === "recommendations"
+          && response.status === "limited"
+          && response.evidence.length === 0
+      })
+      && item.evidenceIds.every(id => evidence.get(id).availability === "available")
+    )
+  );
+}
+
+export async function askAssistant(shiftDate, question, providerDisclosureAcknowledged = false) {
+  const response = await apiRequest(`/api/shifts/${encodeURIComponent(shiftDate)}/assistant/questions`, {
+    method: "POST",
+    body: JSON.stringify({
+      shiftDate,
+      question,
+      providerDisclosureAcknowledged
+    })
+  });
+  if (!validateAssistantResponse(response, shiftDate)) {
+    throw new Error("Assistant returned an invalid response.");
+  }
+  return response;
+}
+
+export async function runAssistantAction(
+  shiftDate,
+  actionType,
+  providerDisclosureAcknowledged = false
+) {
+  const action = ASSISTANT_ACTIONS.get(actionType);
+  if (!action) {
+    throw new Error("Assistant action is not available.");
+  }
+  const result = await apiRequest(
+    `/api/shifts/${encodeURIComponent(shiftDate)}/assistant/actions/${actionType}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ providerDisclosureAcknowledged })
+    }
+  );
+  const reportPattern = new RegExp(
+    `^ai-${action.reportSlug}-\\d{8}T\\d{12}Z-[0-9a-f]{8}\\.md$`
+  );
+  if (!result || typeof result !== "object"
+      || Object.keys(result).length !== 3
+      || !Object.hasOwn(result, "assistant")
+      || !Object.hasOwn(result, "report")
+      || !Object.hasOwn(result, "reportSaveWarning")
+      || !validateAssistantResponse(result.assistant, shiftDate)
+      || !(result.report === null
+        || (result.report
+          && Object.keys(result.report).length === 4
+          && Object.hasOwn(result.report, "name")
+          && Object.hasOwn(result.report, "title")
+          && Object.hasOwn(result.report, "file")
+          && Object.hasOwn(result.report, "available")
+          && result.report.available === true
+          && typeof result.report.name === "string"
+          && result.report.name === result.report.file
+          && result.report.title === action.title
+          && reportPattern.test(result.report.file)))
+      || !(result.reportSaveWarning === null
+        || result.reportSaveWarning === REPORT_SAVE_WARNING)
+      || (result.assistant.providerStatus === "success"
+        && result.report === null
+        && !result.reportSaveWarning)
+      || (result.report !== null && result.reportSaveWarning !== null)
+      || (result.assistant.providerStatus !== "success"
+        && (result.report !== null || result.reportSaveWarning !== null))) {
+    throw new Error("Assistant returned an invalid action response.");
+  }
+  return result;
 }
 
 export function getStartShiftPreflight(

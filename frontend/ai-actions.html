@@ -234,6 +234,17 @@
                             </span>
                         </div>
 
+                        <div class="assistant-disclosure">
+                            NOC Web does not persist or log your prompt, supplied context, raw provider output, or unrestricted response. For these four predefined AI Actions, NOC Web saves only the validated, normalized advisory result as a human-reviewable report in the selected shift's reports directory.
+                            GitHub Copilot CLI or another configured inference provider may apply its own handling or retention; NOC Web cannot claim it is absent.
+                        </div>
+
+                        <label class="assistant-provider-acknowledgement">
+                            <input id="ai-action-provider-disclosure" type="checkbox">
+                            I acknowledge the provider-handling disclosure.
+                        </label>
+
+                        <div id="ai-action-assistant-state" aria-live="polite"></div>
 
                         <div class="ai-action-list">
 
@@ -370,6 +381,11 @@
 
                 </section>
 
+                <article id="ai-action-result" class="panel assistant-result" hidden>
+                    <h2 id="ai-action-result-title">Assistant analysis</h2>
+                    <p id="ai-action-report-save-warning" class="assistant-limitation" role="alert" hidden></p>
+                    <div id="ai-action-result-content"></div>
+                </article>
 
                 <!-- SAFETY NOTICE -->
 
@@ -453,8 +469,15 @@
             getDashboard,
             getShiftNotes,
             getTickets,
-            getInvestigations
+            runAssistantAction as requestAssistantAction,
+            getInvestigations,
+            requestErrorMessage
         } from "./js/api.js";
+
+        import {
+            initializeWorkflow,
+            renderStatePanel
+        } from "./js/workflow-context.js";
 
         const reportModal =
             document.querySelector(
@@ -506,6 +529,45 @@
                 "#ai-report-count"
             );
 
+        const actionState =
+            document.querySelector(
+                "#ai-action-assistant-state"
+            );
+
+        const actionAcknowledgement =
+            document.querySelector(
+                "#ai-action-provider-disclosure"
+            );
+
+        const actionResult =
+            document.querySelector(
+                "#ai-action-result"
+            );
+
+        const actionResultTitle =
+            document.querySelector(
+                "#ai-action-result-title"
+            );
+
+        const actionResultContent =
+            document.querySelector(
+                "#ai-action-result-content"
+            );
+
+        const actionReportSaveWarning =
+            document.querySelector(
+                "#ai-action-report-save-warning"
+            );
+
+        const actionCards =
+            Array.from(
+                document.querySelectorAll(
+                    ".ai-action-card[data-action]"
+                )
+            );
+
+        let actionRequestActive = false;
+
         const contextShiftNotes =
             document.querySelector(
                 "#context-shift-notes"
@@ -546,30 +608,256 @@
                 "#context-handover-icon"
             );
 
-        function getLocalDateString() {
+        const workflowContext =
+            initializeWorkflow({
+                step: "assistant",
+                dateInput: aiDate,
+                onInvalid: context => {
+                    renderStatePanel(actionState, {
+                        source: "Shift context",
+                        kind: "error",
+                        message: context.error
+                    });
+                }
+            });
 
-            const now =
-                new Date();
+        function updateActionAvailability() {
+            aiDate.disabled = actionRequestActive;
+            actionCards.forEach(button => {
+                button.disabled =
+                    !workflowContext.valid ||
+                    !actionAcknowledgement.checked ||
+                    actionRequestActive;
 
-            const year =
-                now.getFullYear();
+                const state =
+                    button.querySelector(".ai-action-state");
 
-            const month =
-                String(
-                    now.getMonth() + 1
-                ).padStart(2, "0");
-
-            const day =
-                String(
-                    now.getDate()
-                ).padStart(2, "0");
-
-            return `${year}-${month}-${day}`;
+                if (!workflowContext.valid) {
+                    state.textContent = "Unavailable";
+                } else if (
+                    !actionAcknowledgement.checked &&
+                    state.textContent === "Ready"
+                ) {
+                    state.textContent = "Acknowledge disclosure";
+                } else if (
+                    actionAcknowledgement.checked &&
+                    state.textContent === "Acknowledge disclosure"
+                ) {
+                    state.textContent = "Ready";
+                }
+            });
         }
 
+        function renderAssistantItems(title, items, formatter = item => item.text) {
+            const section =
+                document.createElement("section");
+            const heading =
+                document.createElement("h2");
+            heading.textContent = title;
+            section.append(heading);
 
-        aiDate.value =
-            getLocalDateString();
+            if (!items.length) {
+                const empty =
+                    document.createElement("p");
+                empty.textContent = "None.";
+                section.append(empty);
+            } else {
+                const list =
+                    document.createElement("ul");
+                items.forEach(item => {
+                    const entry =
+                        document.createElement("li");
+                    entry.textContent = formatter(item);
+                    if (item.route) {
+                        const link =
+                            document.createElement("a");
+                        link.href = item.route.href;
+                        link.textContent = ` ${item.route.label}`;
+                        entry.append(link);
+                    }
+                    list.append(entry);
+                });
+                section.append(list);
+            }
+
+            actionResultContent.append(section);
+        }
+
+        function renderProviderProvenance(response) {
+            const section = document.createElement("section");
+            section.className = "assistant-provider-provenance";
+            const engine = document.createElement("p");
+            engine.textContent = "AI Engine: GitHub Copilot CLI";
+            const invoked = document.createElement("p");
+            invoked.textContent =
+                `Provider Invoked: ${response.providerInvoked ? "YES" : "NO"}`;
+            const statuses = {
+                success: "COMPLETE",
+                unavailable: "UNAVAILABLE",
+                timeout: "TIMEOUT",
+                invalid: "INVALID"
+            };
+            const status = document.createElement("p");
+            status.textContent = `Provider Status: ${statuses[response.providerStatus]}`;
+            section.append(engine, invoked, status);
+            actionResultContent.append(section);
+        }
+
+        function renderAssistantResponse(response, actionLabel) {
+            actionResultContent.replaceChildren();
+            actionReportSaveWarning.hidden = true;
+            actionReportSaveWarning.textContent = "";
+            actionResultTitle.textContent = actionLabel;
+            renderProviderProvenance(response);
+            if (
+                response.providerStatus === "success" &&
+                response.aiObservations.length === 0 &&
+                response.recommendations.length === 0
+            ) {
+                const emptyResult = document.createElement("p");
+                emptyResult.className = "assistant-empty-ai-result";
+                emptyResult.textContent =
+                    "Copilot CLI completed successfully but returned no AI-generated observations or recommendations.";
+                actionResultContent.append(emptyResult);
+            }
+            renderAssistantItems("Source-grounded facts", response.facts);
+            renderAssistantItems(
+                "Operator-reviewed investigation findings",
+                response.reviewedFindings,
+                item => `${item.text} (state: ${item.state})`
+            );
+            renderAssistantItems(
+                "AI-generated observations (advisory)",
+                response.aiObservations
+            );
+            renderAssistantItems("Recommendations", response.recommendations);
+            renderAssistantItems(
+                "Evidence and source status",
+                response.evidence,
+                item => `${item.kind} (${item.id}; ${item.provenance}): ${item.availability}${item.freshness ? `; freshness: ${item.freshness}` : ""}${item.reference ? `; reference: ${item.reference}` : ""}`
+            );
+            renderAssistantItems(
+                "Limitations",
+                response.limitations.map(text => ({ text }))
+            );
+            actionResult.hidden = false;
+
+            renderStatePanel(actionState, {
+                source: "Assistant",
+                kind: response.status === "complete"
+                    ? "success"
+                    : response.status === "limited"
+                        ? "warning"
+                        : "error",
+                message: response.status === "complete"
+                    ? "Advisory answer ready."
+                    : response.status === "limited"
+                        ? "Only limited selected-shift context is available."
+                        : "Assistant analysis is unavailable."
+            });
+        }
+
+        async function runAssistantAction(button) {
+            if (
+                actionRequestActive ||
+                !workflowContext.valid ||
+                !actionAcknowledgement.checked
+            ) {
+                return;
+            }
+
+            const action = button.dataset.action;
+            if (!action) {
+                renderStatePanel(actionState, {
+                    source: "Assistant",
+                    kind: "error",
+                    message: "This analysis action is not available."
+                });
+                return;
+            }
+
+            actionRequestActive = true;
+            actionCards.forEach(card => {
+                card.disabled = true;
+            });
+            actionAcknowledgement.disabled = true;
+            button.classList.remove("is-complete");
+            button.classList.add("is-running");
+            button.setAttribute("aria-busy", "true");
+            button.querySelector(".ai-action-state").textContent = "Analyzing...";
+            actionResult.hidden = true;
+            actionResultContent.replaceChildren();
+            actionReportSaveWarning.hidden = true;
+            actionReportSaveWarning.textContent = "";
+            renderStatePanel(actionState, {
+                source: "Assistant",
+                kind: "warning",
+                message: `Analyzing shift ${workflowContext.shift}...`
+            });
+
+            try {
+                const actionResult = await requestAssistantAction(
+                    workflowContext.shift,
+                    action,
+                    true
+                );
+                const response = actionResult.assistant;
+                renderAssistantResponse(
+                    response,
+                    button.querySelector("strong").textContent.trim()
+                );
+                if (actionResult.reportSaveWarning) {
+                    actionReportSaveWarning.textContent =
+                        actionResult.reportSaveWarning;
+                    actionReportSaveWarning.hidden = false;
+                } else if (actionResult.report) {
+                    await loadReports(workflowContext.shift);
+                }
+                button.querySelector(".ai-action-state").textContent =
+                    response.status === "complete"
+                        ? "Complete"
+                        : response.status === "limited"
+                            ? "Limited"
+                            : "Unavailable";
+                if (response.status === "complete") {
+                    button.classList.add("is-complete");
+                }
+            } catch (error) {
+                const message = requestErrorMessage(error);
+                const timedOut = /timeout|timed out/i.test(message);
+                const malformed = /invalid response/i.test(message);
+                button.querySelector(".ai-action-state").textContent =
+                    timedOut
+                        ? "Timed out"
+                        : malformed
+                            ? "Invalid response"
+                            : "Unavailable";
+                renderStatePanel(actionState, {
+                    source: "Assistant",
+                    kind: timedOut ? "warning" : "error",
+                    message: malformed
+                        ? "The assistant response was invalid; no advice was displayed."
+                        : message
+                });
+            } finally {
+                actionRequestActive = false;
+                actionAcknowledgement.disabled = false;
+                button.classList.remove("is-running");
+                button.setAttribute("aria-busy", "false");
+                updateActionAvailability();
+            }
+        }
+
+        actionCards.forEach(button => {
+            button.addEventListener("click", () => {
+                runAssistantAction(button);
+            });
+        });
+        actionAcknowledgement.addEventListener(
+            "change",
+            updateActionAvailability
+        );
+        updateActionAvailability();
 
 
         function renderReports(
@@ -652,13 +940,13 @@
 
         }
 
-        async function loadReports() {
+        async function loadReports(shiftDate = aiDate.value) {
 
             try {
 
                 const response =
                     await getAiReports(
-                        aiDate.value
+                        shiftDate
                     );
 
 
@@ -942,18 +1230,6 @@
 
         }
 
-        aiDate.addEventListener(
-            "change",
-            () => {
-
-                hideReportModal();
-
-                loadReports();
-                loadContext();
-
-            }
-        );
-
         reportCloseX.addEventListener(
             "click",
             hideReportModal
@@ -1000,8 +1276,17 @@
             }
         );
 
-        loadReports();
-        loadContext();
+        window.addEventListener("pagehide", () => {
+            actionResultContent.replaceChildren();
+            actionReportSaveWarning.replaceChildren();
+            actionResult.hidden = true;
+            actionState.replaceChildren();
+        }, { once: true });
+
+        if (workflowContext.valid) {
+            loadReports();
+            loadContext();
+        }
 
     </script>
 

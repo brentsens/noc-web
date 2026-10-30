@@ -2062,3 +2062,19 @@ td {
 .workflow-state-unavailable,
 .workflow-state-error { border-color: var(--danger, #ef4444); }
 .workflow-state-read-only { border-color: var(--primary, #0f766e); }
+/* Bounded assistant results remain distinct from operational workflow content. */
+.assistant-disclosure,
+.assistant-result {
+    border: 1px solid var(--border-color, #b8c2cc);
+    border-radius: 4px;
+    margin: 1rem 0;
+    padding: 1rem;
+}
+
+.assistant-result section {
+    margin: 1rem 0;
+}
+
+.assistant-limitation {
+    color: var(--danger-color, #8b1e1e);
+}

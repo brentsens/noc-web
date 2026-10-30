@@ -2,6 +2,27 @@ import pytest
 
 
 @pytest.fixture
+def fake_assistant_provider(monkeypatch):
+    """Inject a deterministic provider and capture its bounded request envelopes."""
+    from backend.app import app, configure_assistant_provider
+
+    calls = []
+
+    def install(response):
+        def provider(envelope):
+            calls.append(envelope)
+            if isinstance(response, Exception):
+                raise response
+            return response
+
+        monkeypatch.setattr(app.state, "assistant_provider", None)
+        configure_assistant_provider(provider)
+        return calls
+
+    return install
+
+
+@pytest.fixture
 def readiness_workspace(tmp_path):
     """Create isolated, non-sensitive readiness inputs."""
     from datetime import datetime, timezone
@@ -54,6 +75,7 @@ def noc_root(
     from backend import config
 
     from backend.services import (
+        ai_reports,
         end_shift,
         handover,
         handover_delivery,
@@ -69,6 +91,7 @@ def noc_root(
 
     modules = (
         config,
+        ai_reports,
         end_shift,
         handover,
         handover_delivery,
