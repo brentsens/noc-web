@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from backend.services.assistant import (
     AssistantQuestion,
     answer,
+    validate_assistant_response,
     validate_question,
     validate_shift_date,
 )
@@ -53,31 +54,10 @@ def run_assistant_action(
     )
     provider = getattr(runtime.app.state, "assistant_provider", None)
     response = answer(question) if provider is None else answer(question, provider=provider)
-    if (
-        not isinstance(response, dict)
-        or response.get("shiftDate") != validated_shift
-        or response.get("provider") != "github-copilot-cli"
-        or response.get("providerStatus")
-        not in {"success", "unavailable", "timeout", "invalid", "not-invoked"}
-        or response.get("status") not in {"complete", "limited", "unavailable"}
-        or not isinstance(response.get("providerInvoked"), bool)
-        or (response.get("providerStatus") == "success")
-        is not (response.get("status") == "complete")
-        or (
-            response.get("providerStatus") == "not-invoked"
-            and (
-                response.get("providerInvoked") is not False
-                or response.get("status") != "limited"
-            )
-        )
-        or (
-            response.get("providerStatus") in {"timeout", "invalid"}
-            and response.get("providerInvoked") is not True
-        )
-    ):
+    if not validate_assistant_response(response, validated_shift):
         raise HTTPException(
             status_code=502,
-            detail="Assistant response could not be validated; no report was saved.",
+            detail="Assistant response was invalid; no report was saved.",
         )
 
     report = None
@@ -90,10 +70,9 @@ def run_assistant_action(
                 response,
             )
         except ai_reports.AIReportInvalidResult:
-            raise HTTPException(
-                status_code=502,
-                detail="Assistant response could not be validated; no report was saved.",
-            ) from None
+            report_save_warning = (
+                "Analysis completed, but its advisory report could not be saved."
+            )
         except ai_reports.AIReportPersistenceError:
             report_save_warning = (
                 "Analysis completed, but its advisory report could not be saved."
@@ -132,6 +111,10 @@ def ask_assistant(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
     provider = getattr(runtime.app.state, "assistant_provider", None)
-    if provider is None:
-        return answer(question)
-    return answer(question, provider=provider)
+    response = answer(question) if provider is None else answer(question, provider=provider)
+    if not validate_assistant_response(response, validated_shift):
+        raise HTTPException(
+            status_code=502,
+            detail="Assistant response was invalid.",
+        )
+    return response

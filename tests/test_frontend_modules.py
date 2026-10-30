@@ -761,7 +761,7 @@ def test_assistant_action_api_uses_fixed_action_and_validates_report_response():
           json: async () => ({ assistant, report, reportSaveWarning: null })
         };
       };
-      await api.runAssistantAction(shiftDate, "summary", true);
+      const successfulResult = await api.runAssistantAction(shiftDate, "summary", true);
       let invalidActionRejected = false;
       try {
         await api.runAssistantAction(shiftDate, "freeform", true);
@@ -775,12 +775,22 @@ def test_assistant_action_api_uses_fixed_action_and_validates_report_response():
       } catch {
         invalidReportRejected = true;
       }
+      report.name = report.file;
+      assistant.status = "unavailable";
+      let inconsistentProviderStateRejected = false;
+      try {
+        await api.runAssistantAction(shiftDate, "summary", true);
+      } catch {
+        inconsistentProviderStateRejected = true;
+      }
       console.log(JSON.stringify({
         url: request.url,
         method: request.options.method,
         body: JSON.parse(request.options.body),
+        successfulProviderStatus: successfulResult.assistant.providerStatus,
         invalidActionRejected,
-        invalidReportRejected
+        invalidReportRejected,
+        inconsistentProviderStateRejected
       }));
     """
     result = subprocess.run(
@@ -795,8 +805,10 @@ def test_assistant_action_api_uses_fixed_action_and_validates_report_response():
         "url": "/api/shifts/2026-10-29/assistant/actions/summary",
         "method": "POST",
         "body": {"providerDisclosureAcknowledged": True},
+        "successfulProviderStatus": "success",
         "invalidActionRejected": True,
         "invalidReportRejected": True,
+        "inconsistentProviderStateRejected": True,
     }
 
 

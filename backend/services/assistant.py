@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import date
@@ -93,6 +94,7 @@ ROUTES = {
     "index.html": ("Open Dashboard", False),
     "end-shift.html": ("Open End Shift", True),
 }
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -129,6 +131,7 @@ def _public_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for key, value in item.items()
             if key != "summary"
         }
+        public_item.setdefault("reference", None)
         public.append(public_item)
     return public
 
@@ -161,6 +164,204 @@ def _response(
     }
 
 
+def validate_assistant_response(response: Any, shift_date: str) -> bool:
+    if not isinstance(response, dict) or set(response) != {
+        "shiftDate",
+        "status",
+        "provider",
+        "providerInvoked",
+        "providerStatus",
+        "facts",
+        "reviewedFindings",
+        "aiObservations",
+        "recommendations",
+        "evidence",
+        "limitations",
+    }:
+        return False
+    if response.get("shiftDate") != shift_date or response.get("provider") != ASSISTANT_PROVIDER:
+        return False
+
+    invoked = response.get("providerInvoked")
+    provider_status = response.get("providerStatus")
+    status = response.get("status")
+    if (
+        not isinstance(invoked, bool)
+        or not isinstance(provider_status, str)
+        or not isinstance(status, str)
+    ):
+        return False
+    state_matches = (
+        (provider_status == "success" and status == "complete" and invoked)
+        or (
+            provider_status == "unavailable"
+            and status == "unavailable"
+        )
+        or (
+            provider_status in {"timeout", "invalid"}
+            and status == "unavailable"
+            and invoked
+        )
+        or (
+            provider_status == "not-invoked"
+            and status == "limited"
+            and not invoked
+        )
+    )
+    if not state_matches:
+        return False
+
+    evidence = response.get("evidence")
+    limitations = response.get("limitations")
+    if (
+        not isinstance(evidence, list)
+        or not isinstance(limitations, list)
+        or any(not isinstance(item, str) for item in limitations)
+    ):
+        return False
+
+    evidence_by_id: dict[str, dict[str, Any]] = {}
+    for item in evidence:
+        allowed_evidence_keys = {
+            "id", "kind", "provenance", "availability", "reference", "freshness"
+        }
+        if (
+            not isinstance(item, dict)
+            or set(item) - allowed_evidence_keys
+            or not {"id", "kind", "provenance", "availability", "reference"} <= set(item)
+            or not isinstance(item["id"], str)
+            or not isinstance(item["kind"], str)
+            or not isinstance(item["provenance"], str)
+            or not isinstance(item["availability"], str)
+            or item["availability"] not in VALID_AVAILABILITY
+            or (
+                item["reference"] is not None
+                and not isinstance(item["reference"], str)
+            )
+            or (
+                item.get("freshness") is not None
+                and (
+                    not isinstance(item["freshness"], str)
+                    or item["freshness"]
+                    not in {"current", "stale", "unavailable", "malformed"}
+                )
+            )
+            or item["id"] in evidence_by_id
+        ):
+            return False
+        evidence_by_id[item["id"]] = item
+
+    available_or_stale_ids = {
+        identifier
+        for identifier, item in evidence_by_id.items()
+        if item["availability"] in {"available", "stale"}
+    }
+
+    for category, expected_keys in (
+        ("facts", {"text", "evidenceIds"}),
+        ("reviewedFindings", {"text", "state", "evidenceIds"}),
+    ):
+        items = response.get(category)
+        if not isinstance(items, list):
+            return False
+        for item in items:
+            if (
+                not isinstance(item, dict)
+                or set(item) != expected_keys
+                or not isinstance(item.get("text"), str)
+                or not item["text"].strip()
+                or not isinstance(item.get("evidenceIds"), list)
+                or not item["evidenceIds"]
+                or any(
+                    not isinstance(identifier, str)
+                    or identifier not in evidence_by_id
+                    or evidence_by_id[identifier]["availability"]
+                    not in (
+                        {"available"}
+                        if category == "reviewedFindings"
+                        else {"available", "stale"}
+                    )
+                    for identifier in item["evidenceIds"]
+                )
+                or (
+                    category == "reviewedFindings"
+                    and not isinstance(item.get("state"), str)
+                )
+            ):
+                return False
+
+    recommendations = response.get("recommendations")
+    if not isinstance(recommendations, list):
+        return False
+    provider_recommendations = []
+    for recommendation in recommendations:
+        if not isinstance(recommendation, dict):
+            return False
+        normalized = dict(recommendation)
+        if "route" in normalized:
+            route = _provider_route(normalized["route"], shift_date)
+            if route is None:
+                return False
+            normalized["route"] = route
+        provider_recommendations.append(normalized)
+    provider_items = {
+        "aiObservations": response.get("aiObservations"),
+        "recommendations": provider_recommendations,
+    }
+    if status == "complete":
+        if _validate_provider_result(
+            provider_items,
+            available_or_stale_ids,
+            shift_date,
+            [
+                item
+                for item in evidence
+                if item["availability"] in {"available", "stale"}
+            ],
+        ) is None:
+            return False
+    elif status == "unavailable":
+        if provider_items != {"aiObservations": [], "recommendations": []}:
+            return False
+    else:
+        observations = provider_items["aiObservations"]
+        recommendations = provider_items["recommendations"]
+        if observations != [] or not isinstance(recommendations, list):
+            return False
+        for recommendation in recommendations:
+            if (
+                not isinstance(recommendation, dict)
+                or set(recommendation) - {"text", "evidenceIds", "route"}
+                or not isinstance(recommendation.get("text"), str)
+                or not recommendation["text"].strip()
+                or recommendation.get("evidenceIds") != []
+                or _route(recommendation.get("route"), "") is None
+                or evidence
+            ):
+                return False
+
+    return True
+
+
+def _provider_route(value: Any, shift_date: str) -> dict[str, Any] | None:
+    if not isinstance(value, dict) or set(value) != {
+        "label", "href", "requiresConfirmation"
+    }:
+        return None
+    for href, (label, confirmation) in ROUTES.items():
+        if (
+            value["label"] == label
+            and value["href"] == f"{href}?shift={shift_date}"
+            and value["requiresConfirmation"] is confirmation
+        ):
+            return {
+                "label": label,
+                "href": href,
+                "requiresConfirmation": confirmation,
+            }
+    return None
+
+
 def _route(value: Any, shift_date: str) -> dict[str, Any] | None:
     if not isinstance(value, dict) or set(value) != {"label", "href", "requiresConfirmation"}:
         return None
@@ -177,26 +378,46 @@ def _route(value: Any, shift_date: str) -> dict[str, Any] | None:
     }
 
 
+def _log_provider_validation_failure(rule: str, category: str = "result") -> None:
+    logger.warning(
+        "Assistant provider result rejected: rule=%s category=%s",
+        rule,
+        category,
+    )
+
+
 def _typed_items(
     value: Any,
     evidence_ids: set[str],
     *,
+    category: str,
     route_allowed: bool = False,
 ) -> list[dict[str, Any]] | None:
     if not isinstance(value, list):
+        _log_provider_validation_failure("expected_list", category)
         return None
     items = []
     for item in value:
         if not isinstance(item, dict) or set(item) - {"text", "evidenceIds", "route"}:
+            _log_provider_validation_failure("invalid_item_keys", category)
             return None
         text, ids = item.get("text"), item.get("evidenceIds")
-        if not isinstance(text, str) or not text.strip() or not isinstance(ids, list) or not ids:
+        if not isinstance(text, str) or not text.strip():
+            _log_provider_validation_failure("empty_or_invalid_text", category)
+            return None
+        if not isinstance(ids, list) or not ids:
+            _log_provider_validation_failure("missing_or_empty_evidence_ids", category)
             return None
         if any(not isinstance(identifier, str) or identifier not in evidence_ids for identifier in ids):
+            _log_provider_validation_failure("unknown_evidence_id", category)
             return None
         result = {"text": " ".join(text.split()), "evidenceIds": ids}
         if "route" in item:
-            if not route_allowed or _route(item["route"], "") is None:
+            if not route_allowed:
+                _log_provider_validation_failure("invalid_item_keys", category)
+                return None
+            if _route(item["route"], "") is None:
+                _log_provider_validation_failure("invalid_recommendation_route", category)
                 return None
             result["route"] = item["route"]
         items.append(result)
@@ -209,27 +430,59 @@ def _validate_provider_result(
     shift_date: str,
     available_evidence: list[dict[str, Any]],
 ) -> dict[str, list[dict[str, Any]]] | None:
-    if not isinstance(result, dict) or set(result) != {"aiObservations", "recommendations"}:
+    if not isinstance(result, dict):
+        _log_provider_validation_failure("invalid_top_level_type")
         return None
-    observations = _typed_items(result["aiObservations"], available_evidence_ids)
+    if set(result) != {"aiObservations", "recommendations"}:
+        _log_provider_validation_failure("unexpected_top_level_keys")
+        return None
+    if not isinstance(result["aiObservations"], list):
+        _log_provider_validation_failure("expected_list", "aiObservations")
+        return None
+    if not isinstance(result["recommendations"], list):
+        _log_provider_validation_failure("expected_list", "recommendations")
+        return None
+    observations = _typed_items(
+        result["aiObservations"],
+        available_evidence_ids,
+        category="aiObservations",
+    )
     recommendations = _typed_items(
         result["recommendations"],
         available_evidence_ids,
+        category="recommendations",
         route_allowed=True,
     )
     if observations is None or recommendations is None:
         return None
     evidence_by_id = {item["id"]: item for item in available_evidence}
-    for item in observations + recommendations:
-        cites_stale_evidence = any(
-            evidence_by_id[identifier].get("availability") == "stale"
-            for identifier in item["evidenceIds"]
-        )
-        if cites_stale_evidence and not STALE_EVIDENCE_QUALIFIER_PATTERN.search(item["text"]):
-            return None
+    for category, items in (
+        ("aiObservations", observations),
+        ("recommendations", recommendations),
+    ):
+        for item in items:
+            cites_stale_evidence = any(
+                evidence_by_id[identifier].get("availability") == "stale"
+                for identifier in item["evidenceIds"]
+            )
+            if (
+                cites_stale_evidence
+                and not STALE_EVIDENCE_QUALIFIER_PATTERN.search(item["text"])
+            ):
+                _log_provider_validation_failure(
+                    "stale_evidence_without_qualifier",
+                    category,
+                )
+                return None
     for recommendation in recommendations:
+        if "route" not in recommendation:
+            continue
         route = _route(recommendation.get("route"), shift_date)
         if route is None:
+            _log_provider_validation_failure(
+                "invalid_recommendation_route",
+                "recommendations",
+            )
             return None
         if route["href"].startswith("investigations.html?") and not any(
             item.get("id") in recommendation["evidenceIds"]
@@ -238,6 +491,10 @@ def _validate_provider_result(
             and item.get("availability") == "available"
             for item in available_evidence
         ):
+            _log_provider_validation_failure(
+                "invalid_investigation_route_provenance",
+                "recommendations",
+            )
             return None
         recommendation["route"] = route
     return {

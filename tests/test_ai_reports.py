@@ -102,6 +102,8 @@ def test_successful_ai_action_saves_one_advisory_report_and_opens_it(
 
     assert response.status_code == 200
     body = response.json()
+    assert body["assistant"]["status"] == "complete"
+    assert body["assistant"]["providerInvoked"] is True
     assert body["assistant"]["providerStatus"] == "success"
     assert body["reportSaveWarning"] is None
     report = body["report"]
@@ -264,6 +266,83 @@ def test_malformed_success_response_is_rejected_without_report(noc_root, monkeyp
     assert not list(noc_root.rglob("ai-*.md"))
 
 
+@pytest.mark.parametrize(
+    ("status", "provider_status", "invoked"),
+    [
+        ("unavailable", "success", True),
+        ("complete", "unavailable", True),
+        ("limited", "unavailable", False),
+        ("complete", "not-invoked", False),
+    ],
+)
+def test_inconsistent_provider_state_is_rejected_by_both_assistant_routes(
+    noc_root,
+    monkeypatch,
+    status,
+    provider_status,
+    invoked,
+):
+    monkeypatch.setattr(ai_reports, "NOC_ROOT", noc_root)
+    monkeypatch.setattr(app.state, "assistant_provider", None)
+    response_data = _assistant_response()
+    response_data.update(
+        status=status,
+        providerStatus=provider_status,
+        providerInvoked=invoked,
+    )
+    monkeypatch.setattr(
+        "backend.api.assistant.answer",
+        lambda question: response_data,
+    )
+    client = TestClient(app)
+
+    action_response = client.post(
+        f"/api/shifts/{SHIFT}/assistant/actions/summary",
+        json={"providerDisclosureAcknowledged": True},
+    )
+    question_response = client.post(
+        f"/api/shifts/{SHIFT}/assistant/questions",
+        json={
+            "shiftDate": SHIFT,
+            "question": "What requires attention?",
+            "providerDisclosureAcknowledged": True,
+        },
+    )
+
+    assert action_response.status_code == 502
+    assert question_response.status_code == 502
+    assert not list(noc_root.rglob("ai-*.md"))
+
+
+def test_report_accepts_valid_stale_citations_and_route_optional_result(noc_root):
+    (noc_root / SHIFT / "reports").mkdir(parents=True)
+    response = _assistant_response()
+    response["evidence"][0].update(
+        availability="stale",
+        freshness="stale",
+    )
+    response["facts"][0]["text"] = (
+        "The stale Jira cache may not reflect the current ticket status."
+    )
+    response["aiObservations"].append({
+        "text": "Based on the stale cache, verify the ticket before acting.",
+        "evidenceIds": ["jira-cache"],
+    })
+    response["recommendations"][0].pop("route")
+
+    report = ai_reports.persist_ai_action_report(
+        SHIFT,
+        "summary",
+        response,
+    )
+
+    content = (noc_root / SHIFT / "reports" / report["file"]).read_text(
+        encoding="utf-8"
+    )
+    assert "stale Jira cache" in content
+    assert "verify the ticket before acting" in content
+
+
 def test_report_save_failure_keeps_successful_analysis_and_warns_separately(
     noc_root,
     monkeypatch,
@@ -289,6 +368,40 @@ def test_report_save_failure_keeps_successful_analysis_and_warns_separately(
     assert body["assistant"]["aiObservations"][0]["text"].startswith(
         "The tracked ticket"
     )
+    assert body["assistant"]["status"] == "complete"
+    assert body["assistant"]["providerInvoked"] is True
+    assert body["assistant"]["providerStatus"] == "success"
+    assert body["report"] is None
+    assert body["reportSaveWarning"]
+
+
+def test_report_validation_failure_does_not_change_successful_provider_state(
+    noc_root,
+    monkeypatch,
+):
+    monkeypatch.setattr(ai_reports, "NOC_ROOT", noc_root)
+    monkeypatch.setattr(app.state, "assistant_provider", None)
+    monkeypatch.setattr(
+        "backend.api.assistant.answer",
+        lambda question: _assistant_response(),
+    )
+
+    def reject_report(*args, **kwargs):
+        raise ai_reports.AIReportInvalidResult
+
+    monkeypatch.setattr(ai_reports, "persist_ai_action_report", reject_report)
+
+    response = TestClient(app).post(
+        f"/api/shifts/{SHIFT}/assistant/actions/summary",
+        json={"providerDisclosureAcknowledged": True},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["assistant"]["status"] == "complete"
+    assert body["assistant"]["providerInvoked"] is True
+    assert body["assistant"]["providerStatus"] == "success"
+    assert body["assistant"]["aiObservations"]
     assert body["report"] is None
     assert body["reportSaveWarning"]
 

@@ -709,6 +709,12 @@
         }
 
         function renderAssistantResponse(response, actionLabel) {
+            const completed =
+                response.providerStatus === "success"
+                    && response.status === "complete";
+            const limited =
+                response.providerStatus === "not-invoked"
+                    && response.status === "limited";
             actionResultContent.replaceChildren();
             actionReportSaveWarning.hidden = true;
             actionReportSaveWarning.textContent = "";
@@ -749,14 +755,14 @@
 
             renderStatePanel(actionState, {
                 source: "Assistant",
-                kind: response.status === "complete"
+                kind: completed
                     ? "success"
-                    : response.status === "limited"
+                    : limited
                         ? "warning"
                         : "error",
-                message: response.status === "complete"
+                message: completed
                     ? "Advisory answer ready."
-                    : response.status === "limited"
+                    : limited
                         ? "Only limited selected-shift context is available."
                         : "Assistant analysis is unavailable."
             });
@@ -819,12 +825,16 @@
                     await loadReports(workflowContext.shift);
                 }
                 button.querySelector(".ai-action-state").textContent =
-                    response.status === "complete"
+                    response.providerStatus === "success"
                         ? "Complete"
-                        : response.status === "limited"
+                        : response.providerStatus === "not-invoked"
                             ? "Limited"
-                            : "Unavailable";
-                if (response.status === "complete") {
+                            : response.providerStatus === "timeout"
+                                ? "Timed out"
+                                : response.providerStatus === "invalid"
+                                    ? "Invalid response"
+                                    : "Unavailable";
+                if (response.providerStatus === "success") {
                     button.classList.add("is-complete");
                 }
             } catch (error) {
@@ -836,7 +846,7 @@
                         ? "Timed out"
                         : malformed
                             ? "Invalid response"
-                            : "Unavailable";
+                            : "Request failed";
                 renderStatePanel(actionState, {
                     source: "Assistant",
                     kind: timedOut ? "warning" : "error",

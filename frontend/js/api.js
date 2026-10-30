@@ -369,8 +369,12 @@ function validateAssistantResponse(response, shiftDate) {
       || !ASSISTANT_PROVIDERS.has(response.provider)
       || typeof response.providerInvoked !== "boolean"
       || !ASSISTANT_PROVIDER_STATUSES.has(response.providerStatus)
-      || (response.providerStatus === "success" && !response.providerInvoked)
-      || (["timeout", "invalid"].includes(response.providerStatus) && !response.providerInvoked)
+      || (response.providerStatus === "success"
+        && (!response.providerInvoked || response.status !== "complete"))
+      || (response.providerStatus === "unavailable"
+        && response.status !== "unavailable")
+      || (["timeout", "invalid"].includes(response.providerStatus)
+        && (!response.providerInvoked || response.status !== "unavailable"))
       || (response.providerStatus === "not-invoked"
         && (response.providerInvoked || response.status !== "limited"))
       || !Array.isArray(response.evidence)

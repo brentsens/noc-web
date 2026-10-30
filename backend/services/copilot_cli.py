@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -16,6 +17,8 @@ from backend.services.copilot_mcp import (
     CopilotProviderUnavailable,
 )
 
+
+logger = logging.getLogger(__name__)
 
 COPILOT_CLI_TIMEOUT_SECONDS = 55
 COPILOT_ENVIRONMENT_ALLOWLIST = (
@@ -64,9 +67,12 @@ closing or transitioning a ticket unless the evidence supports it. A missing fie
 item is itself relevant evidence; do not return empty arrays merely because there is no alert.
 
 Be concise and analytical, not a repetition of source facts. Cite only supplied evidence IDs.
-Use evidence only when its availability is "available" or "stale". Explicitly identify stale Jira
-cache data as stale and never describe it as current. Never claim Jira data is current unless its
-supplied freshness is "current". Keep observations
+Use evidence only when its availability is "available" or "stale". For every aiObservations or
+recommendations item whose evidenceIds includes an item with availability "stale", that same item's
+text must explicitly state that its cited evidence, data, or cache is stale. Apply this requirement
+independently to each item; do not rely on another item, limitation, or source-status section to
+qualify it. Explicitly identify stale Jira cache data as stale and never describe it as current.
+Never claim Jira data is current unless its supplied freshness is "current". Keep observations
 distinct from recommendations; all output is advisory and must not claim any change was made or
 bypass existing workflow confirmations. When the evidence supports a useful result, do not return
 empty arrays. Both arrays may be empty only if no applicable analysis is supported.
@@ -89,7 +95,12 @@ Markdown fences, or other text outside the object:
     }
   ]
 }
-Each aiObservations item has exactly non-empty "text" and "evidenceIds". Each recommendation has
+Every aiObservations item MUST contain exactly the keys "text" and "evidenceIds"; no additional
+keys are permitted. Do not add fields such as route, type, category, severity, source, status,
+confidence, or explanatory metadata to aiObservations. "text" must be a non-empty string.
+"evidenceIds" must be a non-empty JSON array containing only supplied evidence IDs whose
+availability is "available" or "stale". Recommendation objects follow their separate schema below;
+the route object belongs only to recommendations, never aiObservations. Each recommendation has
 exactly non-empty "text", "evidenceIds", and one route object. Each route has exactly "label",
 "href", and "requiresConfirmation". Use only these route combinations:
 - "Open Tickets", "tickets.html", true
@@ -99,6 +110,30 @@ exactly non-empty "text", "evidenceIds", and one route object. Each route has ex
 - "Open End Shift", "end-shift.html", true
 Do not return facts or operator-reviewed findings; NOC Web supplies those categories from source
 records."""
+
+
+def _output_length(value: Any) -> int:
+    return len(value) if isinstance(value, (str, bytes, bytearray)) else 0
+
+
+def _log_invalid_response(
+    result: subprocess.CompletedProcess,
+    *,
+    exception: Exception | None = None,
+    json_error: str | None = None,
+    returned_json_type: str | None = None,
+) -> None:
+    logger.warning(
+        "Copilot CLI invalid response: exit_code=%s stdout_length=%s "
+        "stderr_length=%s exception_type=%s json_error=%s "
+        "returned_json_type=%s",
+        result.returncode,
+        _output_length(result.stdout),
+        _output_length(result.stderr),
+        type(exception).__name__ if exception is not None else None,
+        json_error,
+        returned_json_type,
+    )
 
 
 def answer_with_copilot_cli(envelope: dict[str, Any]) -> dict[str, Any]:
@@ -164,12 +199,25 @@ def answer_with_copilot_cli(envelope: dict[str, Any]) -> dict[str, Any]:
                 ) from None
             try:
                 response = json.loads(result.stdout)
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError) as error:
+                _log_invalid_response(
+                    result,
+                    exception=error,
+                    json_error=(
+                        error.msg
+                        if isinstance(error, json.JSONDecodeError)
+                        else "Invalid stdout type"
+                    ),
+                )
                 raise CopilotProviderInvalid(
                     "The GitHub Copilot CLI returned an invalid response.",
                     provider_invoked=True,
                 ) from None
             if not isinstance(response, dict):
+                _log_invalid_response(
+                    result,
+                    returned_json_type=type(response).__name__,
+                )
                 raise CopilotProviderInvalid(
                     "The GitHub Copilot CLI returned an invalid response.",
                     provider_invoked=True,

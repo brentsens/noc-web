@@ -354,7 +354,7 @@ def test_ticket_question_uses_partial_context_and_labels_stale_jira(
     )
 
 
-def test_stale_jira_claim_without_stale_qualification_is_rejected(
+def test_stale_qualification_in_another_item_does_not_validate_recommendation(
     noc_root,
     monkeypatch,
 ):
@@ -365,10 +365,18 @@ def test_stale_jira_claim_without_stale_qualification_is_rejected(
     )
     monkeypatch.setattr(assistant, "ask_copilot", lambda envelope: {
         "aiObservations": [{
-            "text": "NOC-1 is currently open.",
+            "text": "The stale Jira cache is stale and may not reflect current state.",
             "evidenceIds": ["jira-cache"],
         }],
-        "recommendations": [],
+        "recommendations": [{
+            "text": "Review NOC-1 before acting.",
+            "evidenceIds": ["jira-cache"],
+            "route": {
+                "label": "Open Tickets",
+                "href": "tickets.html",
+                "requiresConfirmation": True,
+            },
+        }],
     })
 
     response = assistant.answer(AssistantQuestion(
@@ -381,6 +389,135 @@ def test_stale_jira_claim_without_stale_qualification_is_rejected(
     assert response["providerInvoked"] is True
     assert response["providerStatus"] == "invalid"
     assert response["aiObservations"] == []
+    assert response["recommendations"] == []
+
+
+def test_each_item_citing_stale_evidence_qualifies_it_independently(
+    noc_root,
+    monkeypatch,
+):
+    _write_context(noc_root)
+    _write_jira_cache(
+        noc_root,
+        (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
+    )
+    monkeypatch.setattr(assistant, "ask_copilot", lambda envelope: {
+        "aiObservations": [{
+            "text": "The stale Jira cache may not reflect current ticket status.",
+            "evidenceIds": ["jira-cache"],
+        }],
+        "recommendations": [{
+            "text": "Based on the stale cache, verify the ticket before acting.",
+            "evidenceIds": ["jira-cache"],
+            "route": {
+                "label": "Open Tickets",
+                "href": "tickets.html",
+                "requiresConfirmation": True,
+            },
+        }],
+    })
+
+    response = assistant.answer(AssistantQuestion(
+        SHIFT,
+        "Which tracked tickets need attention?",
+        True,
+    ))
+
+    assert response["status"] == "complete"
+    assert response["providerStatus"] == "success"
+    assert response["aiObservations"][0]["evidenceIds"] == ["jira-cache"]
+    assert response["recommendations"][0]["evidenceIds"] == ["jira-cache"]
+
+
+@pytest.mark.parametrize(
+    ("case", "expected_rule", "category"),
+    [
+        ("unexpected_top_level_keys", "unexpected_top_level_keys", "result"),
+        ("observations_not_list", "expected_list", "aiObservations"),
+        ("recommendations_not_list", "expected_list", "recommendations"),
+        ("invalid_item_keys", "invalid_item_keys", "aiObservations"),
+        ("empty_text", "empty_or_invalid_text", "aiObservations"),
+        ("invalid_text", "empty_or_invalid_text", "aiObservations"),
+        ("missing_evidence_ids", "missing_or_empty_evidence_ids", "aiObservations"),
+        ("empty_evidence_ids", "missing_or_empty_evidence_ids", "aiObservations"),
+        ("unknown_evidence_id", "unknown_evidence_id", "aiObservations"),
+        ("invalid_route", "invalid_recommendation_route", "recommendations"),
+        (
+            "stale_without_qualifier",
+            "stale_evidence_without_qualifier",
+            "aiObservations",
+        ),
+        (
+            "invalid_investigation_route",
+            "invalid_investigation_route_provenance",
+            "recommendations",
+        ),
+    ],
+)
+def test_provider_validation_diagnostics_are_rule_specific_and_redacted(
+    noc_root,
+    monkeypatch,
+    caplog,
+    case,
+    expected_rule,
+    category,
+):
+    _write_context(noc_root)
+    if case == "stale_without_qualifier":
+        _write_jira_cache(
+            noc_root,
+            (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
+        )
+    result = _answer()
+    if case == "unexpected_top_level_keys":
+        result["privateExtra"] = "PRIVATE_PROVIDER_TEXT"
+    elif case == "observations_not_list":
+        result["aiObservations"] = "PRIVATE_PROVIDER_TEXT"
+    elif case == "recommendations_not_list":
+        result["recommendations"] = "PRIVATE_PROVIDER_TEXT"
+    elif case == "invalid_item_keys":
+        result["aiObservations"][0]["severity"] = "high"
+    elif case == "empty_text":
+        result["aiObservations"][0]["text"] = "  "
+    elif case == "invalid_text":
+        result["aiObservations"][0]["text"] = None
+    elif case == "missing_evidence_ids":
+        del result["aiObservations"][0]["evidenceIds"]
+    elif case == "empty_evidence_ids":
+        result["aiObservations"][0]["evidenceIds"] = []
+    elif case == "unknown_evidence_id":
+        result["aiObservations"][0]["evidenceIds"] = ["PRIVATE_TICKET_ID"]
+    elif case == "invalid_route":
+        result["recommendations"][0]["route"]["href"] = "external.html"
+    elif case == "stale_without_qualifier":
+        result["aiObservations"][0].update(
+            text="The Jira ticket is currently open.",
+            evidenceIds=["jira-cache"],
+        )
+    elif case == "invalid_investigation_route":
+        result["recommendations"][0]["route"].update(
+            label="Open Investigations",
+            href="investigations.html",
+        )
+
+    monkeypatch.setattr(assistant, "ask_copilot", lambda envelope: result)
+    caplog.set_level("WARNING", logger=assistant.__name__)
+
+    response = assistant.answer(
+        AssistantQuestion(SHIFT, "Summarize Current Shift", True)
+    )
+
+    diagnostics = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == assistant.__name__
+    ]
+    assert response["providerStatus"] == "invalid"
+    assert diagnostics == [
+        f"Assistant provider result rejected: rule={expected_rule} category={category}"
+    ]
+    assert "PRIVATE_PROVIDER_TEXT" not in diagnostics[0]
+    assert "PRIVATE_TICKET_ID" not in diagnostics[0]
 
 
 def test_individual_source_failure_preserves_available_sources(noc_root, monkeypatch):

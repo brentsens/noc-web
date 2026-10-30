@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.config import NOC_ROOT
+from backend.services.assistant import validate_assistant_response
 from backend.services.assistant_actions import AI_ACTIONS
 
 
@@ -65,26 +66,9 @@ def _reports_directory(shift_date: str) -> Path:
 
 
 def _valid_report_result(shift_date: str, response: object) -> dict[str, Any]:
-    expected_keys = {
-        "shiftDate",
-        "status",
-        "provider",
-        "providerInvoked",
-        "providerStatus",
-        "facts",
-        "reviewedFindings",
-        "aiObservations",
-        "recommendations",
-        "evidence",
-        "limitations",
-    }
     if (
-        not isinstance(response, dict)
-        or set(response) != expected_keys
-        or response.get("shiftDate") != shift_date
+        not validate_assistant_response(response, shift_date)
         or response.get("status") != "complete"
-        or response.get("provider") != "github-copilot-cli"
-        or response.get("providerInvoked") is not True
         or response.get("providerStatus") != "success"
     ):
         raise AIReportInvalidResult
@@ -126,7 +110,7 @@ def _valid_report_result(shift_date: str, response: object) -> dict[str, Any]:
         "facts": {"text", "evidenceIds"},
         "reviewedFindings": {"text", "state", "evidenceIds"},
         "aiObservations": {"text", "evidenceIds"},
-        "recommendations": {"text", "evidenceIds", "route"},
+        "recommendations": {"text", "evidenceIds"},
     }
     for category, expected_item_keys in category_specs.items():
         items = response[category]
@@ -135,7 +119,13 @@ def _valid_report_result(shift_date: str, response: object) -> dict[str, Any]:
         for item in items:
             if (
                 not isinstance(item, dict)
-                or set(item) != expected_item_keys
+                or not (
+                    set(item) == expected_item_keys
+                    or (
+                        category == "recommendations"
+                        and set(item) == expected_item_keys | {"route"}
+                    )
+                )
                 or not isinstance(item.get("text"), str)
                 or not item["text"].strip()
                 or not isinstance(item.get("evidenceIds"), list)
@@ -143,14 +133,19 @@ def _valid_report_result(shift_date: str, response: object) -> dict[str, Any]:
                 or any(
                     not isinstance(identifier, str)
                     or identifier not in evidence_by_id
-                    or evidence_by_id[identifier]["availability"] != "available"
+                    or evidence_by_id[identifier]["availability"]
+                    not in (
+                        {"available"}
+                        if category == "reviewedFindings"
+                        else {"available", "stale"}
+                    )
                     for identifier in item["evidenceIds"]
                 )
             ):
                 raise AIReportInvalidResult
             if category == "reviewedFindings" and not isinstance(item["state"], str):
                 raise AIReportInvalidResult
-            if category == "recommendations":
+            if category == "recommendations" and "route" in item:
                 route = item["route"]
                 allowed_routes = {
                     "Open Tickets": ("tickets.html", True),

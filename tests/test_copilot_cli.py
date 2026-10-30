@@ -123,8 +123,38 @@ def test_cli_prompt_requires_action_analysis_and_exact_validated_json():
     assert "Use the question in that context as the requested analysis scope." in normalized_prompt
     assert "When the evidence supports a useful result, do not return empty arrays." in normalized_prompt
     assert "no explanatory prose, Markdown fences, or other text outside the object" in normalized_prompt
+    assert (
+        'Every aiObservations item MUST contain exactly the keys "text" and "evidenceIds"; '
+        "no additional keys are permitted."
+        in normalized_prompt
+    )
+    assert (
+        "Do not add fields such as route, type, category, severity, source, status, confidence, "
+        "or explanatory metadata to aiObservations."
+        in normalized_prompt
+    )
+    assert (
+        '"text" must be a non-empty string. "evidenceIds" must be a non-empty JSON array '
+        'containing only supplied evidence IDs whose availability is "available" or "stale".'
+        in normalized_prompt
+    )
+    assert (
+        "Recommendation objects follow their separate schema below; the route object belongs "
+        "only to recommendations, never aiObservations."
+        in normalized_prompt
+    )
     assert "Each recommendation has exactly" in normalized_prompt
     assert "one route object" in normalized_prompt
+    assert (
+        "For every aiObservations or recommendations item whose evidenceIds includes an item "
+        'with availability "stale", that same item\'s text must explicitly state'
+        in normalized_prompt
+    )
+    assert (
+        "Apply this requirement independently to each item; do not rely on another item, "
+        "limitation, or source-status section to qualify it."
+        in normalized_prompt
+    )
     assert 'Never claim Jira data is current unless its supplied freshness is "current".' in normalized_prompt
     assert 'an empty "nextAction" means no Next Action is recorded' in normalized_prompt
     assert "The Investigations workflow is exclusively for qualifying Datadog monitor/incident investigations." in normalized_prompt
@@ -199,3 +229,46 @@ def test_cli_provider_failures_are_redacted_and_cleanup_context(
     assert error.value.provider_invoked is provider_invoked
     assert temporary_directories
     assert all(not directory.exists() for directory in temporary_directories)
+
+
+@pytest.mark.parametrize(
+    ("stdout", "expected_exception", "expected_json_error", "returned_type"),
+    [
+        ("private-output is not JSON", "JSONDecodeError", "Expecting value", None),
+        ('["private provider response"]', None, None, "list"),
+        (None, "TypeError", "Invalid stdout type", None),
+    ],
+)
+def test_invalid_cli_json_logs_only_redacted_diagnostics(
+    monkeypatch,
+    caplog,
+    stdout,
+    expected_exception,
+    expected_json_error,
+    returned_type,
+):
+    stderr = "private stderr diagnostic"
+    monkeypatch.setattr(copilot_cli.shutil, "which", lambda name: "/usr/bin/copilot")
+    monkeypatch.setattr(
+        copilot_cli.subprocess,
+        "run",
+        lambda arguments, **options: subprocess.CompletedProcess(
+            arguments,
+            0,
+            stdout,
+            stderr,
+        ),
+    )
+
+    with pytest.raises(CopilotProviderInvalid):
+        copilot_cli.answer_with_copilot_cli(_envelope("private operator prompt"))
+
+    assert len(caplog.records) == 1
+    message = caplog.records[0].getMessage()
+    assert "exit_code=0" in message
+    assert f"stdout_length={len(stdout) if stdout is not None else 0}" in message
+    assert f"stderr_length={len(stderr)}" in message
+    assert f"exception_type={expected_exception}" in message
+    assert f"json_error={expected_json_error}" in message
+    assert f"returned_json_type={returned_type}" in message
+    assert "private" not in message
