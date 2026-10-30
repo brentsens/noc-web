@@ -46,6 +46,10 @@
                     AI Actions
                 </a>
 
+                <a class="nav-item" href="resources.html">
+                    Resources
+                </a>
+
                 <div class="nav-divider"></div>
 
                 <a class="nav-item" href="start-shift.html">
@@ -695,7 +699,8 @@
                 success: "COMPLETE",
                 unavailable: "UNAVAILABLE",
                 timeout: "TIMEOUT",
-                invalid: "INVALID"
+                invalid: "INVALID",
+                "not-invoked": "NOT INVOKED"
             };
             const status = document.createElement("p");
             status.textContent = `Provider Status: ${statuses[response.providerStatus]}`;

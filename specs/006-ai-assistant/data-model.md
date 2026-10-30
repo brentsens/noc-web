@@ -47,7 +47,7 @@ listed as a limitation and never causes an unrelated source to be substituted.
 | `recommendations` | Optional operator choices with evidence IDs and an existing workflow route; navigation only. |
 | `provider` | Fixed identifier `github-copilot-cli`; no provider diagnostics or execution details are exposed. |
 | `providerInvoked` | True only when the Copilot CLI process was launched for this answer; false for refusal, insufficient context, or a CLI that could not be started. |
-| `providerStatus` | `success`, `unavailable`, `timeout`, or `invalid`; success remains success when both AI-authored arrays are empty. |
+| `providerStatus` | `success`, `unavailable`, `timeout`, `invalid`, or `not-invoked`; context insufficiency is not provider unavailability. |
 | `evidence` | Reviewed item references and availability; raw evidence excluded. |
 | `limitations` | Insufficient, unavailable, stale, malformed, conflicting, invalid-shift, out-of-scope, refusal, or provider-failure explanation. |
 | `status` | `complete` only when a validated answer exists; otherwise `limited` or `unavailable`, never success-shaped. |

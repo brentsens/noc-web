@@ -78,6 +78,37 @@ def test_status_exposes_unavailable_jira_cache(
     assert result["jiraCache"] == jira_cache_health
 
 
+def test_status_lists_generated_investigation_awaiting_review(noc_root, monkeypatch):
+    mock_status_dependencies(monkeypatch, {
+        "available": True,
+        "refreshedAt": None,
+        "freshness": "current",
+    })
+    directory = noc_root / SHIFT_DATE / "investigations" / "generated"
+    directory.mkdir(parents=True)
+    (directory / "investigation.md").write_text(
+        "# Investigation: Generated\n"
+        "- Investigation Name: generated\n"
+        "- Shift Date: 2099-12-31\n"
+        "- Evidence Provenance: noc-inv\n"
+        "\n## Summary\nAdvisory text.\n",
+        encoding="utf-8",
+    )
+    (directory / "generation-status.json").write_text(
+        '{"generationStatus":"completed","validationStatus":"ready_for_review",'
+        '"shiftDate":"2099-12-31","name":"generated",'
+        '"notebookUrl":"https://app.datadoghq.com/notebook/123/example",'
+        '"provenance":"noc-inv"}',
+        encoding="utf-8",
+    )
+
+    result = status.get_status(SHIFT_DATE)
+
+    assert result["investigations"]["needsReview"] == 1
+    assert result["needsReview"]["items"][-1]["id"] == "investigation:generated"
+    assert result["reviewedFindings"] == []
+
+
 def test_status_cache_health_has_no_refresh_or_cache_write(
     noc_root,
     monkeypatch,

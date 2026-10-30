@@ -47,6 +47,10 @@
                     AI Actions
                 </a>
 
+                <a class="nav-item" href="resources.html">
+                    Resources
+                </a>
+
                 <div class="nav-divider"></div>
 
                 <a class="nav-item" href="start-shift.html">
@@ -134,11 +138,49 @@
                     <div class="page-controls">
 
                         <input id="investigation-date" class="date-control" type="date">
-
+                        <button id="show-create-investigation" class="button" type="button">
+                            + Create from Datadog Notebook
+                        </button>
 
                     </div>
 
                 </div>
+
+                <section id="create-investigation-panel" class="panel investigation-create-panel hidden" aria-labelledby="create-investigation-title">
+                    <div class="panel-header">
+                        <h2 id="create-investigation-title">Create from Datadog Notebook</h2>
+                        <span class="count-badge">Explicit confirmation required</span>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="create-investigation-name">Investigation Name</label>
+                        <input id="create-investigation-name" class="form-control" type="text" maxlength="120">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="create-notebook-url">FINAL Datadog Notebook URL</label>
+                        <input id="create-notebook-url" class="form-control" type="url" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="create-investigation-shift">Selected Shift</label>
+                        <input id="create-investigation-shift" class="form-control" type="date" readonly>
+                    </div>
+                    <div class="page-controls investigation-create-controls">
+                        <button id="cancel-create-investigation" class="button" type="button">Cancel</button>
+                        <button id="preview-create-investigation" class="button" type="button">Preview</button>
+                    </div>
+                    <div id="create-investigation-preview" class="investigation-section hidden" aria-live="polite">
+                        <h3>Confirmation preview</h3>
+                        <p id="create-preview-values"></p>
+                        <ul>
+                            <li>Generation path: noc-inv → GitHub Copilot CLI → Datadog MCP.</li>
+                            <li>Datadog remains read-only. No Jira or Datadog data will be modified.</li>
+                            <li>A local investigation record may be created and requires validation and operator review.</li>
+                            <li>Creation requires your separate explicit confirmation.</li>
+                        </ul>
+                        <button id="confirm-create-investigation" class="button" type="button" disabled>
+                            Create Investigation
+                        </button>
+                    </div>
+                </section>
 
 
                 <!-- INVESTIGATION WORKSPACE -->
@@ -226,6 +268,16 @@
                                     <span id="investigation-capture"></span>
                                 </div>
 
+                                <div>
+                                    <label>Generation / validation</label>
+                                    <span id="investigation-generation-status"></span>
+                                </div>
+
+                                <div>
+                                    <label>Review state</label>
+                                    <span id="investigation-review-state"></span>
+                                </div>
+
                             </div>
 
 
@@ -245,6 +297,8 @@
                                 <p id="investigation-status">
                                     AI analysis is advisory and never operational state until reviewed.
                                 </p>
+                                <p id="investigation-validation-issues" class="investigation-warning hidden"></p>
+                                <pre id="investigation-advisory-content" class="investigation-advisory-content hidden"></pre>
                             </section>
 
 
@@ -280,8 +334,10 @@
     <script type="module">
 
         import {
+            createInvestigation,
             getInvestigation,
             getInvestigations,
+            previewInvestigation,
             reviewInvestigation,
             rejectInvestigation
         } from "./js/api.js";
@@ -295,6 +351,16 @@
             document.querySelector(
                 "#investigation-date"
             );
+        const createPanel = document.querySelector("#create-investigation-panel");
+        const showCreateButton = document.querySelector("#show-create-investigation");
+        const cancelCreateButton = document.querySelector("#cancel-create-investigation");
+        const createNameInput = document.querySelector("#create-investigation-name");
+        const notebookUrlInput = document.querySelector("#create-notebook-url");
+        const createShiftInput = document.querySelector("#create-investigation-shift");
+        const previewButton = document.querySelector("#preview-create-investigation");
+        const previewPanel = document.querySelector("#create-investigation-preview");
+        const previewValues = document.querySelector("#create-preview-values");
+        const confirmCreateButton = document.querySelector("#confirm-create-investigation");
         const sourceStates = document.createElement("div");
         sourceStates.id = "investigation-source-states";
         document.querySelector(".page-header").after(sourceStates);
@@ -347,6 +413,16 @@
                 ).padStart(2, "0");
 
             return `${year}-${month}-${day}`;
+        }
+
+        function validationMessage(error) {
+            const labels = {
+                name: "Investigation Name",
+                notebookUrl: "FINAL Datadog Notebook URL",
+                shiftDate: "Selected Shift"
+            };
+            const label = labels[error.field];
+            return label ? `${label}: ${error.message}` : error.message;
         }
 
         function renderInvestigations() {
@@ -418,31 +494,28 @@
                     "investigation-card";
 
 
-                card.innerHTML = `
-        <div class="investigation-card-top">
-
-            <div>
-
-                <div class="investigation-card-title">
-                    ${investigation.title}
-                </div>
-
-                <div class="investigation-card-name">
-                    ${investigation.name}
-                </div>
-
-            </div>
-
-            <span class="ready-outline">
-                READY
-            </span>
-
-        </div>
-
-        <div class="investigation-card-meta">
-            ${investigation.lifecycle.state}
-        </div>
-    `;
+                const cardTop = document.createElement("div");
+                cardTop.className = "investigation-card-top";
+                const cardTitle = document.createElement("div");
+                const title = document.createElement("div");
+                title.className = "investigation-card-title";
+                title.textContent = investigation.title;
+                const name = document.createElement("div");
+                name.className = "investigation-card-name";
+                name.textContent = investigation.name;
+                cardTitle.append(title, name);
+                const status = document.createElement("span");
+                status.className = "ready-outline";
+                status.textContent = investigation.validationStatus === "needs_review"
+                    ? "NEEDS REVIEW"
+                    : investigation.validationStatus === "ready_for_review"
+                        ? "READY FOR REVIEW"
+                        : "READY";
+                cardTop.append(cardTitle, status);
+                const cardMeta = document.createElement("div");
+                cardMeta.className = "investigation-card-meta";
+                cardMeta.textContent = investigation.lifecycle.state;
+                card.append(cardTop, cardMeta);
 
 
                 card.addEventListener(
@@ -478,80 +551,7 @@
                         investigationDate.value,
                         investigationName
                     );
-                selectedInvestigation = investigation;
-
-
-                document
-                    .querySelectorAll(
-                        ".investigation-card"
-                    )
-                    .forEach(
-                        item => {
-
-                            item.classList.remove(
-                                "selected-investigation"
-                            );
-
-                        }
-                    );
-
-
-                card.classList.add(
-                    "selected-investigation"
-                );
-
-
-                emptyState.classList.add(
-                    "hidden"
-                );
-
-                detailContent.classList.remove(
-                    "hidden"
-                );
-
-
-                document.querySelector(
-                    "#investigation-name"
-                ).textContent =
-                    investigation.name;
-
-
-                document.querySelector(
-                    "#investigation-title"
-                ).textContent =
-                    investigation.title;
-
-
-                document.querySelector(
-                    "#investigation-source"
-                ).textContent =
-                    investigation.evidence.provenance || "Unavailable";
-
-
-                document.querySelector(
-                    "#investigation-capture"
-                ).textContent =
-                    `${investigation.evidence.availability} · ${investigation.evidence.access}`;
-
-
-                document.querySelector(
-                    "#investigation-summary"
-                ).textContent =
-                    investigation.evidence.reference || "No source reference is available.";
-
-
-                document.querySelector(
-                    "#investigation-status"
-                ).textContent =
-                    investigation.advisory.label;
-
-
-                document.querySelector(
-                    "#investigation-handover"
-                ).textContent =
-                    investigation.reviewedFinding
-                        ? `${investigation.reviewedFinding.finding} (${investigation.reviewedFinding.state})`
-                        : "No operator-reviewed context has been published.";
+                showInvestigationDetails(investigation, card);
 
             } catch (error) {
 
@@ -561,6 +561,60 @@
                 );
 
             }
+
+        }
+
+        function showInvestigationDetails(investigation, card = null) {
+            selectedInvestigation = investigation;
+
+            document
+                .querySelectorAll(".investigation-card")
+                .forEach(item => item.classList.remove("selected-investigation"));
+            if (card) {
+                card.classList.add("selected-investigation");
+            } else {
+                const matchingCard = [...document.querySelectorAll(".investigation-card")]
+                    .find(item => item.querySelector(".investigation-card-name")?.textContent === investigation.name);
+                matchingCard?.classList.add("selected-investigation");
+            }
+
+            emptyState.classList.add("hidden");
+            detailContent.classList.remove("hidden");
+            document.querySelector("#investigation-name").textContent = investigation.name;
+            document.querySelector("#investigation-title").textContent = investigation.title;
+            document.querySelector("#investigation-source").textContent =
+                investigation.evidence.provenance || "Unavailable";
+            document.querySelector("#investigation-capture").textContent =
+                `${investigation.evidence.availability} · ${investigation.evidence.access}`;
+            document.querySelector("#investigation-generation-status").textContent =
+                investigation.generationStatus
+                    ? `${investigation.generationStatus} · ${investigation.validationStatus}`
+                    : "Existing record";
+            document.querySelector("#investigation-review-state").textContent =
+                investigation.lifecycle.reviewState;
+            document.querySelector("#investigation-summary").textContent =
+                investigation.notebookUrl || investigation.evidence.reference
+                    || "No source reference is available.";
+            document.querySelector("#investigation-status").textContent =
+                investigation.validationStatus === "needs_review"
+                    ? "GENERATED RECORD NEEDS REVIEW. This content is advisory and withheld from handover."
+                    : investigation.validationStatus === "ready_for_review"
+                        ? "READY FOR REVIEW. Generated content remains advisory until you review it."
+                        : investigation.error?.message || investigation.advisory.label;
+            const validationIssues = document.querySelector("#investigation-validation-issues");
+            validationIssues.textContent = investigation.validationIssues?.length
+                ? `Unavailable or invalid sections: ${investigation.validationIssues.join(", ")}`
+                : "";
+            validationIssues.classList.toggle("hidden", !investigation.validationIssues?.length);
+            const advisoryContent = document.querySelector("#investigation-advisory-content");
+            advisoryContent.textContent = investigation.advisory.content || "";
+            advisoryContent.classList.toggle("hidden", !investigation.advisory.content);
+            publishReviewedFinding.disabled =
+                investigation.validationStatus === "needs_review";
+            document.querySelector("#investigation-handover").textContent =
+                investigation.reviewedFinding
+                    ? `${investigation.reviewedFinding.finding} (${investigation.reviewedFinding.state})`
+                    : "No operator-reviewed context has been published.";
 
         }
 
@@ -599,6 +653,7 @@
 
 
                 renderInvestigations();
+                return true;
 
             } catch (error) {
 
@@ -625,6 +680,7 @@
                     kind: "error",
                     message: error.message
                 }]);
+                return false;
 
             }
 
@@ -634,6 +690,141 @@
             "input",
             renderInvestigations
         );
+
+        let pendingPreview = null;
+        function resetCreatePreview() {
+            pendingPreview = null;
+            previewPanel.classList.add("hidden");
+            confirmCreateButton.disabled = true;
+        }
+
+        showCreateButton.addEventListener("click", () => {
+            createShiftInput.value = investigationDate.value;
+            resetCreatePreview();
+            createPanel.classList.remove("hidden");
+            createNameInput.focus();
+        });
+
+        cancelCreateButton.addEventListener("click", () => {
+            createPanel.classList.add("hidden");
+            createNameInput.value = "";
+            notebookUrlInput.value = "";
+            resetCreatePreview();
+        });
+
+        investigationDate.addEventListener("change", () => {
+            createShiftInput.value = investigationDate.value;
+            resetCreatePreview();
+        });
+        createNameInput.addEventListener("input", resetCreatePreview);
+        notebookUrlInput.addEventListener("input", resetCreatePreview);
+
+        previewButton.addEventListener("click", async () => {
+            resetCreatePreview();
+            if (!workflowContext.valid || !investigationDate.value) {
+                renderStatePanel(sourceStates, {
+                    source: "Investigation preview",
+                    kind: "error",
+                    message: "Select a valid shift before previewing."
+                });
+                return;
+            }
+            if (createShiftInput.value !== investigationDate.value) {
+                renderStatePanel(sourceStates, {
+                    source: "Investigation preview",
+                    kind: "error",
+                    message: "The selected shift changed. Review the shift and preview again."
+                });
+                return;
+            }
+            try {
+                pendingPreview = await previewInvestigation(
+                    investigationDate.value,
+                    createNameInput.value,
+                    notebookUrlInput.value
+                );
+                previewValues.textContent =
+                    `Shift: ${pendingPreview.shiftDate}\n`
+                    + `Investigation: ${pendingPreview.displayTitle}\n`
+                    + `Local identifier: ${pendingPreview.normalizedName}\n`
+                    + `FINAL Notebook: ${pendingPreview.notebookUrl}\n`
+                    + `Target: ${pendingPreview.target}`;
+                previewPanel.classList.remove("hidden");
+                confirmCreateButton.disabled = false;
+                renderStatePanel(sourceStates, {
+                    source: "Investigation preview",
+                    kind: "current",
+                    message: "Preview is read-only. No command has run and no record was created."
+                });
+            } catch (error) {
+                renderStatePanel(sourceStates, {
+                    source: "Investigation preview",
+                    kind: "error",
+                    message: validationMessage(error)
+                });
+            }
+        });
+
+        confirmCreateButton.addEventListener("click", async () => {
+            if (!pendingPreview || pendingPreview.shiftDate !== investigationDate.value) {
+                resetCreatePreview();
+                renderStatePanel(sourceStates, {
+                    source: "Create investigation",
+                    kind: "error",
+                    message: "Preview is no longer current. Preview the request again."
+                });
+                return;
+            }
+            const confirmation =
+                "Create this Datadog investigation now?\n\n"
+                + `Shift: ${pendingPreview.shiftDate}\n`
+                + `Investigation: ${pendingPreview.displayTitle}\n`
+                + `Local identifier: ${pendingPreview.normalizedName}\n`
+                + `FINAL Notebook: ${pendingPreview.notebookUrl}\n\n`
+                + "This will run noc-inv using GitHub Copilot CLI and Datadog MCP.\n"
+                + "Datadog remains read-only. A local investigation record may be created.";
+            if (!window.confirm(confirmation)) {
+                return;
+            }
+            confirmCreateButton.disabled = true;
+            try {
+                const created = await createInvestigation(
+                    pendingPreview.shiftDate,
+                    createNameInput.value,
+                    pendingPreview.notebookUrl,
+                    true
+                );
+                createPanel.classList.add("hidden");
+                renderStatePanel(sourceStates, {
+                    source: "Investigation creation",
+                    kind: created.validationStatus === "needs_review" ? "warning" : "current",
+                    message: created.validationStatus === "needs_review"
+                        ? "Record created, but GENERATED RECORD NEEDS REVIEW."
+                        : "Investigation created and is READY FOR REVIEW. It remains unreviewed."
+                });
+                const refreshed = await loadInvestigations();
+                if (!refreshed) {
+                    showInvestigationDetails(created);
+                    renderStatePanel(sourceStates, {
+                        source: "Investigation list refresh",
+                        kind: "error",
+                        message: "Creation succeeded; the list could not be refreshed. The created record is shown."
+                    });
+                } else {
+                    showInvestigationDetails(created);
+                }
+                createNameInput.value = "";
+                notebookUrlInput.value = "";
+                resetCreatePreview();
+            } catch (error) {
+                confirmCreateButton.disabled = false;
+                renderStatePanel(sourceStates, {
+                    source: "Investigation creation",
+                    kind: "error",
+                    message: validationMessage(error)
+                });
+            }
+        });
 
         publishReviewedFinding.addEventListener("click", async () => {
             if (!selectedInvestigation) {
@@ -646,26 +837,6 @@
                     source: "Reviewed context",
                     kind: "error",
                     message: "Enter a concise finding and state before publishing."
-                });
-
-                rejectAdvisory.addEventListener("click", async () => {
-                    if (!selectedInvestigation || !window.confirm(
-                        "Reject this advisory in local NOC context?\n\n"
-                        + "This does not modify evidence, Datadog, or Jira."
-                    )) {
-                        return;
-                    }
-                    try {
-                        selectedInvestigation = await rejectInvestigation(
-                            investigationDate.value, selectedInvestigation.name, true
-                        );
-                        document.querySelector("#investigation-status").textContent =
-                            "The advisory was rejected and is not operational context.";
-                    } catch (error) {
-                        renderStatePanel(sourceStates, {
-                            source: "Reviewed context", kind: "error", message: error.message
-                        });
-                    }
                 });
                 return;
             }
@@ -700,6 +871,31 @@
             }
         });
 
+        rejectAdvisory.addEventListener("click", async () => {
+            if (!selectedInvestigation || !window.confirm(
+                "Reject this advisory in local NOC context?\n\n"
+                + "This does not modify evidence, Datadog, or Jira."
+            )) {
+                return;
+            }
+            try {
+                const rejected = await rejectInvestigation(
+                    investigationDate.value, selectedInvestigation.name, true
+                );
+                showInvestigationDetails(rejected);
+                renderStatePanel(sourceStates, {
+                    source: "Reviewed context",
+                    kind: "current",
+                    message: "The advisory was rejected and is not operational context."
+                });
+            } catch (error) {
+                renderStatePanel(sourceStates, {
+                    source: "Reviewed context",
+                    kind: "error",
+                    message: error.message
+                });
+            }
+        });
 
         investigationDate.addEventListener(
             "change",

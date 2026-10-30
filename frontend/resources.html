@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SES NOC Operations - Resources</title>
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-name">SESAMI</div>
+                <div class="brand-subtitle">NOC OPERATIONS</div>
+            </div>
+            <nav class="nav" aria-label="Main navigation">
+                <a class="nav-item" href="index.html">Dashboard</a>
+                <a class="nav-item" href="shift-notes.html">Shift Notes</a>
+                <a class="nav-item" href="tickets.html">Tickets</a>
+                <a class="nav-item" href="investigations.html">Investigations</a>
+                <a class="nav-item ai" href="ai-actions.html">AI Actions</a>
+                <a class="nav-item" href="assistant.html">Assistant</a>
+                <a class="nav-item active" href="resources.html" aria-current="page">Resources</a>
+                <div class="nav-divider"></div>
+                <a class="nav-item" href="start-shift.html">Start Shift</a>
+                <a class="nav-item" href="status.html">Status</a>
+                <a class="nav-item" href="health.html">Health</a>
+                <a class="nav-item" href="end-shift.html">End Shift</a>
+            </nav>
+            <div class="sidebar-bottom">
+                <div class="nav-item">Settings</div>
+                <div class="version">noc-web v0.1.0</div>
+            </div>
+        </aside>
+
+        <main class="main">
+            <header class="topbar">
+                <div class="ai-page-label">NOC RESOURCE DIRECTORY</div>
+                <div class="profile">
+                    <div class="avatar">BS</div>
+                    <div>
+                        <div class="profile-name">NOC Engineer</div>
+                        <div class="profile-subtitle">Local Workstation</div>
+                    </div>
+                </div>
+            </header>
+
+            <section class="content">
+                <div class="page-header">
+                    <div>
+                        <h1>NOC Resources</h1>
+                        <p>Operator-controlled shortcuts to SES environments, support, documentation, and observability.</p>
+                    </div>
+                    <span class="ai-badge">EXTERNAL LINKS</span>
+                </div>
+
+                <div class="workflow-bar resource-navigation-note" role="note">
+                    <span class="workflow-read-only">
+                        Links open in a new tab. No shift, ticket, or other noc-web context is sent to external sites.
+                    </span>
+                </div>
+
+                <div id="resource-groups" class="resource-groups"></div>
+            </section>
+        </main>
+    </div>
+
+    <script type="module">
+        import { RESOURCE_GROUPS } from "./js/resources.js";
+        import { preserveSelectedShiftNavigation } from "./js/workflow-context.js";
+
+        preserveSelectedShiftNavigation();
+
+        const container = document.querySelector("#resource-groups");
+
+        RESOURCE_GROUPS.forEach(group => {
+            const section = document.createElement("details");
+            section.className = "panel resource-group";
+            section.open = true;
+
+            const header = document.createElement("summary");
+            header.className = "panel-header resource-group-summary";
+            const title = document.createElement("h2");
+            title.textContent = group.title;
+            header.append(title);
+
+            const grid = document.createElement("div");
+            grid.className = "resource-grid";
+            group.resources.forEach(resource => {
+                const link = document.createElement("a");
+                link.className = `resource-card${resource.environment === "demo" ? " resource-card-demo" : ""}`;
+                link.href = resource.url;
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+
+                const details = document.createElement("span");
+                details.className = "resource-card-details";
+                const name = document.createElement("strong");
+                name.textContent = resource.name;
+                const type = document.createElement("span");
+                type.className = "resource-environment-label";
+                type.textContent = resource.environment === "demo"
+                    ? "DEMO · NON-PRODUCTION"
+                    : group.title === "SES ENVIRONMENTS"
+                        ? "PRODUCTION"
+                        : "EXTERNAL RESOURCE";
+                details.append(name, type);
+
+                const indicator = document.createElement("span");
+                indicator.className = "resource-external-indicator";
+                indicator.setAttribute("aria-label", "opens in a new tab");
+                indicator.textContent = "↗";
+                link.append(details, indicator);
+                grid.append(link);
+            });
+
+            section.append(header, grid);
+            container.append(section);
+        });
+    </script>
+</body>
+</html>

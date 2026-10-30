@@ -1,13 +1,12 @@
 import json
 
 from backend.config import NOC_ROOT
-
 from backend.services.jira_ticket_queue import (
     get_jira_ticket_queue,
 )
 from backend.services.jira_cache import get_jira_cache_health
 from backend.services.tickets import get_operational_work_summary
-from backend.services.investigations import get_reviewed_findings
+from backend.services.investigations import get_noc_root, get_reviewed_findings
 
 
 CLOSED_JIRA_STATUSES = {
@@ -19,7 +18,8 @@ CLOSED_JIRA_STATUSES = {
 
 def get_dashboard(shift_date: str) -> dict:
 
-    shift_dir = NOC_ROOT / shift_date
+    noc_root = get_noc_root()
+    shift_dir = noc_root / shift_date
 
     jira_queue = get_jira_ticket_queue()
 
@@ -29,7 +29,7 @@ def get_dashboard(shift_date: str) -> dict:
     )
 
     ticket_dir = (
-        NOC_ROOT
+        noc_root
         / "tickets"
         / "open"
     )

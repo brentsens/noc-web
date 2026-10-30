@@ -89,6 +89,30 @@ def test_context_is_selected_shift_only_and_safe(noc_root):
     assert all("noc-inv.log" not in item.get("summary", {}) for item in evidence)
 
 
+def test_generated_needs_review_content_is_excluded_from_assistant_context(noc_root):
+    _write_context(noc_root)
+    investigation = noc_root / SHIFT / "investigations" / "memory"
+    (investigation / "investigation.md").write_text(
+        (investigation / "investigation.md").read_text(encoding="utf-8")
+        + "\n## Summary\nRAW_NOTEBOOK_SECRET must not be sent to the Assistant.\n",
+        encoding="utf-8",
+    )
+    (investigation / "generation-status.json").write_text(json.dumps({
+        "generationStatus": "completed",
+        "validationStatus": "needs_review",
+        "shiftDate": SHIFT,
+        "name": "memory",
+        "notebookUrl": "https://app.datadoghq.com/notebook/123/example",
+        "provenance": "noc-inv",
+    }), encoding="utf-8")
+
+    evidence = {item["id"]: item for item in assistant_context.collect_context(SHIFT)}
+
+    assert evidence["reviewed-findings"]["summary"] == []
+    assert evidence["investigation:memory"]["summary"]["reviewState"] == "unreviewed"
+    assert "RAW_NOTEBOOK_SECRET" not in json.dumps(evidence)
+
+
 def test_context_includes_read_only_operational_sources_and_keeps_jira_fields_separate(
     noc_root,
     monkeypatch,
@@ -231,9 +255,132 @@ def test_empty_selected_shift_context_is_limited_without_provider(noc_root, monk
     monkeypatch.setattr(assistant, "ask_copilot", lambda envelope: pytest.fail("provider called"))
     response = assistant.answer(AssistantQuestion(SHIFT, "What requires attention?", True))
     assert response["status"] == "limited"
-    assert "insufficient" in response["limitations"][-1]
+    assert "sufficient" in response["limitations"][-1]
     assert response["providerInvoked"] is False
-    assert response["providerStatus"] == "unavailable"
+    assert response["providerStatus"] == "not-invoked"
+
+
+def test_missing_selected_shift_notes_never_falls_back_to_another_shift(
+    noc_root,
+    monkeypatch,
+):
+    _write_context(noc_root)
+    evidence = {
+        item["id"]: item
+        for item in assistant_context.collect_context("2026-10-30")
+    }
+
+    assert evidence["shift-notes"]["availability"] == "unavailable"
+    assert evidence["shift-notes"]["summary"]["activity"] == []
+    assert "Checked service" not in json.dumps(evidence)
+
+
+def test_timeline_question_without_selected_shift_activity_does_not_invoke_provider(
+    noc_root,
+):
+    _write_context(noc_root)
+    question = AssistantQuestion(
+        "2026-10-30",
+        "What was the last action taken today?",
+        True,
+    )
+    response = assistant.answer(
+        question,
+        provider=lambda envelope: pytest.fail("provider called without timeline evidence"),
+    )
+
+    assert response["status"] == "limited"
+    assert response["provider"] == "github-copilot-cli"
+    assert response["providerInvoked"] is False
+    assert response["providerStatus"] == "not-invoked"
+    message = (
+        "No recorded shift activity is available for 10/30/2026 yet. "
+        "The selected shift has not been initialized and Shift Notes are unavailable. "
+        "The last action taken for that shift cannot be determined from the bounded context."
+    )
+    assert message in response["limitations"]
+    assert message in [item["text"] for item in response["facts"]]
+    assert "Checked service" not in json.dumps(response)
+
+
+def test_ticket_question_uses_partial_context_and_labels_stale_jira(
+    noc_root,
+    monkeypatch,
+):
+    _write_context(noc_root)
+    _write_jira_cache(
+        noc_root,
+        (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
+    )
+    captured = {}
+
+    def provider(envelope):
+        captured.update(envelope)
+        return {
+            "aiObservations": [{
+                "text": (
+                    "NOC-1 has no recorded Next Action in local tracking; "
+                    "the stale Jira cache may not reflect its current status."
+                ),
+                "evidenceIds": ["local-work", "jira-cache"],
+            }],
+            "recommendations": [],
+        }
+
+    response = assistant.answer(
+        AssistantQuestion(
+            "2026-10-30",
+            "Which tracked tickets need attention?",
+            True,
+        ),
+        provider=provider,
+    )
+
+    evidence = {item["id"]: item for item in response["evidence"]}
+    provider_evidence = {item["id"]: item for item in captured["evidence"]}
+    assert response["status"] == "complete"
+    assert response["providerInvoked"] is True
+    assert response["providerStatus"] == "success"
+    assert evidence["shift-notes"]["availability"] == "unavailable"
+    assert evidence["jira-cache"]["availability"] == "stale"
+    assert evidence["jira-cache"]["freshness"] == "stale"
+    assert provider_evidence["jira-cache"]["availability"] == "stale"
+    assert provider_evidence["jira-cache"]["summary"]["tickets"]
+    assert any("stale Jira cache" in fact["text"] for fact in response["facts"])
+    assert all(
+        "current Jira cache" not in fact["text"]
+        for fact in response["facts"]
+        if "Jira" in fact["text"]
+    )
+
+
+def test_stale_jira_claim_without_stale_qualification_is_rejected(
+    noc_root,
+    monkeypatch,
+):
+    _write_context(noc_root)
+    _write_jira_cache(
+        noc_root,
+        (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
+    )
+    monkeypatch.setattr(assistant, "ask_copilot", lambda envelope: {
+        "aiObservations": [{
+            "text": "NOC-1 is currently open.",
+            "evidenceIds": ["jira-cache"],
+        }],
+        "recommendations": [],
+    })
+
+    response = assistant.answer(AssistantQuestion(
+        SHIFT,
+        "Which tracked tickets need attention?",
+        True,
+    ))
+
+    assert response["status"] == "unavailable"
+    assert response["providerInvoked"] is True
+    assert response["providerStatus"] == "invalid"
+    assert response["aiObservations"] == []
 
 
 def test_individual_source_failure_preserves_available_sources(noc_root, monkeypatch):
@@ -267,7 +414,7 @@ def test_prohibited_requests_are_refused_without_provider(monkeypatch, operator_
     assert response["facts"] == []
     assert "Nothing was changed." in response["limitations"][0]
     assert response["providerInvoked"] is False
-    assert response["providerStatus"] == "unavailable"
+    assert response["providerStatus"] == "not-invoked"
 
 
 def test_reviewed_datadog_findings_question_uses_existing_investigation_projection(

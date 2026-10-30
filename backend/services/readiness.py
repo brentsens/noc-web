@@ -14,7 +14,8 @@ COMMAND_CATALOG = (
     ("tix", ("--help",)),
     ("noc-start", ("--help",)),
     ("noc-status", ("--help",)),
-    ("noc-inv", ("--help",)),
+    ("noc-inv", ("--contract-version",)),
+    ("copilot", ("--version",)),
     ("noc-handover", ("--help",)),
 )
 
@@ -170,29 +171,44 @@ def _command_checks(profile: ConfigurationProfile) -> list[ReadinessCheck]:
             ))
             continue
         try:
+            expected_output = (
+                "noc-inv-contract=1" if command == "noc-inv" else None
+            )
             result = subprocess.run(
                 [str(executable), *arguments], shell=False, timeout=profile.command_timeout_seconds,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+                stdout=subprocess.PIPE if expected_output else subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, check=False, text=True,
             )
-            status = "ready" if result.returncode == 0 else "notReady"
+            status = (
+                "ready"
+                if result.returncode == 0
+                and (
+                    expected_output is None
+                    or result.stdout.strip() == expected_output
+                )
+                else "notReady"
+            )
         except (OSError, subprocess.TimeoutExpired):
             status = "notReady"
         checks.append(_check(
             identifier, "command", status, f"{command} command",
             "The required command completed safely." if status == "ready" else
             "A required operational command cannot complete safely.",
-            "No action required." if status == "ready" else
-            "Install or restore the documented command and run readiness again.",
+            "No action required." if status == "ready" else (
+                "Install the compatible noc-inv contract and run readiness again."
+                if command == "noc-inv" else
+                "Install or restore the documented command and run readiness again."
+            ),
         ))
     return checks
 
 
-def _write_check(profile: ConfigurationProfile) -> ReadinessCheck:
+def _write_probe(directory: Path) -> bool:
     probe_file: Path | None = None
     created = False
     failed = False
     try:
-        probe_file = profile.probe_directory / f".readiness-{uuid.uuid4().hex}"
+        probe_file = directory / f".readiness-{uuid.uuid4().hex}"
         descriptor = os.open(probe_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         created = True
         with os.fdopen(descriptor, "wb") as stream:
@@ -210,7 +226,11 @@ def _write_check(profile: ConfigurationProfile) -> ReadinessCheck:
                 probe_file.unlink()
             except OSError:
                 failed = True
-    if failed:
+    return not failed
+
+
+def _write_check(profile: ConfigurationProfile) -> ReadinessCheck:
+    if not _write_probe(profile.probe_directory):
         return _check(
             "writeCapability.probe", "writeCapability", "notReady",
             "Approved destination write capability",
@@ -221,6 +241,22 @@ def _write_check(profile: ConfigurationProfile) -> ReadinessCheck:
         "writeCapability.probe", "writeCapability", "ready",
         "Approved destination write capability",
         "The approved destination accepted non-destructive write evidence.",
+        "No action required.",
+    )
+
+
+def _investigation_storage_check(profile: ConfigurationProfile) -> ReadinessCheck:
+    if not _write_probe(profile.noc_root):
+        return _check(
+            "investigationStorage.path", "investigationStorage", "notReady",
+            "Investigation record storage",
+            "The configured investigation storage cannot safely accept a local record.",
+            "Restore access or capacity for the configured NOC storage path.",
+        )
+    return _check(
+        "investigationStorage.path", "investigationStorage", "ready",
+        "Investigation record storage",
+        "The configured investigation storage accepted a non-destructive write probe.",
         "No action required.",
     )
 
@@ -262,6 +298,7 @@ def assess_readiness(profile: ConfigurationProfile, shift_date: str) -> dict:
         checks.append(_cache_check(profile, policy.source_id, policy.maximum_age_seconds))
     checks.extend(_command_checks(profile))
     checks.append(_write_check(profile))
+    checks.append(_investigation_storage_check(profile))
     return {
         "assessedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "shiftDate": shift_date,

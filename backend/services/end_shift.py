@@ -5,14 +5,14 @@ from backend.services.ticket_sync import (
     get_ticket_sync_state,
 )
 from backend.services.tickets import get_operational_work_summary
-from backend.services.investigations import get_reviewed_findings
+from backend.services.investigations import get_noc_root, get_reviewed_findings
 
 
 def get_end_shift_preflight(
     shift_date: str,
 ) -> dict:
 
-    shift_dir = NOC_ROOT / shift_date
+    shift_dir = get_noc_root() / shift_date
 
     notes_file = (
         shift_dir / "shift-notes.md"
@@ -59,6 +59,10 @@ def get_end_shift_preflight(
     review_count = (
         status["needsReview"]["count"]
     )
+    investigation_review_count = status.get("investigations", {}).get(
+        "needsReview", 0
+    )
+    ticket_review_count = max(0, review_count - investigation_review_count)
 
     health_failed = (
         health["result"]["failed"]
@@ -155,13 +159,15 @@ def get_end_shift_preflight(
             "open": (
                 status["openTickets"]["count"]
             ),
-            "needsReview": review_count,
+            "needsReview": ticket_review_count,
         },
 
         "investigations": {
             "count": (
                 status["investigations"]["count"]
             ),
+            "needsReview": investigation_review_count,
+            "needsReviewItems": status["investigations"].get("needsReviewItems", []),
         },
 
         "health": {

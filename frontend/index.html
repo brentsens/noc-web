@@ -45,6 +45,10 @@
                     AI Actions
                 </a>
 
+                <a class="nav-item" href="resources.html">
+                    Resources
+                </a>
+
                 <div class="nav-divider"></div>
 
                 <a class="nav-item" href="start-shift.html">
@@ -218,7 +222,7 @@
                 </section>
 
 
-                <section class="lower-grid">
+                <section class="lower-grid dashboard-actions-grid">
 
                     <article class="panel">
 
@@ -289,6 +293,24 @@
 
                     </article>
 
+                    <article class="panel">
+                        <div class="panel-header">
+                            <h2>Quick Links</h2>
+                        </div>
+                        <nav
+                            id="dashboard-quick-links"
+                            class="dashboard-quick-links"
+                            aria-label="External resource quick links"
+                        ></nav>
+                        <a
+                            id="resources-directory-link"
+                            class="dashboard-resources-link"
+                            href="resources.html"
+                        >
+                            Full Resources Directory
+                        </a>
+                    </article>
+
                 </section>
 
 
@@ -331,6 +353,35 @@
             getShiftNotes
         } from "./js/api.js";
         import { initializeWorkflow, renderStatePanel, renderStatePanels } from "./js/workflow-context.js";
+        import { RESOURCE_GROUPS } from "./js/resources.js";
+
+        const dashboardQuickLinks =
+            document.querySelector("#dashboard-quick-links");
+        const quickLinkResources =
+            RESOURCE_GROUPS.flatMap(group => group.resources)
+                .filter(resource => resource.dashboardQuickLink);
+
+        quickLinkResources.forEach(resource => {
+            const link = document.createElement("a");
+            link.className = "dashboard-resource-link";
+            link.href = resource.url;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.setAttribute(
+                "aria-label",
+                `${resource.name}, opens in a new tab`
+            );
+
+            const name = document.createElement("span");
+            name.textContent = resource.name;
+            const indicator = document.createElement("span");
+            indicator.className = "resource-external-indicator";
+            indicator.setAttribute("aria-hidden", "true");
+            indicator.textContent = "↗";
+
+            link.append(name, indicator);
+            dashboardQuickLinks.appendChild(link);
+        });
 
         const dashboardDate =
             document.querySelector(

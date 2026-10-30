@@ -58,11 +58,18 @@ def run_assistant_action(
         or response.get("shiftDate") != validated_shift
         or response.get("provider") != "github-copilot-cli"
         or response.get("providerStatus")
-        not in {"success", "unavailable", "timeout", "invalid"}
+        not in {"success", "unavailable", "timeout", "invalid", "not-invoked"}
         or response.get("status") not in {"complete", "limited", "unavailable"}
         or not isinstance(response.get("providerInvoked"), bool)
         or (response.get("providerStatus") == "success")
         is not (response.get("status") == "complete")
+        or (
+            response.get("providerStatus") == "not-invoked"
+            and (
+                response.get("providerInvoked") is not False
+                or response.get("status") != "limited"
+            )
+        )
         or (
             response.get("providerStatus") in {"timeout", "invalid"}
             and response.get("providerInvoked") is not True

@@ -67,7 +67,23 @@ SUPPORTED_CONTEXT_PATTERN = re.compile(
     r"\b(?:noc|shift|ticket|jira|tracking|next action|investigation|investigations|"
     r"reviewed|finding|findings|datadog|handover|status|dashboard|readiness|warning|"
     r"notes|focus|priority|priorities|attention|operational|work|carry over|changed|"
-    r"source|context|assistant|unavailable|error)\b",
+    r"source|context|assistant|unavailable|error|activity|action|today|yesterday|"
+    r"timeline|chronology|latest|recent|last)\b",
+    re.IGNORECASE,
+)
+TIMELINE_QUESTION_PATTERN = re.compile(
+    r"\b(?:last (?:recorded )?(?:action|activity)|latest (?:recorded )?(?:action|activity)|"
+    r"most recent (?:action|activity)|what happened (?:today|this shift)|"
+    r"what did .{1,40} (?:do|happen) (?:today|this shift)|when did|when was|"
+    r"timeline|chronology|shift activity)\b",
+    re.IGNORECASE,
+)
+TRACKED_TICKET_QUESTION_PATTERN = re.compile(
+    r"\b(?:tracked tickets?|local(?:ly)? tracked|ticket(?:s)? need attention)\b",
+    re.IGNORECASE,
+)
+STALE_EVIDENCE_QUALIFIER_PATTERN = re.compile(
+    r"\bstale\b|\b(?:as of|at) (?:the )?last refresh\b",
     re.IGNORECASE,
 )
 ROUTES = {
@@ -128,7 +144,7 @@ def _response(
     ai_observations: list[dict[str, Any]] | None = None,
     recommendations: list[dict[str, Any]] | None = None,
     provider_invoked: bool = False,
-    provider_status: str = "unavailable",
+    provider_status: str = "not-invoked",
 ) -> dict[str, Any]:
     return {
         "shiftDate": shift_date,
@@ -203,6 +219,14 @@ def _validate_provider_result(
     )
     if observations is None or recommendations is None:
         return None
+    evidence_by_id = {item["id"]: item for item in available_evidence}
+    for item in observations + recommendations:
+        cites_stale_evidence = any(
+            evidence_by_id[identifier].get("availability") == "stale"
+            for identifier in item["evidenceIds"]
+        )
+        if cites_stale_evidence and not STALE_EVIDENCE_QUALIFIER_PATTERN.search(item["text"]):
+            return None
     for recommendation in recommendations:
         route = _route(recommendation.get("route"), shift_date)
         if route is None:
@@ -225,22 +249,41 @@ def _validate_provider_result(
 def _source_facts(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     facts = []
     for item in evidence:
-        if item.get("availability") != "available":
+        availability = item.get("availability")
+        if availability != "available" and not (
+            item.get("kind") == "jira-cache" and availability == "stale"
+        ):
             continue
         identifier = item["id"]
         summary = item.get("summary")
         if item["kind"] == "jira-cache" and isinstance(summary, dict):
             tickets = summary.get("tickets", [])
-            facts.append({
-                "text": f"The current Jira cache contains {len(tickets)} open ticket(s).",
-                "evidenceIds": [identifier],
-            })
+            stale = availability == "stale" or item.get("freshness") == "stale"
+            if stale:
+                facts.append({
+                    "text": (
+                        f"The stale Jira cache contains {len(tickets)} open ticket(s) "
+                        "and may not reflect current Jira state."
+                    ),
+                    "evidenceIds": [identifier],
+                })
+            else:
+                facts.append({
+                    "text": f"The current Jira cache contains {len(tickets)} open ticket(s).",
+                    "evidenceIds": [identifier],
+                })
             for ticket in tickets:
                 jira = ticket["jira"]
                 facts.append({
                     "text": (
-                        f"{jira['id']} is {jira['status']} with priority "
-                        f"{jira['priority']}."
+                        (
+                            f"At the time of the stale cache, {jira['id']} had status "
+                            f"{jira['status']} and priority {jira['priority']}."
+                            if stale
+                            else
+                            f"{jira['id']} is {jira['status']} with priority "
+                            f"{jira['priority']}."
+                        )
                     ),
                     "evidenceIds": [identifier],
                 })
@@ -280,11 +323,15 @@ def _source_facts(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _has_substantive_context(evidence: list[dict[str, Any]]) -> bool:
     for item in evidence:
-        if item.get("availability") != "available":
+        availability = item.get("availability")
+        if availability not in {"available", "stale"}:
             continue
         summary = item.get("summary")
         if item["kind"] == "jira-cache":
-            return True
+            if availability == "available" or (
+                isinstance(summary, dict) and summary.get("tickets")
+            ):
+                return True
         if item["kind"] == "local-work" and summary:
             return True
         if item["kind"] == "shift-notes" and summary and summary.get("activity"):
@@ -300,6 +347,134 @@ def _has_substantive_context(evidence: list[dict[str, Any]]) -> bool:
         if item["kind"] == "status" and summary and summary.get("needsReview", {}).get("count", 0) > 0:
             return True
     return False
+
+
+def _has_question_sufficient_context(
+    question: str,
+    evidence: list[dict[str, Any]],
+) -> bool:
+    if TIMELINE_QUESTION_PATTERN.search(question):
+        return any(
+            item.get("kind") == "shift-notes"
+            and item.get("availability") == "available"
+            and isinstance(item.get("summary"), dict)
+            and item["summary"].get("activity")
+            for item in evidence
+        )
+
+    if TRACKED_TICKET_QUESTION_PATTERN.search(question):
+        local_work_available = any(
+            item.get("kind") == "local-work"
+            and item.get("availability") == "available"
+            and isinstance(item.get("summary"), list)
+            and item["summary"]
+            for item in evidence
+        )
+        jira_has_tracked_tickets = any(
+            item.get("kind") == "jira-cache"
+            and item.get("availability") in {"available", "stale"}
+            and isinstance(item.get("summary"), dict)
+            and any(
+                ticket.get("localTracking", {}).get("tracked") is True
+                for ticket in item["summary"].get("tickets", [])
+                if isinstance(ticket, dict)
+                and isinstance(ticket.get("localTracking"), dict)
+            )
+            for item in evidence
+        )
+        return local_work_available or jira_has_tracked_tickets
+
+    return _has_substantive_context(evidence)
+
+
+def _selected_shift_not_initialized(evidence: list[dict[str, Any]]) -> bool:
+    status = next(
+        (
+            item.get("summary")
+            for item in evidence
+            if item.get("id") == "status"
+            and item.get("availability") == "available"
+        ),
+        None,
+    )
+    if not isinstance(status, dict):
+        return False
+    shift = status.get("shift", {})
+    return (
+        isinstance(shift, dict)
+        and not shift.get("directoryExists", True)
+        and not shift.get("notesAvailable", True)
+    )
+
+
+def _activity_gap_message(shift_date: str, evidence: list[dict[str, Any]]) -> str:
+    parsed_date = date.fromisoformat(shift_date)
+    date_label = f"{parsed_date.month}/{parsed_date.day}/{parsed_date.year}"
+    if _selected_shift_not_initialized(evidence):
+        notes_reason = "The selected shift has not been initialized and Shift Notes are unavailable."
+    elif any(
+        item.get("id") == "shift-notes"
+        and item.get("availability") == "available"
+        and isinstance(item.get("summary"), dict)
+        and not item["summary"].get("activity")
+        for item in evidence
+    ):
+        notes_reason = "Shift Notes contain no recorded activity for the selected shift."
+    else:
+        notes_reason = "Shift Notes are not available for the selected shift."
+    return (
+        f"No recorded shift activity is available for {date_label} yet. "
+        f"{notes_reason} The last action taken for that shift cannot be determined "
+        "from the bounded context."
+    )
+
+
+def _insufficient_context_reason(
+    shift_date: str,
+    question: str,
+    evidence: list[dict[str, Any]],
+) -> str:
+    if TIMELINE_QUESTION_PATTERN.search(question):
+        return _activity_gap_message(shift_date, evidence)
+    if _selected_shift_not_initialized(evidence):
+        return (
+            "The selected shift has not been initialized and Shift Notes are unavailable. "
+            "Available sources do not contain evidence sufficient to answer this question; "
+            "the provider was not invoked."
+        )
+    return (
+        "Available selected-shift context is insufficient to answer this question; "
+        "the provider was not invoked."
+    )
+
+
+def _activity_gap_fact(
+    shift_date: str,
+    evidence: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    source = next(
+        (
+            item for item in evidence
+            if item.get("id") == "shift-notes"
+            and item.get("availability") == "available"
+        ),
+        None,
+    )
+    if source is None:
+        source = next(
+            (
+                item for item in evidence
+                if item.get("id") == "status"
+                and item.get("availability") == "available"
+            ),
+            None,
+        )
+    if source is None:
+        return []
+    return [{
+        "text": _activity_gap_message(shift_date, evidence),
+        "evidenceIds": [source["id"]],
+    }]
 
 
 def _reviewed_findings(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -374,17 +549,28 @@ def answer(
         facts = _source_facts(context)
         reviewed_findings = _reviewed_findings(context)
         limitations = _limitation_messages(context)
-        available_evidence = [
+        provider_evidence = [
             item for item in context
-            if item.get("availability") == "available"
+            if item.get("availability") in {"available", "stale"}
         ]
-        available_ids = {item["id"] for item in available_evidence}
-        if not available_ids or not _has_substantive_context(context):
+        available_ids = {item["id"] for item in provider_evidence}
+        if not available_ids or not _has_question_sufficient_context(
+            question.question,
+            context,
+        ):
+            if TIMELINE_QUESTION_PATTERN.search(question.question):
+                facts.extend(_activity_gap_fact(question.shift_date, context))
             return _response(
                 question.shift_date,
                 "limited",
                 context,
-                limitations + ["Available selected-shift context is insufficient to answer this question."],
+                limitations + [
+                    _insufficient_context_reason(
+                        question.shift_date,
+                        question.question,
+                        context,
+                    )
+                ],
                 facts=facts,
                 reviewed_findings=reviewed_findings,
             )
@@ -392,13 +578,12 @@ def answer(
         envelope = {
             "shiftDate": question.shift_date,
             "question": question.question,
-            "evidence": [
-                item for item in context
-                if item.get("availability") == "available"
-            ],
+            "evidence": provider_evidence,
             "policy": (
                 "Read-only advisory analysis. Return only aiObservations and recommendations. "
-                "Use only available evidence IDs. Do not claim facts, create reviewed findings, "
+                "Use only evidence IDs whose availability is available or stale. Clearly label "
+                "stale evidence and never claim it represents current state. Do not claim facts, "
+                "create reviewed findings, "
                 "perform actions, use tools, execute commands, query external systems, or refresh data."
             ),
         }
@@ -446,7 +631,7 @@ def answer(
             provider_result,
             available_ids,
             question.shift_date,
-            available_evidence,
+            provider_evidence,
         )
         if validated is None:
             return _response(

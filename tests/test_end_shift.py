@@ -14,6 +14,42 @@ def test_handover_api_requires_explicit_confirmation_before_preflight(noc_root):
     assert response.status_code == 422
 
 
+def test_generated_investigation_awaiting_review_blocks_end_shift(noc_root, monkeypatch):
+    create_workspace(noc_root)
+    mock_dependencies(monkeypatch, review_count=1)
+    monkeypatch.setattr(
+        end_shift,
+        "get_status",
+        lambda shift: {
+            "openTickets": {"count": 0},
+            "needsReview": {
+                "count": 1,
+                "items": [{
+                    "id": "investigation:checkout-latency",
+                    "reason": "Generated investigation is awaiting operator review.",
+                }],
+            },
+            "investigations": {
+                "count": 1,
+                "needsReview": 1,
+                "needsReviewItems": [{
+                    "id": "investigation:checkout-latency",
+                    "reason": "Generated investigation is awaiting operator review.",
+                }],
+            },
+        },
+    )
+
+    result = end_shift.get_end_shift_preflight(SHIFT_DATE)
+
+    assert result["ready"] is False
+    assert result["tickets"]["needsReview"] == 0
+    assert result["investigations"]["needsReview"] == 1
+    assert result["investigations"]["needsReviewItems"][0]["id"] == (
+        "investigation:checkout-latency"
+    )
+
+
 def create_workspace(
     noc_root,
     handover=False,

@@ -24,6 +24,25 @@ function localToday() {
     return new Date(now.getTime() - offset).toISOString().slice(0, 10);
 }
 
+export function preserveSelectedShiftNavigation(shift) {
+    const selectedShift = shift ?? new URL(window.location.href).searchParams.get("shift");
+    if (!isIsoDate(selectedShift)) {
+        return;
+    }
+
+    const navigableFiles = new Set([
+        ...STEPS.map(([, , file]) => file),
+        "resources.html"
+    ]);
+    document.querySelectorAll("a[href]").forEach(link => {
+        const href = link.getAttribute("href");
+        const file = href?.split(/[?#]/, 1)[0];
+        if (file && navigableFiles.has(file)) {
+            link.href = workflowLink(file, selectedShift);
+        }
+    });
+}
+
 export function getWorkflowContext({ requireExplicitShift = false } = {}) {
     const url = new URL(window.location.href);
     const supplied = url.searchParams.get("shift");
@@ -102,11 +121,12 @@ export function initializeWorkflow({ step, dateInput, onInvalid, requireExplicit
     }).join("");
     bar.innerHTML = `<span class="workflow-context">Shift ${context.shift}</span>${links}${next ? `<a class="workflow-next" href="${workflowLink(next[2], context.shift)}">Next: ${next[1]} →</a>` : ""}<span class="workflow-read-only">Inspection is read-only</span>`;
     content?.prepend(bar);
+    preserveSelectedShiftNavigation(context.shift);
     const workflowFiles = new Set(STEPS.map(([, , file]) => file));
     document.querySelectorAll("a[href]").forEach(link => {
         const href = link.getAttribute("href");
-        if (workflowFiles.has(href)) {
-            link.href = workflowLink(href, context.shift);
+        const file = href?.split(/[?#]/, 1)[0];
+        if (file && workflowFiles.has(file)) {
             if (link.closest(".sidebar")) {
                 link.classList.add("workflow-nav-redundant");
             }

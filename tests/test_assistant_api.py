@@ -19,7 +19,7 @@ def _response():
         "limitations": ["Available selected-shift context is insufficient."],
         "provider": "github-copilot-cli",
         "providerInvoked": False,
-        "providerStatus": "unavailable",
+        "providerStatus": "not-invoked",
     }
 
 
@@ -35,7 +35,7 @@ def test_question_route_validates_shift_body_and_disclosure(monkeypatch):
     assert "reviewed" not in response.json()
     assert response.json()["provider"] == "github-copilot-cli"
     assert response.json()["providerInvoked"] is False
-    assert response.json()["providerStatus"] == "unavailable"
+    assert response.json()["providerStatus"] == "not-invoked"
     assert client.post("/api/shifts/nope/assistant/questions", json={
         "shiftDate": "nope", "question": "test", "providerDisclosureAcknowledged": True,
     }).status_code == 400
@@ -64,6 +64,35 @@ def test_refusal_does_not_invoke_provider_or_action_endpoint(monkeypatch):
     assert body["status"] == "limited"
     assert body["facts"] == []
     assert "Nothing was changed." in body["limitations"][0]
+
+
+def test_predefined_action_accepts_not_invoked_insufficient_context(monkeypatch):
+    client = TestClient(app)
+    monkeypatch.setattr(app.state, "assistant_provider", None)
+    monkeypatch.setattr("backend.api.assistant.answer", lambda question: {
+        "shiftDate": SHIFT,
+        "status": "limited",
+        "provider": "github-copilot-cli",
+        "providerInvoked": False,
+        "providerStatus": "not-invoked",
+        "facts": [],
+        "reviewedFindings": [],
+        "aiObservations": [],
+        "recommendations": [],
+        "evidence": [],
+        "limitations": ["The selected shift has not been initialized."],
+    })
+
+    response = client.post(
+        f"/api/shifts/{SHIFT}/assistant/actions/summary",
+        json={"providerDisclosureAcknowledged": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["assistant"]["providerStatus"] == "not-invoked"
+    assert response.json()["assistant"]["providerInvoked"] is False
+    assert response.json()["report"] is None
+    assert response.json()["reportSaveWarning"] is None
 
 
 def test_recommendation_route_preserves_shift_and_existing_confirmation(monkeypatch):

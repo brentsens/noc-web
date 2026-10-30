@@ -237,6 +237,10 @@
     margin-bottom: 16px;
 }
 
+.dashboard-actions-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .dependency-bar {
     display: flex;
     flex-wrap: wrap;

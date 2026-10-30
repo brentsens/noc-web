@@ -20,6 +20,8 @@ export async function apiRequest(
 
       let message =
         `Request failed: ${response.status}`;
+      let field;
+      let code;
 
 
       try {
@@ -28,8 +30,12 @@ export async function apiRequest(
           await response.json();
 
 
-        if (error.detail) {
+        if (typeof error.detail === "string") {
           message = error.detail;
+        } else if (error.detail && typeof error.detail.message === "string") {
+          message = error.detail.message;
+          field = error.detail.field;
+          code = error.detail.code;
         }
 
       } catch {
@@ -37,7 +43,10 @@ export async function apiRequest(
       }
 
 
-      throw new Error(message);
+      const requestError = new Error(message);
+      requestError.field = field;
+      requestError.code = code;
+      throw requestError;
 
     }
 
@@ -154,6 +163,25 @@ export function getInvestigation(
 
 }
 
+export function previewInvestigation(shiftDate, name, notebookUrl) {
+  return apiRequest(`/api/shifts/${shiftDate}/investigations/preview`, {
+    method: "POST",
+    body: JSON.stringify({ name, notebookUrl })
+  });
+}
+
+export function createInvestigation(
+  shiftDate,
+  name,
+  notebookUrl,
+  confirmed = false
+) {
+  return apiRequest(`/api/shifts/${shiftDate}/investigations`, {
+    method: "POST",
+    body: JSON.stringify({ name, notebookUrl, confirmed })
+  });
+}
+
 export function reviewInvestigation(
   shiftDate,
   investigationName,
@@ -248,7 +276,8 @@ const ASSISTANT_PROVIDER_STATUSES = new Set([
   "success",
   "unavailable",
   "timeout",
-  "invalid"
+  "invalid",
+  "not-invoked"
 ]);
 const ASSISTANT_AVAILABILITY = new Set([
   "available",
@@ -342,6 +371,8 @@ function validateAssistantResponse(response, shiftDate) {
       || !ASSISTANT_PROVIDER_STATUSES.has(response.providerStatus)
       || (response.providerStatus === "success" && !response.providerInvoked)
       || (["timeout", "invalid"].includes(response.providerStatus) && !response.providerInvoked)
+      || (response.providerStatus === "not-invoked"
+        && (response.providerInvoked || response.status !== "limited"))
       || !Array.isArray(response.evidence)
       || !Array.isArray(response.limitations)
       || response.limitations.some(item => typeof item !== "string")) {
@@ -376,7 +407,10 @@ function validateAssistantResponse(response, shiftDate) {
           && response.status === "limited"
           && response.evidence.length === 0
       })
-      && item.evidenceIds.every(id => evidence.get(id).availability === "available")
+      && item.evidenceIds.every(id =>
+        evidence.get(id).availability === "available"
+        || (name !== "reviewedFindings" && evidence.get(id).availability === "stale")
+      )
     )
   );
 }

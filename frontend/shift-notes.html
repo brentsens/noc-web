@@ -30,6 +30,8 @@
                 <a class="nav-item" href="investigations.html">Investigations</a>
                 <a class="nav-item ai" href="ai-actions.html">AI Actions</a>
 
+                <a class="nav-item" href="resources.html">Resources</a>
+
                 <div class="nav-divider"></div>
 
                 <a class="nav-item" href="start-shift.html">
@@ -188,6 +190,10 @@
             getShiftNotes,
             addShiftNote
         } from "./js/api.js";
+        import {
+            getWorkflowContext,
+            preserveSelectedShiftNavigation
+        } from "./js/workflow-context.js";
 
         let notes = [];
 
@@ -256,7 +262,9 @@
 
 
         shiftDate.value =
-            getLocalDateString();
+            getWorkflowContext().shift || getLocalDateString();
+
+        preserveSelectedShiftNavigation(shiftDate.value);
 
 
         function totalEntries() {
@@ -583,10 +591,15 @@
             renderNotes
         );
 
-        shiftDate.addEventListener(
-            "change",
-            loadShiftNotes
-        );
+        shiftDate.addEventListener("change", () => {
+            window.history.replaceState(
+                {},
+                "",
+                `?shift=${encodeURIComponent(shiftDate.value)}`
+            );
+            preserveSelectedShiftNavigation(shiftDate.value);
+            loadShiftNotes();
+        });
 
         const pageParams =
             new URLSearchParams(
@@ -602,7 +615,7 @@
             window.history.replaceState(
                 {},
                 "",
-                window.location.pathname
+                `?shift=${encodeURIComponent(shiftDate.value)}`
             );
         }
 

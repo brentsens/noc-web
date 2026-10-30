@@ -2,7 +2,7 @@ import re
 
 from backend.config import NOC_ROOT
 from backend.services.tickets import get_operational_work_summary
-from backend.services.investigations import get_reviewed_findings
+from backend.services.investigations import get_noc_root, get_reviewed_findings
 
 from datetime import datetime
 
@@ -19,8 +19,9 @@ def get_shift_notes(
     shift_date: str,
 ) -> dict:
 
+    noc_root = get_noc_root()
     notes_file = (
-        NOC_ROOT
+        noc_root
         / shift_date
         / "shift-notes.md"
     )
@@ -170,8 +171,9 @@ def add_shift_note(
     text: str,
 ) -> dict:
 
+    noc_root = get_noc_root()
     notes_file = (
-        NOC_ROOT
+        noc_root
         / shift_date
         / "shift-notes.md"
     )

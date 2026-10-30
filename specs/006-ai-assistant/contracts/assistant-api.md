@@ -144,11 +144,18 @@ value is placed in application logs, files, cache, browser storage, or response 
 
 The response exposes only fixed provider provenance: `provider` is `github-copilot-cli`;
 `providerInvoked` is true only when the CLI process was launched; and `providerStatus` is one of
-`success`, `unavailable`, `timeout`, or `invalid`. Refusal or insufficient context returns
-`providerInvoked: false` and `providerStatus: "unavailable"`. A missing/unstartable CLI is also
-unavailable and not invoked; an unavailable CLI session after launch is invoked. Timeout and
-invalid-output statuses indicate the CLI was invoked. These fields contain no prompt, temporary
-path, subprocess output, credentials, authentication data, or exception detail.
+`success`, `unavailable`, `timeout`, `invalid`, or `not-invoked`. Refusal or insufficient
+question-relevant context returns `providerInvoked: false` and `providerStatus: "not-invoked"`.
+A missing/unstartable CLI is unavailable and not invoked; an unavailable CLI session after launch
+is invoked. Timeout and invalid-output statuses indicate the CLI was invoked. These fields contain
+no prompt, temporary path, subprocess output, credentials, authentication data, or exception detail.
+
+Context sufficiency depends on the question. A missing Shift Notes file does not prevent useful
+ticket analysis when Local NOC Tracking and Jira cache evidence are available. Stale Jira evidence
+may be included with its stale availability/freshness labels and must never be represented as
+current. Timeline questions require timestamped selected-shift activity; another date's Shift
+Notes are never substituted. When that activity is absent, the Assistant returns a grounded
+explanation without invoking the provider.
 
 `providerStatus: "success"` means a schema-valid provider result was received, not that it
 contained advice. If both `aiObservations` and `recommendations` are empty, the Assistant views

@@ -5,7 +5,7 @@ import subprocess
 from datetime import datetime
 from backend.config import NOC_ROOT
 from backend.services.tickets import get_operational_work_summary
-from backend.services.investigations import get_reviewed_findings
+from backend.services.investigations import get_noc_root, get_reviewed_findings
 
 
 
@@ -56,8 +56,9 @@ def get_handover(
     shift_date: str,
 ) -> dict:
 
+    noc_root = get_noc_root()
     handover_file = (
-        NOC_ROOT
+        noc_root
         / shift_date
         / "handover"
         / f"handover-{shift_date}.md"
@@ -231,8 +232,9 @@ def generate_handover(
     local_work = get_operational_work_summary()
     _validate_local_work(local_work)
 
+    noc_root = get_noc_root()
     handover_file = (
-        NOC_ROOT
+        noc_root
         / shift_date
         / "handover"
         / f"handover-{shift_date}.md"
@@ -303,8 +305,9 @@ def regenerate_handover(
     local_work = get_operational_work_summary()
     _validate_local_work(local_work)
 
+    noc_root = get_noc_root()
     handover_dir = (
-        NOC_ROOT
+        noc_root
         / shift_date
         / "handover"
     )

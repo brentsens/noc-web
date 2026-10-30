@@ -45,6 +45,10 @@
                     AI Actions
                 </a>
 
+                <a class="nav-item" href="resources.html">
+                    Resources
+                </a>
+
                 <div class="nav-divider"></div>
 
                 <a class="nav-item" href="start-shift.html">
@@ -1306,11 +1310,30 @@
                 // Investigations
                 const investigationCount =
                     preflight.investigations.count;
+                const investigationReviews =
+                    preflight.investigations.needsReview || 0;
+                const reviewedFindingCount =
+                    (preflight.reviewedFindings || []).length;
 
-                if (investigationCount > 0) {
+                if (investigationReviews > 0) {
 
                     readinessInvestigationsCopy.textContent =
-                        `${investigationCount} validated investigation${investigationCount === 1
+                        `${investigationReviews} investigation${investigationReviews === 1
+                            ? ""
+                            : "s"
+                        } require validation or operator review and are excluded from handover.`;
+
+                    setReadinessState(
+                        readinessInvestigationsIcon,
+                        readinessInvestigationsState,
+                        "REVIEW",
+                        false
+                    );
+
+                } else if (reviewedFindingCount > 0) {
+
+                    readinessInvestigationsCopy.textContent =
+                        `${reviewedFindingCount} concise operator-reviewed investigation finding${reviewedFindingCount === 1
                             ? ""
                             : "s"
                         } available for handover.`;
@@ -1318,14 +1341,25 @@
                     setReadinessState(
                         readinessInvestigationsIcon,
                         readinessInvestigationsState,
-                        "VALIDATED",
+                        "REVIEWED",
                         true
+                    );
+
+                } else if (investigationCount > 0) {
+
+                    readinessInvestigationsCopy.textContent =
+                        "Investigation records are available, but no operator-reviewed findings are ready for handover.";
+
+                    setReadinessState(
+                        readinessInvestigationsIcon,
+                        readinessInvestigationsState,
+                        "NOT REVIEWED",
+                        false
                     );
 
                 } else {
 
-                    readinessInvestigationsCopy.textContent =
-                        "No validated investigations for this date.";
+                    readinessInvestigationsCopy.textContent = "No investigations for this date.";
 
                     setReadinessState(
                         readinessInvestigationsIcon,

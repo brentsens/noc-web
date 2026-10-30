@@ -9,6 +9,7 @@ from backend.config import (
     CacheSourcePolicy,
     ConfigurationError,
     ConfigurationProfile,
+    DEFAULT_INVESTIGATION_TIMEOUT_SECONDS,
     resolve_readiness_profile,
 )
 from backend.services import readiness
@@ -43,7 +44,8 @@ def _prepared_profile(tmp_path):
     )
     for command, _ in readiness.COMMAND_CATALOG:
         executable = binary / command
-        executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        output = "printf 'noc-inv-contract=1\\n'\n" if command == "noc-inv" else ""
+        executable.write_text(f"#!/bin/sh\n{output}exit 0\n", encoding="utf-8")
         executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
     return _profile(root)
 
@@ -56,6 +58,7 @@ def test_absent_overrides_preserve_historical_defaults(monkeypatch):
 
     assert profile.noc_root == config.HOME / "noc"
     assert profile.noc_bin == config.HOME / ".local" / "bin"
+    assert profile.investigation_timeout_seconds == DEFAULT_INVESTIGATION_TIMEOUT_SECONDS
     assert {setting.source for setting in profile.settings} == {"default"}
 
 
@@ -71,11 +74,13 @@ def test_valid_explicit_overrides_are_redacted_and_normalized(tmp_path):
         "NOC_WEB_READINESS_PROBE_DIR": str(probe),
         "NOC_WEB_JIRA_CACHE_MAX_AGE_SECONDS": "60",
         "NOC_WEB_COMMAND_TIMEOUT_SECONDS": "5",
+        "NOC_WEB_INVESTIGATION_TIMEOUT_SECONDS": "300",
     })
 
     assert profile.noc_root == root.resolve()
     assert profile.cache_sources[0].maximum_age_seconds == 60
     assert profile.command_timeout_seconds == 5
+    assert profile.investigation_timeout_seconds == 300
     assert {setting.source for setting in profile.settings} == {"explicit"}
     assert str(root) not in str(profile.settings)
 
@@ -88,6 +93,9 @@ def test_valid_explicit_overrides_are_redacted_and_normalized(tmp_path):
     ("NOC_WEB_JIRA_CACHE_MAX_AGE_SECONDS", "0"),
     ("NOC_WEB_JIRA_CACHE_MAX_AGE_SECONDS", "nope"),
     ("NOC_WEB_COMMAND_TIMEOUT_SECONDS", "61"),
+    ("NOC_WEB_INVESTIGATION_TIMEOUT_SECONDS", "0"),
+    ("NOC_WEB_INVESTIGATION_TIMEOUT_SECONDS", "901"),
+    ("NOC_WEB_INVESTIGATION_TIMEOUT_SECONDS", "unbounded"),
 ])
 def test_invalid_explicit_override_never_falls_back(name, value):
     with pytest.raises(ConfigurationError) as error:
@@ -105,6 +113,40 @@ def test_assessment_is_ready_with_compatible_records_and_safe_probes(readiness_w
     assert result["readOnly"] is True
     assert result["liveness"][0]["status"] == "notConfigured"
     assert not list(readiness_workspace.probe_directory.iterdir())
+    assert not list(readiness_workspace.noc_root.glob(".readiness-*"))
+
+
+def test_readiness_reports_generation_commands_and_investigation_storage(
+    readiness_workspace,
+):
+    result = readiness.assess_readiness(readiness_workspace, "2099-12-31")
+    checks = {item["id"]: item for item in result["checks"]}
+
+    assert checks["command.noc-inv"]["status"] == "ready"
+    assert checks["command.copilot"]["status"] == "ready"
+    assert checks["investigationStorage.path"]["status"] == "ready"
+
+
+def test_readiness_rejects_incompatible_noc_inv_contract(readiness_workspace):
+    executable = readiness_workspace.noc_bin / "noc-inv"
+    executable.write_text("#!/bin/sh\nprintf 'legacy-contract\\n'\nexit 0\n", encoding="utf-8")
+    executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
+
+    result = readiness.assess_readiness(readiness_workspace, "2099-12-31")
+    checks = {item["id"]: item for item in result["checks"]}
+
+    assert checks["command.noc-inv"]["status"] == "notReady"
+    assert "compatible noc-inv contract" in checks["command.noc-inv"]["correctiveAction"]
+
+
+def test_readiness_reports_missing_copilot_command(readiness_workspace):
+    (readiness_workspace.noc_bin / "copilot").unlink()
+
+    result = readiness.assess_readiness(readiness_workspace, "2099-12-31")
+
+    assert next(
+        item for item in result["checks"] if item["id"] == "command.copilot"
+    )["status"] == "notReady"
 
 
 def test_missing_default_locations_are_configuration_not_ready(tmp_path):
@@ -175,11 +217,16 @@ def test_readiness_discards_sensitive_command_output(tmp_path, monkeypatch):
     secret = "token-value-123"
 
     class Result:
-        returncode = 1
+        returncode = 0
+        stdout = secret
 
     def failed_run(*args, **kwargs):
-        assert kwargs["stdout"] is readiness.subprocess.DEVNULL
         assert kwargs["stderr"] is readiness.subprocess.DEVNULL
+        command = args[0][0]
+        if command.endswith("/noc-inv"):
+            assert kwargs["stdout"] is readiness.subprocess.PIPE
+        else:
+            assert kwargs["stdout"] is readiness.subprocess.DEVNULL
         return Result()
 
     monkeypatch.setattr(readiness.subprocess, "run", failed_run)

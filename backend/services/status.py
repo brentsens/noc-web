@@ -11,7 +11,7 @@ from backend.services.jira_cache import (
     get_jira_cache_health,
 )
 from backend.services.tickets import get_operational_work_summary
-from backend.services.investigations import get_reviewed_findings
+from backend.services.investigations import get_noc_root, get_reviewed_findings
 
 
 CLOSED_JIRA_STATUSES = {
@@ -32,7 +32,8 @@ DEPENDENCIES = (
 
 
 def get_status(shift_date: str) -> dict:
-    shift_dir = NOC_ROOT / shift_date
+    noc_root = get_noc_root()
+    shift_dir = noc_root / shift_date
     notes_file = shift_dir / "shift-notes.md"
     investigation_dir = shift_dir / "investigations"
     handover_file = (
@@ -42,7 +43,7 @@ def get_status(shift_date: str) -> dict:
     )
 
     ticket_dir = (
-        NOC_ROOT
+        noc_root
         / "tickets"
         / "open"
     )
@@ -194,6 +195,7 @@ def get_status(shift_date: str) -> dict:
 
     # Investigations
     investigations = []
+    investigation_reviews = []
 
     if investigation_dir.is_dir():
         for investigation_file in sorted(
@@ -233,6 +235,44 @@ def get_status(shift_date: str) -> dict:
                     or "status not recorded"
                 ),
             })
+            status_file = investigation_file.parent / "generation-status.json"
+            review_file = investigation_file.parent / "reviewed-context.json"
+            if not status_file.exists():
+                continue
+            try:
+                generation = json.loads(status_file.read_text(encoding="utf-8"))
+                if review_file.is_file():
+                    review_context = json.loads(review_file.read_text(encoding="utf-8"))
+                    review_state = review_context.get("reviewState")
+                    if (
+                        review_state is None
+                        and isinstance(review_context.get("finding"), str)
+                        and isinstance(review_context.get("state"), str)
+                    ):
+                        review_state = "reviewed"
+                else:
+                    review_state = "unreviewed"
+                if (
+                    generation.get("generationStatus") == "completed"
+                    and generation.get("validationStatus") in {"ready_for_review", "needs_review"}
+                    and review_state not in {"reviewed", "rejected"}
+                ):
+                    reason = (
+                        "Generated investigation needs validation."
+                        if generation["validationStatus"] == "needs_review"
+                        else "Generated investigation is awaiting operator review."
+                    )
+                    investigation_reviews.append({
+                        "id": f"investigation:{investigation_file.parent.name}",
+                        "reason": reason,
+                    })
+                    needs_review.append(investigation_reviews[-1])
+            except (OSError, UnicodeError, json.JSONDecodeError, AttributeError):
+                investigation_reviews.append({
+                    "id": f"investigation:{investigation_file.parent.name}",
+                    "reason": "Generated investigation status is unavailable.",
+                })
+                needs_review.append(investigation_reviews[-1])
 
     # Handover
     handover_created = (
@@ -276,6 +316,8 @@ def get_status(shift_date: str) -> dict:
         "investigations": {
             "count": len(investigations),
             "items": investigations,
+            "needsReview": len(investigation_reviews),
+            "needsReviewItems": investigation_reviews,
         },
 
         "handover": {

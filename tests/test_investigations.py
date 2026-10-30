@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from backend.app import app
-from backend.services import dashboard, investigations, shift_notes, status
+from backend.services import dashboard, handover, investigations, shift_notes, status
 
 
 SHIFT_DATE = "2099-12-31"
@@ -99,6 +99,45 @@ def test_rejected_advisory_is_not_propagated(noc_root):
     assert investigations.get_reviewed_findings(SHIFT_DATE) == []
 
 
+def test_generated_needs_review_cannot_be_reviewed_but_can_be_explicitly_rejected(
+    noc_root,
+):
+    directory = noc_root / SHIFT_DATE / "investigations" / "generated"
+    directory.mkdir(parents=True)
+    (directory / "investigation.md").write_text(
+        "# Investigation: Generated record\n"
+        "- Status: active\n"
+        "- Source of truth: noc-inv\n"
+        "- Evidence Provenance: noc-inv\n"
+        "- FINAL Datadog Notebook: https://app.datadoghq.com/notebook/123/example\n"
+        "\n## Summary\nTBD\n",
+        encoding="utf-8",
+    )
+    (directory / "generation-status.json").write_text(
+        '{"generationStatus":"completed","validationStatus":"needs_review",'
+        '"shiftDate":"2099-12-31","name":"generated",'
+        '"notebookUrl":"https://app.datadoghq.com/notebook/123/example",'
+        '"provenance":"noc-inv"}',
+        encoding="utf-8",
+    )
+    client = TestClient(app)
+
+    review = client.post(
+        f"/api/shifts/{SHIFT_DATE}/investigations/generated/review",
+        json={"confirmed": True, "finding": "Queue high", "state": "monitoring"},
+    )
+    assert review.status_code == 422
+    assert not (directory / "reviewed-context.json").exists()
+    assert investigations.get_reviewed_findings(SHIFT_DATE) == []
+
+    rejected = client.post(
+        f"/api/shifts/{SHIFT_DATE}/investigations/generated/reject",
+        json={"confirmed": True},
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["lifecycle"]["reviewState"] == "rejected"
+
+
 def test_corrupt_investigations_return_unavailable_projections_without_changing_files(noc_root):
     _investigation(noc_root)
     corrupt_context = noc_root / SHIFT_DATE / "investigations" / "corrupt-context"
@@ -132,12 +171,21 @@ def test_corrupt_investigations_return_unavailable_projections_without_changing_
 
 def test_only_reviewed_context_reaches_operational_projections(noc_root, monkeypatch):
     _investigation(noc_root)
-    investigations.review_investigation(
-        SHIFT_DATE, "memory", "Memory remains elevated", "monitoring"
-    )
     monkeypatch.setattr(dashboard, "get_jira_ticket_queue", lambda: {"tickets": []})
     monkeypatch.setattr(status, "get_jira_ticket_queue", lambda: {"tickets": []})
 
+    pending = [
+        dashboard.get_dashboard(SHIFT_DATE),
+        status.get_status(SHIFT_DATE),
+        shift_notes.get_shift_notes(SHIFT_DATE),
+        handover.get_handover(SHIFT_DATE),
+    ]
+    assert all(result["reviewedFindings"] == [] for result in pending)
+    assert all("raw secret-like source output" not in str(result) for result in pending)
+
+    investigations.review_investigation(
+        SHIFT_DATE, "memory", "Memory remains elevated", "monitoring"
+    )
     dashboard_result = dashboard.get_dashboard(SHIFT_DATE)
     status_result = status.get_status(SHIFT_DATE)
     notes_result = shift_notes.get_shift_notes(SHIFT_DATE)

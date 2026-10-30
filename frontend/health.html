@@ -45,6 +45,10 @@
                     AI Actions
                 </a>
 
+                <a class="nav-item" href="resources.html">
+                    Resources
+                </a>
+
                 <div class="nav-divider"></div>
 
                 <a class="nav-item" href="start-shift.html">
@@ -343,6 +347,7 @@
         import {
             getHealth
         } from "./js/api.js";
+        import { preserveSelectedShiftNavigation } from "./js/workflow-context.js";
 
 
         const healthDate =
@@ -730,10 +735,17 @@
         healthDate.value =
             getDefaultShiftDate();
 
-        healthDate.addEventListener(
-            "change",
-            loadHealth
-        );
+        preserveSelectedShiftNavigation(healthDate.value);
+
+        healthDate.addEventListener("change", () => {
+            window.history.replaceState(
+                {},
+                "",
+                `?shift=${encodeURIComponent(healthDate.value)}`
+            );
+            preserveSelectedShiftNavigation(healthDate.value);
+            loadHealth();
+        });
 
         loadHealth();
 

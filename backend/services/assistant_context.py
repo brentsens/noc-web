@@ -119,7 +119,7 @@ def _jira_cache_source(local_work: dict[str, Any]) -> dict[str, Any]:
         "unavailable": "unavailable",
         "malformed": "malformed",
     }[freshness]
-    if availability != "available" or cache is None:
+    if availability not in {"available", "stale"} or cache is None:
         return _item(
             "jira-cache",
             "jira-cache",
@@ -173,7 +173,7 @@ def _jira_cache_source(local_work: dict[str, Any]) -> dict[str, Any]:
         "jira-cache",
         "jira-cache",
         "noc-web",
-        "available",
+        availability,
         summary={
             "refreshedAt": health.get("refreshedAt"),
             "count": len(tickets),
@@ -287,7 +287,8 @@ def collect_context(shift_date: str) -> list[dict[str, Any]]:
         "shift-notes",
         lambda: get_shift_notes(shift_date),
         lambda value: (
-            _availability(value.get("availability")),
+            _availability(value.get("availability"))
+            if value.get("exists") else "unavailable",
             {
                 "exists": bool(value.get("exists")),
                 "activity": [

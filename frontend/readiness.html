@@ -17,6 +17,7 @@
         <a class="nav-item" href="shift-notes.html">Shift Notes</a>
         <a class="nav-item" href="tickets.html">Tickets</a>
         <a class="nav-item" href="investigations.html">Investigations</a>
+        <a class="nav-item" href="resources.html">Resources</a>
         <div class="nav-divider"></div>
         <a class="nav-item" href="start-shift.html">Start Shift</a>
         <a class="nav-item" href="status.html">Status</a>
@@ -49,6 +50,8 @@
   </div>
   <script type="module">
     import { getReadiness, requestErrorMessage } from "./js/api.js";
+    import { preserveSelectedShiftNavigation } from "./js/workflow-context.js";
+
     const dateInput = document.querySelector("#readiness-date");
     const overall = document.querySelector("#overall-status");
     const summary = document.querySelector("#readiness-summary");
@@ -56,6 +59,7 @@
     const liveness = document.querySelector("#readiness-liveness");
     const today = new Date().toISOString().slice(0, 10);
     dateInput.value = new URLSearchParams(location.search).get("shift") || today;
+    preserveSelectedShiftNavigation(dateInput.value);
 
     function renderCheck(check) {
       const age = Number.isInteger(check.ageSeconds) ? ` Cache age: ${check.ageSeconds}s.` : "";
@@ -80,6 +84,7 @@
     }
     dateInput.addEventListener("change", () => {
       history.replaceState(null, "", `?shift=${encodeURIComponent(dateInput.value)}`);
+      preserveSelectedShiftNavigation(dateInput.value);
       load();
     });
     load();

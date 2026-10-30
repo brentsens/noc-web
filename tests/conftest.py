@@ -48,7 +48,8 @@ def readiness_workspace(tmp_path):
     )
     for command, _ in COMMAND_CATALOG:
         executable = command_directory / command
-        executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        output = "printf 'noc-inv-contract=1\\n'\n" if command == "noc-inv" else ""
+        executable.write_text(f"#!/bin/sh\n{output}exit 0\n", encoding="utf-8")
         executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
     return ConfigurationProfile(
         noc_root=root,
@@ -58,6 +59,19 @@ def readiness_workspace(tmp_path):
         command_timeout_seconds=1,
         settings=(),
     )
+
+
+@pytest.fixture
+def investigation_workspace(readiness_workspace, monkeypatch):
+    """Provide configured paths and fake local commands for generation tests."""
+    monkeypatch.setenv("NOC_WEB_NOC_ROOT", str(readiness_workspace.noc_root))
+    monkeypatch.setenv("NOC_WEB_NOC_BIN", str(readiness_workspace.noc_bin))
+    monkeypatch.setenv(
+        "NOC_WEB_READINESS_PROBE_DIR",
+        str(readiness_workspace.probe_directory),
+    )
+    monkeypatch.setenv("NOC_WEB_INVESTIGATION_TIMEOUT_SECONDS", "3")
+    return readiness_workspace
 
 
 @pytest.fixture

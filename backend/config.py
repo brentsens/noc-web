@@ -16,8 +16,10 @@ NOC_BIN = HOME / ".local" / "bin"
 
 DEFAULT_JIRA_CACHE_MAX_AGE_SECONDS = 30 * 60
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 10
+DEFAULT_INVESTIGATION_TIMEOUT_SECONDS = 300
 MAX_JIRA_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60
 MAX_COMMAND_TIMEOUT_SECONDS = 60
+MAX_INVESTIGATION_TIMEOUT_SECONDS = 900
 
 
 class ConfigurationError(ValueError):
@@ -49,6 +51,7 @@ class ConfigurationProfile:
     cache_sources: tuple[CacheSourcePolicy, ...]
     command_timeout_seconds: int
     settings: tuple[ConfigurationSetting, ...]
+    investigation_timeout_seconds: int = DEFAULT_INVESTIGATION_TIMEOUT_SECONDS
 
 
 def _environment_value(name: str, environment: dict[str, str] | None) -> tuple[str | None, bool]:
@@ -129,6 +132,12 @@ def resolve_readiness_profile(
         MAX_COMMAND_TIMEOUT_SECONDS,
         environment,
     )
+    investigation_timeout, investigation_timeout_setting = _positive_integer_setting(
+        "NOC_WEB_INVESTIGATION_TIMEOUT_SECONDS",
+        DEFAULT_INVESTIGATION_TIMEOUT_SECONDS,
+        MAX_INVESTIGATION_TIMEOUT_SECONDS,
+        environment,
+    )
     return ConfigurationProfile(
         noc_root=noc_root,
         noc_bin=noc_bin,
@@ -143,5 +152,7 @@ def resolve_readiness_profile(
             probe_setting,
             cache_setting,
             timeout_setting,
+            investigation_timeout_setting,
         ),
+        investigation_timeout_seconds=investigation_timeout,
     )
