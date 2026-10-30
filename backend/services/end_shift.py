@@ -4,6 +4,7 @@ from backend.services.status import get_status
 from backend.services.ticket_sync import (
     get_ticket_sync_state,
 )
+from backend.services.tickets import get_operational_work_summary
 
 
 def get_end_shift_preflight(
@@ -26,6 +27,9 @@ def get_end_shift_preflight(
     status = get_status(
         shift_date
     )
+    local_work = status.get("localWork")
+    if local_work is None:
+        local_work = get_operational_work_summary()
 
     health = get_health(
         shift_date
@@ -198,4 +202,6 @@ def get_end_shift_preflight(
                 )
             ),
         },
+
+        "localWork": local_work,
     }

@@ -6,6 +6,70 @@ from backend.app import app
 from backend.services import jira_cache, tickets
 
 
+def write_local_ticket(noc_root, filename, ticket):
+    ticket_dir = noc_root / "tickets" / "open"
+    ticket_dir.mkdir(parents=True, exist_ok=True)
+    (ticket_dir / filename).write_text(
+        json.dumps(ticket),
+        encoding="utf-8",
+    )
+
+
+def test_operational_work_summary_is_active_local_only_and_unique(noc_root):
+    write_local_ticket(noc_root, "NOC-123.json", {
+        "id": "NOC-123",
+        "jira": {
+            "summary": "Must not be exposed",
+            "priority": "High",
+        },
+        "noc": {
+            "next_action": "Collect logs",
+            "notes": "Await maintenance window",
+        },
+        "tracking": {"jira_key": "NOC-123", "state": "active"},
+    })
+    write_local_ticket(noc_root, "NOC-999.json", {
+        "id": "NOC-999",
+        "noc": {"next_action": "Historical", "notes": "Closed"},
+        "tracking": {"jira_key": "NOC-999", "state": "closed"},
+    })
+
+    summary = tickets.get_operational_work_summary()
+
+    assert summary == {
+        "available": True,
+        "error": None,
+        "count": 1,
+        "items": [{
+            "jiraKey": "NOC-123",
+            "trackingState": "active",
+            "nextAction": "Collect logs",
+            "nocNotes": "Await maintenance window",
+        }],
+    }
+
+
+def test_operational_work_summary_reports_malformed_or_duplicate_local_data(
+    noc_root,
+):
+    write_local_ticket(noc_root, "NOC-123.json", {
+        "id": "NOC-123",
+        "noc": {"next_action": "", "notes": ""},
+        "tracking": {"jira_key": "NOC-123", "state": "active"},
+    })
+    write_local_ticket(noc_root, "duplicate.json", {
+        "id": "NOC-124",
+        "noc": {"next_action": "", "notes": ""},
+        "tracking": {"jira_key": "NOC-123", "state": "active"},
+    })
+
+    summary = tickets.get_operational_work_summary()
+
+    assert summary["available"] is False
+    assert summary["items"] == []
+    assert "duplicate active jiraKey: NOC-123" in summary["error"]
+
+
 def write_cache(noc_root, ticket_id="NOC-123"):
     jira_cache.write_jira_cache({
         "tickets": [{

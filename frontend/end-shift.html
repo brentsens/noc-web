@@ -356,6 +356,18 @@
 
                 </section>
 
+                <section class="lower-grid">
+                    <article class="panel">
+                        <div class="panel-header">
+                            <h2>Outstanding Local NOC Work</h2>
+                            <span id="end-shift-local-work-badge" class="count-badge">0</span>
+                        </div>
+                        <div id="end-shift-local-work-list">
+                            Loading local tracking data...
+                        </div>
+                    </article>
+                </section>
+
             </section>
 
         </main>
@@ -755,6 +767,38 @@
                 "#regenerate-handover"
             );
 
+        const localWorkBadge =
+            document.querySelector("#end-shift-local-work-badge");
+
+        const localWorkList =
+            document.querySelector("#end-shift-local-work-list");
+
+        function renderLocalWork(localWork) {
+            localWorkList.innerHTML = "";
+            localWorkBadge.textContent = localWork.count;
+
+            if (!localWork.available) {
+                localWorkList.textContent =
+                    `Local tracking unavailable: ${localWork.error}`;
+                return;
+            }
+
+            if (localWork.count === 0) {
+                localWorkList.textContent =
+                    "No outstanding local NOC work.";
+                return;
+            }
+
+            localWork.items.forEach(item => {
+                const entry = document.createElement("p");
+                entry.textContent =
+                    `${item.jiraKey} — Next Action: `
+                    + `${item.nextAction || "Not recorded"}; NOC Notes: `
+                    + `${item.nocNotes || "Not recorded"}`;
+                localWorkList.appendChild(entry);
+            });
+        }
+
         function getLocalDateString() {
 
             const now = new Date();
@@ -1118,6 +1162,8 @@
                         endShiftDate.value
                     );
 
+                renderLocalWork(preflight.localWork);
+
 
                 // Jira Freshness
                 const jiraSync =
@@ -1288,6 +1334,10 @@
                     "End Shift preflight failed:",
                     error
                 );
+
+                localWorkBadge.textContent = "0";
+                localWorkList.textContent =
+                    "Local tracking data unavailable.";
 
                 const checks = [
                     [

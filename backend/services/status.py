@@ -10,6 +10,7 @@ from backend.services.jira_ticket_queue import (
 from backend.services.jira_cache import (
     get_jira_cache_health,
 )
+from backend.services.tickets import get_operational_work_summary
 
 
 CLOSED_JIRA_STATUSES = {
@@ -283,4 +284,6 @@ def get_status(shift_date: str) -> dict:
         "dependencies": dependencies,
 
         "readOnly": True,
+
+        "localWork": get_operational_work_summary(),
     }

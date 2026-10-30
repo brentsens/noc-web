@@ -278,3 +278,53 @@ def test_closed_local_tracking_is_excluded_from_open_ticket_consumers(
     closed = tickets.get_ticket("NOC-123")
     assert closed["trackingState"] == "closed"
     assert closed["localTracking"]["nocNotes"] == "Retain context"
+
+
+def test_generated_handover_includes_one_local_work_section(noc_root, monkeypatch):
+    handover_file = (
+        noc_root / SHIFT_DATE / "handover" / f"handover-{SHIFT_DATE}.md"
+    )
+    ticket_dir = noc_root / "tickets" / "open"
+    ticket_dir.mkdir(parents=True)
+    (ticket_dir / "NOC-123.json").write_text(
+        """{"id":"NOC-123","noc":{"next_action":"Collect logs","notes":"Local"},
+        "tracking":{"jira_key":"NOC-123","state":"active"}}""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(handover.shutil, "which", lambda command: "/mock/handover")
+    monkeypatch.setattr(
+        handover.subprocess,
+        "run",
+        lambda args, **kwargs: (
+            handover_file.parent.mkdir(parents=True, exist_ok=True),
+            handover_file.write_text(
+                """Base handover
+
+## Active Local NOC Work
+
+- Old local work
+""",
+                encoding="utf-8",
+            ),
+            subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr=""),
+        )[-1],
+    )
+
+    handover.generate_handover(SHIFT_DATE)
+
+    content = handover_file.read_text(encoding="utf-8")
+    assert content.count("## Active Local NOC Work") == 1
+    assert "Next Action: Collect logs" in content
+    assert "summary" not in content
+
+
+def test_malformed_local_work_does_not_overwrite_handover(noc_root):
+    handover_file = create_handover(noc_root, "Existing safe handover\n")
+    ticket_dir = noc_root / "tickets" / "open"
+    ticket_dir.mkdir(parents=True)
+    (ticket_dir / "bad.json").write_text("{", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Local tracking data is unavailable"):
+        handover.regenerate_handover(SHIFT_DATE)
+
+    assert handover_file.read_text(encoding="utf-8") == "Existing safe handover\n"

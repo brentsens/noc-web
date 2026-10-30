@@ -206,6 +206,17 @@
 
                 </section>
 
+                <section class="lower-grid">
+                    <article class="panel">
+                        <div class="panel-header">
+                            <h2>Active Local NOC Work</h2>
+                        </div>
+                        <div id="local-work-list" class="activity-list">
+                            Loading local tracking data...
+                        </div>
+                    </article>
+                </section>
+
 
                 <section class="lower-grid">
 
@@ -358,6 +369,38 @@
 
         const ticketTable =
             document.querySelector("#ticket-table");
+
+        const localWorkList =
+            document.querySelector("#local-work-list");
+
+        function renderLocalWork(localWork) {
+            localWorkList.innerHTML = "";
+
+            if (!localWork.available) {
+                localWorkList.textContent =
+                    `Local tracking unavailable: ${localWork.error}`;
+                return;
+            }
+
+            if (localWork.count === 0) {
+                localWorkList.textContent =
+                    "No active local NOC work.";
+                return;
+            }
+
+            for (const item of localWork.items) {
+                const row = document.createElement("div");
+                row.className = "activity-row";
+                const title = document.createElement("strong");
+                title.textContent = item.jiraKey;
+                const details = document.createElement("div");
+                details.textContent =
+                    `Next Action: ${item.nextAction || "Not recorded"} · `
+                    + `NOC Notes: ${item.nocNotes || "Not recorded"}`;
+                row.append(title, details);
+                localWorkList.appendChild(row);
+            }
+        }
 
 
         function getLocalDateString() {
@@ -644,6 +687,8 @@
                 reviewCount.textContent =
                     dashboard.needsReview;
 
+                renderLocalWork(dashboard.localWork);
+
 
                 if (
                     dashboard.handover === "created"
@@ -722,6 +767,9 @@
 
                 handoverSubtitle.textContent =
                     "Could not determine status";
+
+                localWorkList.textContent =
+                    "Local tracking data unavailable.";
 
             }
 

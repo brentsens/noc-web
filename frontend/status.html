@@ -259,6 +259,19 @@
 
                     </article>
 
+                    <article class="panel">
+
+                        <div class="panel-header">
+                            <h2>Active Local NOC Work</h2>
+                            <span id="status-local-work-badge" class="count-badge">0</span>
+                        </div>
+
+                        <div id="status-local-work-list">
+                            Loading local tracking data...
+                        </div>
+
+                    </article>
+
                 </section>
 
 
@@ -415,6 +428,38 @@
             document.querySelector(
                 "#status-investigation-list"
             );
+
+        const localWorkBadge =
+            document.querySelector("#status-local-work-badge");
+
+        const localWorkList =
+            document.querySelector("#status-local-work-list");
+
+        function renderLocalWork(localWork) {
+            localWorkList.innerHTML = "";
+            localWorkBadge.textContent = localWork.count;
+
+            if (!localWork.available) {
+                localWorkList.textContent =
+                    `Local tracking unavailable: ${localWork.error}`;
+                return;
+            }
+
+            if (localWork.count === 0) {
+                localWorkList.textContent =
+                    "No active local NOC work.";
+                return;
+            }
+
+            localWork.items.forEach(item => {
+                const entry = document.createElement("p");
+                entry.textContent =
+                    `${item.jiraKey} — Next Action: `
+                    + `${item.nextAction || "Not recorded"}; NOC Notes: `
+                    + `${item.nocNotes || "Not recorded"}`;
+                localWorkList.appendChild(entry);
+            });
+        }
 
 
         function getDefaultShiftDate() {
@@ -822,6 +867,8 @@
                     status.investigations.items
                 );
 
+                renderLocalWork(status.localWork);
+
             } catch (error) {
 
                 console.error(
@@ -842,6 +889,9 @@
 
                 investigationList.textContent =
                     "Could not load status data.";
+                localWorkBadge.textContent = "0";
+                localWorkList.textContent =
+                    "Local tracking data unavailable.";
             }
         }
 

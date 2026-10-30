@@ -133,6 +133,70 @@ def get_closed_tickets() -> list[dict]:
     return tickets
 
 
+def get_operational_work_summary() -> dict:
+    """Return the validated, active-only local NOC work projection."""
+    items = []
+    seen_keys = set()
+    ticket_dir = _ticket_dir()
+
+    try:
+        ticket_files = sorted(ticket_dir.glob("*.json")) if ticket_dir.is_dir() else []
+        for ticket_file in ticket_files:
+            ticket = _read_raw_ticket(ticket_file)
+            tracking_value = ticket.get("tracking")
+            if tracking_value is not None and not isinstance(tracking_value, dict):
+                raise ValueError("tracking must be an object")
+
+            tracking = tracking_value or {}
+            state = tracking.get("state", "active")
+            if state not in {"active", "closed"}:
+                raise ValueError("tracking state must be active or closed")
+            if state == "closed":
+                continue
+
+            jira_key = tracking.get("jira_key", ticket.get("id"))
+            if (
+                not isinstance(jira_key, str)
+                or not JIRA_KEY_PATTERN.fullmatch(jira_key)
+            ):
+                raise ValueError("jiraKey must be a valid Jira ticket key")
+            if jira_key in seen_keys:
+                raise ValueError(f"duplicate active jiraKey: {jira_key}")
+
+            noc = ticket.get("noc", {})
+            if not isinstance(noc, dict):
+                raise ValueError("noc must be an object")
+            next_action = noc.get("next_action", "")
+            noc_notes = noc.get("notes", "")
+            if not isinstance(next_action, str) or not isinstance(noc_notes, str):
+                raise ValueError("NOC next action and notes must be strings")
+
+            seen_keys.add(jira_key)
+            items.append({
+                "jiraKey": jira_key,
+                "trackingState": "active",
+                "nextAction": next_action,
+                "nocNotes": noc_notes,
+            })
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return {
+            "available": False,
+            "error": (
+                "Local tracking data is unavailable. "
+                f"Fix the local ticket records and retry: {error}"
+            ),
+            "count": 0,
+            "items": [],
+        }
+
+    return {
+        "available": True,
+        "error": None,
+        "count": len(items),
+        "items": items,
+    }
+
+
 def get_open_ticket(ticket_id: str) -> dict | None:
     return _read_ticket_from_state(ticket_id, "open")
 

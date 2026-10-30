@@ -108,6 +108,11 @@ def create_handover(
             status_code=500,
             detail=str(error),
         )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        )
 
 @router.post(
     "/{shift_date}/handover/regenerate"
@@ -182,5 +187,10 @@ def regenerate_existing_handover(
     except RuntimeError as error:
         raise HTTPException(
             status_code=500,
+            detail=str(error),
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
             detail=str(error),
         )

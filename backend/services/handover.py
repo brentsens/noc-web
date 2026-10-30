@@ -4,12 +4,47 @@ import subprocess
 
 from datetime import datetime
 from backend.config import NOC_ROOT
+from backend.services.tickets import get_operational_work_summary
 
 
 
 SECTION_PATTERN = re.compile(
     r"^##\s+(.+?)\s*$"
 )
+
+LOCAL_WORK_SECTION_PATTERN = re.compile(
+    r"(?ms)^## Active Local NOC Work\s*$.*?(?=^##\s|\Z)"
+)
+
+
+def _active_local_work_section(summary: dict) -> str:
+    if not summary["available"]:
+        raise ValueError(summary["error"])
+    if not summary["items"]:
+        return ""
+
+    lines = ["## Active Local NOC Work", ""]
+    for item in summary["items"]:
+        lines.extend((
+            f"- {item['jiraKey']}",
+            f"  - Next Action: {item['nextAction']}",
+            f"  - NOC Notes: {item['nocNotes']}",
+        ))
+    return "\n".join(lines)
+
+
+def _append_active_local_work(handover_file, summary: dict) -> None:
+    section = _active_local_work_section(summary)
+    if not section:
+        return
+    content = LOCAL_WORK_SECTION_PATTERN.sub(
+        "",
+        handover_file.read_text(encoding="utf-8"),
+    ).rstrip()
+    handover_file.write_text(
+        f"{content}\n\n{section}\n",
+        encoding="utf-8",
+    )
 
 
 def get_handover(
@@ -34,6 +69,7 @@ def get_handover(
             "sections": [],
             "closing": "",
             "content": "",
+            "localWork": get_operational_work_summary(),
         }
 
 
@@ -178,11 +214,15 @@ def get_handover(
 
         "content":
             content.strip(),
+
+        "localWork": get_operational_work_summary(),
     }
 
 def generate_handover(
     shift_date: str,
 ) -> dict:
+    local_work = get_operational_work_summary()
+    _active_local_work_section(local_work)
 
     handover_file = (
         NOC_ROOT
@@ -244,6 +284,7 @@ def generate_handover(
             )
         )
 
+    _append_active_local_work(handover_file, local_work)
     return get_handover(
         shift_date
     )
@@ -251,6 +292,8 @@ def generate_handover(
 def regenerate_handover(
     shift_date: str,
 ) -> dict:
+    local_work = get_operational_work_summary()
+    _active_local_work_section(local_work)
 
     handover_dir = (
         NOC_ROOT
@@ -376,6 +419,12 @@ def regenerate_handover(
                 "The previous handover was restored."
             )
         )
+
+    try:
+        _append_active_local_work(handover_file, local_work)
+    except OSError:
+        shutil.copy2(archive_file, handover_file)
+        raise
 
     handover = get_handover(
         shift_date

@@ -1,6 +1,7 @@
 import re
 
 from backend.config import NOC_ROOT
+from backend.services.tickets import get_operational_work_summary
 
 from datetime import datetime
 
@@ -31,6 +32,7 @@ def get_shift_notes(
             "exists": False,
             "sections": [],
             "activity": [],
+            "localWork": get_operational_work_summary(),
         }
 
 
@@ -156,6 +158,7 @@ def get_shift_notes(
         "exists": True,
         "sections": sections,
         "activity": activity,
+        "localWork": get_operational_work_summary(),
     }
 
 def add_shift_note(

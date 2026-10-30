@@ -218,3 +218,22 @@ def test_preserves_section_spacing(
         "Test alert\n\n## Salesforce Tickets"
         in content
     )
+
+
+def test_shift_notes_expose_active_local_work_without_changing_note_artifact(
+    noc_root,
+):
+    notes_file = create_notes_file(noc_root)
+    ticket_dir = noc_root / "tickets" / "open"
+    ticket_dir.mkdir(parents=True)
+    (ticket_dir / "NOC-123.json").write_text(
+        """{"id":"NOC-123","noc":{"next_action":"Follow up","notes":"Local"},
+        "tracking":{"jira_key":"NOC-123","state":"active"}}""",
+        encoding="utf-8",
+    )
+    original = notes_file.read_text(encoding="utf-8")
+
+    result = shift_notes.get_shift_notes(SHIFT_DATE)
+
+    assert result["localWork"]["items"][0]["nextAction"] == "Follow up"
+    assert notes_file.read_text(encoding="utf-8") == original

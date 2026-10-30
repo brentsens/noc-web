@@ -137,3 +137,31 @@ def test_status_cache_health_has_no_refresh_or_cache_write(
     assert ticket_file.read_text(
         encoding="utf-8"
     ) == original_ticket
+
+
+def test_status_adds_active_local_work_and_excludes_closed_records(
+    noc_root,
+    monkeypatch,
+):
+    mock_status_dependencies(monkeypatch, {
+        "available": True,
+        "refreshedAt": None,
+        "freshness": "current",
+    })
+    ticket_dir = noc_root / "tickets" / "open"
+    ticket_dir.mkdir(parents=True)
+    (ticket_dir / "NOC-100.json").write_text(
+        """{"id":"NOC-100","noc":{"next_action":"Check","notes":"Local"},
+        "tracking":{"jira_key":"NOC-100","state":"active"}}""",
+        encoding="utf-8",
+    )
+    (ticket_dir / "NOC-101.json").write_text(
+        """{"id":"NOC-101","noc":{"next_action":"Closed","notes":"Old"},
+        "tracking":{"jira_key":"NOC-101","state":"closed"}}""",
+        encoding="utf-8",
+    )
+
+    result = status.get_status(SHIFT_DATE)
+
+    assert result["localWork"]["count"] == 1
+    assert result["localWork"]["items"][0]["jiraKey"] == "NOC-100"

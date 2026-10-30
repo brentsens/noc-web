@@ -5,6 +5,7 @@ from backend.config import NOC_ROOT
 from backend.services.jira_ticket_queue import (
     get_jira_ticket_queue,
 )
+from backend.services.tickets import get_operational_work_summary
 
 
 CLOSED_JIRA_STATUSES = {
@@ -137,4 +138,5 @@ def get_dashboard(shift_date: str) -> dict:
             if handover_created
             else "pending"
         ),
+        "localWork": get_operational_work_summary(),
     }

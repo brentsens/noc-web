@@ -291,3 +291,28 @@ def test_existing_handover_disables_generation(
         result["generation"]["message"]
         == "Handover already exists."
     )
+
+
+def test_end_shift_adds_active_local_work_without_changing_preflight(
+    noc_root,
+    monkeypatch,
+):
+    create_workspace(noc_root)
+    mock_dependencies(monkeypatch)
+    ticket_dir = noc_root / "tickets" / "open"
+    ticket_dir.mkdir(parents=True)
+    (ticket_dir / "NOC-123.json").write_text(
+        """{"id":"NOC-123","noc":{"next_action":"Follow up","notes":"Local"},
+        "tracking":{"jira_key":"NOC-123","state":"active"}}""",
+        encoding="utf-8",
+    )
+
+    result = end_shift.get_end_shift_preflight(SHIFT_DATE)
+
+    assert result["ready"] is True
+    assert result["localWork"]["items"] == [{
+        "jiraKey": "NOC-123",
+        "trackingState": "active",
+        "nextAction": "Follow up",
+        "nocNotes": "Local",
+    }]
