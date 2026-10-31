@@ -62,6 +62,9 @@ from backend.api.jira_discovery import (
 from backend.api.readiness import (
     router as readiness_router,
 )
+from backend.api.datadog_incidents import (
+    router as datadog_incidents_router,
+)
 from backend.api.assistant import (
     router as assistant_router,
 )
@@ -148,6 +151,10 @@ app.include_router(
 
 app.include_router(
     readiness_router
+)
+
+app.include_router(
+    datadog_incidents_router
 )
 
 app.include_router(

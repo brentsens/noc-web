@@ -146,6 +146,12 @@
 
                 </div>
 
+                <section
+                    id="active-datadog-incidents"
+                    class="panel active-incidents-panel investigation-live-incidents"
+                    aria-label="Datadog Incidents"
+                ></section>
+
                 <section id="create-investigation-panel" class="panel investigation-create-panel hidden" aria-labelledby="create-investigation-title">
                     <div class="panel-header">
                         <h2 id="create-investigation-title">Create from Datadog Notebook</h2>
@@ -342,6 +348,7 @@
             rejectInvestigation
         } from "./js/api.js";
         import { initializeWorkflow, renderStatePanel, renderStatePanels } from "./js/workflow-context.js";
+        import { mountActiveIncidents } from "./js/active-incidents.js";
 
         let investigations = [];
         let selectedInvestigation = null;
@@ -351,6 +358,10 @@
             document.querySelector(
                 "#investigation-date"
             );
+        mountActiveIncidents(
+            document.querySelector("#active-datadog-incidents"),
+            { allowCreateInvestigation: true }
+        );
         const createPanel = document.querySelector("#create-investigation-panel");
         const showCreateButton = document.querySelector("#show-create-investigation");
         const cancelCreateButton = document.querySelector("#cancel-create-investigation");
@@ -917,6 +928,31 @@
         });
         if (workflowContext.valid) {
             loadInvestigations();
+        }
+        let incidentTitleHint = null;
+        try {
+            incidentTitleHint = window.sessionStorage.getItem(
+                "noc-web:incident-title-handoff"
+            );
+            window.sessionStorage.removeItem("noc-web:incident-title-handoff");
+        } catch {
+            incidentTitleHint = null;
+        }
+        if (
+            workflowContext.valid
+            && typeof incidentTitleHint === "string"
+            && incidentTitleHint.trim()
+            && incidentTitleHint.length <= 120
+            && !/[\u0000-\u001f\u007f]/.test(incidentTitleHint)
+        ) {
+            createShiftInput.value = investigationDate.value;
+            createNameInput.value = incidentTitleHint.trim();
+            createPanel.classList.remove("hidden");
+            renderStatePanel(sourceStates, {
+                source: "Datadog incident",
+                kind: "read-only",
+                message: "Review the incident title, provide a FINAL Notebook URL, then use Preview. No investigation was created."
+            });
         }
 
     </script>

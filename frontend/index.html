@@ -208,6 +208,8 @@
 
                     </article>
 
+                    <article id="active-datadog-incidents" class="panel active-incidents-panel"></article>
+
                 </section>
 
                 <section class="lower-grid">
@@ -354,6 +356,7 @@
         } from "./js/api.js";
         import { initializeWorkflow, renderStatePanel, renderStatePanels } from "./js/workflow-context.js";
         import { RESOURCE_GROUPS } from "./js/resources.js";
+        import { mountActiveIncidents } from "./js/active-incidents.js";
 
         const dashboardQuickLinks =
             document.querySelector("#dashboard-quick-links");
@@ -387,6 +390,10 @@
             document.querySelector(
                 "#dashboard-date"
             );
+        mountActiveIncidents(
+            document.querySelector("#active-datadog-incidents"),
+            { showViewIncidents: true }
+        );
 
         const shiftStatus =
             document.querySelector(

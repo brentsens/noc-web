@@ -65,6 +65,25 @@ export async function apiRequest(
 
   }
 
+  export function getDatadogIncidents() {
+
+    return apiRequest(
+      "/api/datadog/incidents"
+    );
+
+  }
+
+  export function refreshDatadogIncidents() {
+
+    return apiRequest(
+      "/api/datadog/incidents/refresh",
+      {
+        method: "POST"
+      }
+    );
+
+  }
+
   export function getTickets() {
 
     return apiRequest(
