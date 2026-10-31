@@ -6,7 +6,11 @@ from backend.services.jira_ticket_queue import (
 )
 from backend.services.jira_cache import get_jira_cache_health
 from backend.services.tickets import get_operational_work_summary
-from backend.services.investigations import get_noc_root, get_reviewed_findings
+from backend.services.investigations import (
+    get_investigations,
+    get_noc_root,
+    get_reviewed_findings,
+)
 
 
 CLOSED_JIRA_STATUSES = {
@@ -34,11 +38,6 @@ def get_dashboard(shift_date: str) -> dict:
         / "open"
     )
 
-    investigation_dir = (
-        shift_dir
-        / "investigations"
-    )
-
     handover_file = (
         shift_dir
         / "handover"
@@ -56,16 +55,13 @@ def get_dashboard(shift_date: str) -> dict:
         )
 
 
-    # Reviewed investigations
-
-    investigation_files = []
-
-    if investigation_dir.exists():
-        investigation_files = list(
-            investigation_dir.glob(
-                "*/investigation.md"
-            )
-        )
+    investigation_lifecycle = get_investigations(shift_date)
+    investigation_review_count = sum(
+        1
+        for investigation in investigation_lifecycle
+        if investigation.get("lifecycleStatus") == "ready_for_review"
+        or investigation.get("error")
+    )
 
 
     # Tickets requiring human review
@@ -130,10 +126,16 @@ def get_dashboard(shift_date: str) -> dict:
             len(jira_tickets),
 
         "investigations":
-            len(investigation_files),
+            len(investigation_lifecycle),
+
+        "investigationLifecycle":
+            investigation_lifecycle,
+
+        "investigationNeedsReview":
+            investigation_review_count,
 
         "needsReview":
-            review_count,
+            review_count + investigation_review_count,
 
         "handover": (
             "created"

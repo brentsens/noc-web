@@ -45,11 +45,12 @@ def create_investigation(
     name,
     title,
     *,
+    shift_date=SHIFT_DATE,
     review_context=None,
     notebook_url=None,
     generated_next_actions=None,
 ):
-    directory = noc_root / SHIFT_DATE / "investigations" / name
+    directory = noc_root / shift_date / "investigations" / name
     directory.mkdir(parents=True)
     metadata = f"# Investigation: {title}\n- Status: active\n- Source of truth: noc-inv\n"
     if notebook_url:
@@ -74,6 +75,80 @@ def create_investigation(
             encoding="utf-8",
         )
     return directory
+
+
+def test_handover_uses_lifecycle_and_excludes_ready_or_cured_future_work(noc_root):
+    create_handover(
+        noc_root,
+        "## Summary\nOperational handover.\n\n"
+        "## Investigation Updates\n\n"
+        "## Next Shift Actions\n"
+        "- Generated next action for queue pressure\n",
+    )
+    create_investigation(
+        noc_root,
+        "ready-item",
+        "Ready Queue Pressure",
+        review_context={
+            "reviewState": "unreviewed",
+            "lifecycleStatus": "ready_for_review",
+            "finding": "READY_FINDING_MUST_NOT_HAND_OVER",
+            "state": "",
+        },
+        generated_next_actions="- Generated future action for queue pressure",
+    )
+    create_investigation(
+        noc_root,
+        "escalated-item",
+        "Escalated Memory Pressure",
+        review_context={
+            "reviewState": "reviewed",
+            "lifecycleStatus": "escalated_to_incident",
+            "finding": "Operator confirms memory pressure remains elevated",
+            "state": "legacy state",
+            "lastLifecycleChangedAt": "2099-12-31T12:00:00+00:00",
+            "lastLifecycleChangedShiftDate": SHIFT_DATE,
+        },
+    )
+    create_investigation(
+        noc_root,
+        "cured-current",
+        "Cured Checkout Delay",
+        review_context={
+            "reviewState": "reviewed",
+            "lifecycleStatus": "cured",
+            "finding": "Checkout delay recovered",
+            "state": "legacy state",
+            "lastLifecycleChangedAt": "2099-12-31T12:00:00+00:00",
+            "lastLifecycleChangedShiftDate": SHIFT_DATE,
+        },
+        generated_next_actions="- GENERATED_CURED_FUTURE_ACTION",
+    )
+    create_investigation(
+        noc_root,
+        "cured-earlier",
+        "Earlier Cured Issue",
+        shift_date="2099-12-30",
+        review_context={
+            "reviewState": "reviewed",
+            "lifecycleStatus": "cured",
+            "finding": "Earlier issue recovered",
+            "state": "legacy state",
+            "lastLifecycleChangedAt": "2099-12-30T12:00:00+00:00",
+            "lastLifecycleChangedShiftDate": "2099-12-30",
+        },
+    )
+
+    handover_file = noc_root / SHIFT_DATE / "handover" / f"handover-{SHIFT_DATE}.md"
+    handover._include_reviewed_findings(handover_file, SHIFT_DATE)
+    content = handover_file.read_text(encoding="utf-8")
+
+    assert "Operator confirms memory pressure remains elevated" in content
+    assert "Checkout delay recovered" in content
+    assert "READY_FINDING_MUST_NOT_HAND_OVER" not in content
+    assert "Earlier issue recovered" not in content
+    assert "GENERATED_CURED_FUTURE_ACTION" not in content
+    assert "legacy state" not in content
 
 
 def test_missing_handover(
@@ -375,8 +450,11 @@ def test_generated_handover_uses_local_context_without_standalone_section(
         "BRINKS Bridge Exceptions – stuck event timestamp parse failure (uspri-prod)",
         review_context={
             "reviewState": "reviewed",
+            "lifecycleStatus": "cured",
             "finding": "Done",
             "state": "Cured",
+            "lastLifecycleChangedAt": "2099-12-31T12:00:00+00:00",
+            "lastLifecycleChangedShiftDate": SHIFT_DATE,
             "reviewedAt": "PRIVATE_REVIEW_TIMESTAMP",
             "reviewedBy": "PRIVATE_REVIEWER",
         },
@@ -395,8 +473,11 @@ def test_generated_handover_uses_local_context_without_standalone_section(
         "CCO login (cco.sesami.io) Frankfurt latency – 2026-10-14",
         review_context={
             "reviewState": "reviewed",
+            "lifecycleStatus": "cured",
             "finding": "Done",
             "state": "Cured",
+            "lastLifecycleChangedAt": "2099-12-31T12:00:00+00:00",
+            "lastLifecycleChangedShiftDate": SHIFT_DATE,
             "reviewedAt": "PRIVATE_REVIEW_TIMESTAMP",
             "reviewedBy": "PRIVATE_REVIEWER",
         },
@@ -644,8 +725,11 @@ def test_summary_replaces_unresolved_sentence_that_names_cured_investigations(no
         "BRINKS Bridge Exceptions",
         review_context={
             "reviewState": "reviewed",
+            "lifecycleStatus": "cured",
             "finding": "Done",
             "state": "Cured",
+            "lastLifecycleChangedAt": "2099-12-31T12:00:00+00:00",
+            "lastLifecycleChangedShiftDate": SHIFT_DATE,
         },
     )
     create_investigation(
@@ -654,8 +738,11 @@ def test_summary_replaces_unresolved_sentence_that_names_cured_investigations(no
         "CCO Frankfurt latency",
         review_context={
             "reviewState": "reviewed",
+            "lifecycleStatus": "cured",
             "finding": "Done",
             "state": "Cured",
+            "lastLifecycleChangedAt": "2099-12-31T12:00:00+00:00",
+            "lastLifecycleChangedShiftDate": SHIFT_DATE,
         },
     )
     generated = """## Summary
@@ -686,8 +773,11 @@ def test_summary_always_includes_resolved_review_states(noc_root):
         "BRINKS Bridge Exceptions",
         review_context={
             "reviewState": "reviewed",
+            "lifecycleStatus": "cured",
             "finding": "Done",
             "state": "Cured",
+            "lastLifecycleChangedAt": "2099-12-31T12:00:00+00:00",
+            "lastLifecycleChangedShiftDate": SHIFT_DATE,
         },
     )
     create_investigation(
@@ -696,8 +786,11 @@ def test_summary_always_includes_resolved_review_states(noc_root):
         "CCO Frankfurt latency",
         review_context={
             "reviewState": "reviewed",
+            "lifecycleStatus": "cured",
             "finding": "Done",
             "state": "Cured",
+            "lastLifecycleChangedAt": "2099-12-31T12:00:00+00:00",
+            "lastLifecycleChangedShiftDate": SHIFT_DATE,
         },
     )
     generated = """## Summary

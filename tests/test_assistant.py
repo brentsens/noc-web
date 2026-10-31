@@ -154,7 +154,7 @@ def test_context_includes_read_only_operational_sources_and_keeps_jira_fields_se
     assert jira_item["localTracking"]["nocNotes"] == "Local context"
     assert "description" not in json.dumps(evidence)
     assert evidence["reviewed-findings"]["summary"][0]["finding"] == "Memory remains elevated."
-    assert evidence["investigation:memory"]["summary"]["status"] == "active"
+    assert evidence["investigation:memory"]["summary"]["status"] == "Escalated to Incident"
 
 
 @pytest.mark.parametrize(
@@ -214,7 +214,7 @@ def test_validated_answer_has_distinct_evidence_backed_categories(noc_root, monk
     assert response["status"] == "complete"
     assert response["facts"]
     assert response["reviewedFindings"][0]["text"] == "Memory remains elevated."
-    assert response["reviewedFindings"][0]["state"] == "monitoring"
+    assert response["reviewedFindings"][0]["state"] == "Escalated to Incident"
     assert "reviewed" not in response
     assert response["aiObservations"][0]["evidenceIds"] == ["local-work"]
     assert response["recommendations"][0]["route"]["href"] == f"tickets.html?shift={SHIFT}"

@@ -157,27 +157,29 @@ export function addShiftNote(
 }
 
 export function getInvestigations(
-  shiftDate
+  shiftDate,
+  view = "active"
 ) {
 
   return apiRequest(
-      `/api/shifts/${shiftDate}/investigations`
+      `/api/shifts/${shiftDate}/investigations?view=${encodeURIComponent(view)}`
   );
 
 }
 
 
 export function getInvestigation(
-  shiftDate,
-  investigationName
+  creationShiftDate,
+  investigationName,
+  selectedShiftDate = creationShiftDate
 ) {
 
   return apiRequest(
-      `/api/shifts/${shiftDate}/investigations/${
+      `/api/shifts/${creationShiftDate}/investigations/${
           encodeURIComponent(
               investigationName
           )
-      }`
+      }?selectedShiftDate=${encodeURIComponent(selectedShiftDate)}`
   );
 
 }
@@ -201,21 +203,43 @@ export function createInvestigation(
   });
 }
 
-export function reviewInvestigation(
-  shiftDate,
+export function updateInvestigationLifecycle(
+  creationShiftDate,
   investigationName,
+  lifecycleStatus,
   finding,
-  state,
+  selectedShiftDate,
   confirmed = false
 ) {
   return apiRequest(
-    `/api/shifts/${shiftDate}/investigations/${encodeURIComponent(investigationName)}/review`,
+    `/api/shifts/${creationShiftDate}/investigations/${encodeURIComponent(investigationName)}/review`,
     {
       method: "POST",
       body: JSON.stringify({
         confirmed,
+        lifecycleStatus,
         finding,
-        state
+        selectedShiftDate
+      })
+    }
+  );
+}
+
+export function attachDatadogIncident(
+  creationShiftDate,
+  investigationName,
+  incidentId,
+  selectedShiftDate,
+  confirmed = false
+) {
+  return apiRequest(
+    `/api/shifts/${creationShiftDate}/investigations/${encodeURIComponent(investigationName)}/datadog-incident`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        confirmed,
+        incidentId,
+        selectedShiftDate
       })
     }
   );

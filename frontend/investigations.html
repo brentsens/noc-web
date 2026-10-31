@@ -136,7 +136,7 @@
                     </div>
 
                     <div class="page-controls">
-
+                        <label class="form-label" for="investigation-date">Selected Shift</label>
                         <input id="investigation-date" class="date-control" type="date">
                         <button id="show-create-investigation" class="button" type="button">
                             + Create from Datadog Notebook
@@ -199,13 +199,16 @@
 
                         <div class="panel-header">
 
-                            <h2>
-                                Investigation Lifecycle
-                            </h2>
+                            <h2>Investigations</h2>
 
-                            <span id="investigation-count" class="count-badge">
-                                0 investigation
-                            </span>
+                            <div class="page-controls">
+                                <label class="form-label" for="investigation-view">View</label>
+                                <select id="investigation-view" class="form-control">
+                                    <option value="active">Active</option>
+                                    <option value="history">History</option>
+                                </select>
+                                <span id="investigation-count" class="count-badge">0 investigations</span>
+                            </div>
 
                         </div>
 
@@ -255,8 +258,8 @@
 
                                 </div>
 
-                                <span class="ready-outline">
-                                    READY FOR HANDOVER
+                                <span id="investigation-lifecycle-badge" class="ready-outline">
+                                    Ready for Review
                                 </span>
 
                             </div>
@@ -282,6 +285,11 @@
                                 <div>
                                     <label>Review state</label>
                                     <span id="investigation-review-state"></span>
+                                </div>
+
+                                <div>
+                                    <label>Shift visibility</label>
+                                    <span id="investigation-visibility"></span>
                                 </div>
 
                             </div>
@@ -314,16 +322,48 @@
 
                                 <p id="investigation-handover"></p>
 
-                                <textarea id="reviewed-finding" class="form-control" rows="2"
-                                    placeholder="Concise operator-reviewed finding"></textarea>
-                                <input id="reviewed-state" class="form-control" type="text"
-                                    placeholder="Current concise state">
-                                <button id="publish-reviewed-finding" class="button" type="button">
-                                    Review and publish local context
+                                <div class="form-group">
+                                    <label class="form-label" for="reviewed-finding">Operator-reviewed finding</label>
+                                    <input id="reviewed-finding" class="form-control" type="text" maxlength="500"
+                                        autocomplete="off">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="lifecycle-status">Lifecycle</label>
+                                    <select id="lifecycle-status" class="form-control">
+                                        <option value="ready_for_review">Ready for Review</option>
+                                        <option value="escalated_to_incident">Escalated to Incident</option>
+                                        <option value="cured">Cured</option>
+                                    </select>
+                                </div>
+                                <button id="confirm-lifecycle-change" class="button" type="button" disabled>
+                                    Confirm Lifecycle Change
                                 </button>
                                 <button id="reject-advisory" class="button" type="button">
                                     Reject advisory
                                 </button>
+                            </section>
+
+                            <section id="datadog-attachment-section" class="investigation-section hidden">
+                                <h3>Datadog incident</h3>
+                                <p id="datadog-attachment-freshness"></p>
+                                <div id="attached-datadog-incident"></div>
+                                <div id="datadog-resolution-warning" class="investigation-warning hidden">
+                                    <p>Datadog incident resolved</p>
+                                    <p>Local investigation still Escalated to Incident</p>
+                                    <p>Operator review required</p>
+                                </div>
+                                <div id="datadog-attachment-controls">
+                                    <label class="form-label" for="datadog-incident-picker">
+                                        Attach a current Datadog incident
+                                    </label>
+                                    <select id="datadog-incident-picker" class="form-control">
+                                        <option value="">Select an incident</option>
+                                    </select>
+                                    <p id="datadog-selected-incident"></p>
+                                    <button id="confirm-datadog-attachment" class="button" type="button" disabled>
+                                        Confirm Incident Attachment
+                                    </button>
+                                </div>
                             </section>
 
                         </div>
@@ -340,11 +380,13 @@
     <script type="module">
 
         import {
+            attachDatadogIncident,
             createInvestigation,
+            getDatadogIncidents,
             getInvestigation,
             getInvestigations,
             previewInvestigation,
-            reviewInvestigation,
+            updateInvestigationLifecycle,
             rejectInvestigation
         } from "./js/api.js";
         import { initializeWorkflow, renderStatePanel, renderStatePanels } from "./js/workflow-context.js";
@@ -358,6 +400,13 @@
             document.querySelector(
                 "#investigation-date"
             );
+        const investigationView = document.querySelector("#investigation-view");
+        const visibilityLabels = {
+            created_this_shift: "Created this shift",
+            carried: "Carried from an earlier shift",
+            cured_this_shift: "Cured this shift",
+            historical: "Historical"
+        };
         mountActiveIncidents(
             document.querySelector("#active-datadog-incidents"),
             { allowCreateInvestigation: true }
@@ -401,9 +450,164 @@
                 "#investigation-count"
             );
         const reviewedFindingInput = document.querySelector("#reviewed-finding");
-        const reviewedStateInput = document.querySelector("#reviewed-state");
-        const publishReviewedFinding = document.querySelector("#publish-reviewed-finding");
+        const lifecycleStatusInput = document.querySelector("#lifecycle-status");
+        const confirmLifecycleChange = document.querySelector("#confirm-lifecycle-change");
         const rejectAdvisory = document.querySelector("#reject-advisory");
+        const lifecycleBadge = document.querySelector("#investigation-lifecycle-badge");
+        const attachmentSection = document.querySelector("#datadog-attachment-section");
+        const attachmentControls = document.querySelector("#datadog-attachment-controls");
+        const attachmentFreshness = document.querySelector("#datadog-attachment-freshness");
+        const attachedIncidentDisplay = document.querySelector("#attached-datadog-incident");
+        const resolutionWarning = document.querySelector("#datadog-resolution-warning");
+        const datadogIncidentPicker = document.querySelector("#datadog-incident-picker");
+        const selectedIncidentDisplay = document.querySelector("#datadog-selected-incident");
+        const confirmDatadogAttachment = document.querySelector("#confirm-datadog-attachment");
+        let latestDatadogSnapshot = null;
+        const lifecycleLabels = {
+            ready_for_review: "Ready for Review",
+            escalated_to_incident: "Escalated to Incident",
+            cured: "Cured"
+        };
+
+        function updateLifecycleControls() {
+            const currentStatus = selectedInvestigation?.lifecycleStatus;
+            const targetStatus = lifecycleStatusInput.value;
+            const allowedTransitions = {
+                ready_for_review: ["escalated_to_incident", "cured"],
+                escalated_to_incident: ["cured"],
+                cured: []
+            };
+            const finding = reviewedFindingInput.value;
+            const canChange = Boolean(
+                selectedInvestigation
+                && selectedInvestigation.validationStatus !== "needs_review"
+                && allowedTransitions[currentStatus]?.includes(targetStatus)
+                && finding.trim()
+                && finding.length <= 500
+                && !/[\r\n]/.test(finding)
+            );
+            confirmLifecycleChange.disabled = !canChange;
+        }
+
+        function selectedDatadogIncident() {
+            return latestDatadogSnapshot?.incidents?.find(
+                incident => incident.id === datadogIncidentPicker.value
+            ) || null;
+        }
+
+        function updateDatadogAttachmentControls() {
+            const incident = selectedDatadogIncident();
+            if (!incident) {
+                selectedIncidentDisplay.textContent = "";
+                confirmDatadogAttachment.disabled = true;
+                return;
+            }
+            selectedIncidentDisplay.textContent =
+                `ID ${incident.id} · ${incident.title} · `
+                + `${incident.severity || "Severity unavailable"} · ${incident.state} · `
+                + `${incident.url || "URL unavailable"} · `
+                + `Cache ${latestDatadogSnapshot.freshness.toUpperCase()}`;
+            confirmDatadogAttachment.disabled =
+                latestDatadogSnapshot.freshness !== "current"
+                || !["ACTIVE", "STABLE"].includes(incident.state)
+                || Boolean(selectedInvestigation?.datadogIncidentReference);
+        }
+
+        function renderAttachedDatadogIncident(investigation) {
+            const attached = investigation.datadogIncidentReference;
+            if (!attached) {
+                return;
+            }
+            const link = document.createElement("a");
+            link.textContent = "View Datadog Incident ↗";
+            link.href = attached.url;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            attachedIncidentDisplay.append(link);
+            attachedIncidentDisplay.append(
+                document.createTextNode(
+                    ` · ${attached.incidentId} · ${attached.title} · ${attached.lastKnownState} · ${attached.url}`
+                )
+            );
+        }
+
+        async function loadDatadogAttachmentOptions(investigation) {
+            const canAttachDatadogIncident =
+                investigation.lifecycleStatus === "escalated_to_incident";
+            const hasAttachedDatadogIncident =
+                Boolean(investigation.datadogIncidentReference);
+            attachmentSection.classList.toggle(
+                "hidden",
+                !canAttachDatadogIncident && !hasAttachedDatadogIncident
+            );
+            attachmentControls.classList.toggle("hidden", !canAttachDatadogIncident);
+            latestDatadogSnapshot = null;
+            attachedIncidentDisplay.replaceChildren();
+            resolutionWarning.classList.add("hidden");
+            datadogIncidentPicker.replaceChildren();
+            datadogIncidentPicker.appendChild(
+                new Option("Select an incident", "")
+            );
+            datadogIncidentPicker.disabled =
+                !canAttachDatadogIncident || hasAttachedDatadogIncident;
+            confirmDatadogAttachment.disabled = true;
+            if (!canAttachDatadogIncident && !hasAttachedDatadogIncident) {
+                return;
+            }
+
+            try {
+                const snapshot = await getDatadogIncidents();
+                if (
+                    selectedInvestigation?.name !== investigation.name
+                    || selectedInvestigation?.creationShiftDate !== investigation.creationShiftDate
+                ) {
+                    return;
+                }
+                latestDatadogSnapshot = snapshot;
+                attachmentFreshness.textContent =
+                    `Datadog cache freshness: ${snapshot.freshness.toUpperCase()}`;
+                const incidents = Array.isArray(snapshot.incidents)
+                    ? snapshot.incidents
+                    : [];
+                for (const incident of incidents) {
+                    if (!["ACTIVE", "STABLE"].includes(incident.state)) {
+                        continue;
+                    }
+                    const option = new Option(
+                        `${incident.id} — ${incident.title} — ${incident.severity || "Severity unavailable"} — ${incident.state} — ${incident.url || "URL unavailable"}`,
+                        incident.id
+                    );
+                    datadogIncidentPicker.appendChild(option);
+                }
+                renderAttachedDatadogIncident(investigation);
+                const attached = investigation.datadogIncidentReference;
+                if (attached) {
+                    if (
+                        canAttachDatadogIncident
+                        && snapshot.freshness === "current"
+                        && !incidents.some(incident => incident.id === attached.incidentId)
+                    ) {
+                        resolutionWarning.classList.remove("hidden");
+                    }
+                }
+                updateDatadogAttachmentControls();
+            } catch (error) {
+                if (
+                    selectedInvestigation?.name !== investigation.name
+                    || selectedInvestigation?.creationShiftDate !== investigation.creationShiftDate
+                ) {
+                    return;
+                }
+                attachmentFreshness.textContent =
+                    "Datadog cache freshness: unavailable";
+                renderAttachedDatadogIncident(investigation);
+                renderStatePanel(sourceStates, {
+                    source: "Datadog incident attachment",
+                    kind: "error",
+                    message: error.message
+                });
+            }
+        }
 
         function getLocalDateString() {
 
@@ -455,7 +659,7 @@
                             `
                 ${investigation.name}
                 ${investigation.title}
-                ${investigation.lifecycle.state}
+                ${investigation.lifecycleLabel}
                 `
                                 .toLowerCase();
 
@@ -517,15 +721,14 @@
                 cardTitle.append(title, name);
                 const status = document.createElement("span");
                 status.className = "ready-outline";
-                status.textContent = investigation.validationStatus === "needs_review"
-                    ? "NEEDS REVIEW"
-                    : investigation.validationStatus === "ready_for_review"
-                        ? "READY FOR REVIEW"
-                        : "READY";
+                status.textContent = investigation.lifecycleLabel || "Unavailable";
                 cardTop.append(cardTitle, status);
                 const cardMeta = document.createElement("div");
                 cardMeta.className = "investigation-card-meta";
-                cardMeta.textContent = investigation.lifecycle.state;
+                cardMeta.textContent =
+                    `${investigation.lifecycleLabel || "Unavailable"} · `
+                    + `${visibilityLabels[investigation.visibility] || "Historical"} · `
+                    + `Created ${investigation.creationShiftDate}`;
                 card.append(cardTop, cardMeta);
 
 
@@ -534,7 +737,7 @@
                     () => {
 
                         loadInvestigationDetails(
-                            investigation.name,
+                            investigation,
                             card
                         );
 
@@ -551,7 +754,7 @@
         }
 
         async function loadInvestigationDetails(
-            investigationName,
+            investigationSummary,
             card
         ) {
 
@@ -559,9 +762,11 @@
 
                 const investigation =
                     await getInvestigation(
-                        investigationDate.value,
-                        investigationName
+                        investigationSummary.creationShiftDate,
+                        investigationSummary.name,
+                        investigationDate.value
                     );
+                investigation.visibility = investigationSummary.visibility;
                 showInvestigationDetails(investigation, card);
 
             } catch (error) {
@@ -603,6 +808,14 @@
                     : "Existing record";
             document.querySelector("#investigation-review-state").textContent =
                 investigation.lifecycle.reviewState;
+            document.querySelector("#investigation-visibility").textContent =
+                `${visibilityLabels[investigation.visibility] || "Created this shift"} · Created ${investigation.creationShiftDate || investigationDate.value}`;
+            lifecycleBadge.textContent =
+                investigation.lifecycleLabel || "Unavailable";
+            lifecycleStatusInput.value =
+                investigation.lifecycleStatus || "ready_for_review";
+            reviewedFindingInput.value =
+                investigation.reviewedFinding?.finding || "";
             document.querySelector("#investigation-summary").textContent =
                 investigation.notebookUrl || investigation.evidence.reference
                     || "No source reference is available.";
@@ -620,12 +833,21 @@
             const advisoryContent = document.querySelector("#investigation-advisory-content");
             advisoryContent.textContent = investigation.advisory.content || "";
             advisoryContent.classList.toggle("hidden", !investigation.advisory.content);
-            publishReviewedFinding.disabled =
-                investigation.validationStatus === "needs_review";
+            lifecycleStatusInput.disabled =
+                investigation.validationStatus === "needs_review"
+                || investigation.lifecycleStatus === "cured";
+            rejectAdvisory.disabled =
+                investigation.lifecycleStatus !== "ready_for_review"
+                || investigation.lifecycle?.reviewState !== "unreviewed";
+            reviewedFindingInput.disabled =
+                investigation.validationStatus === "needs_review"
+                || investigation.lifecycleStatus === "cured";
+            updateLifecycleControls();
             document.querySelector("#investigation-handover").textContent =
                 investigation.reviewedFinding
-                    ? `${investigation.reviewedFinding.finding} (${investigation.reviewedFinding.state})`
+                    ? investigation.reviewedFinding.finding
                     : "No operator-reviewed context has been published.";
+            loadDatadogAttachmentOptions(investigation);
 
         }
 
@@ -635,7 +857,8 @@
 
                 const response =
                     await getInvestigations(
-                        investigationDate.value
+                        investigationDate.value,
+                        investigationView.value
                     );
 
 
@@ -645,8 +868,8 @@
                     source: "Investigations",
                     kind: response.count > 0 ? "current" : "unavailable",
                     message: response.count > 0
-                        ? "Available investigations were loaded without generating new work."
-                        : "No investigations are available for this shift."
+                        ? `${response.count} ${investigationView.value} investigations loaded for ${response.selectedShiftDate}.`
+                        : `No ${investigationView.value} investigations are available for ${response.selectedShiftDate}.`
                 }, {
                     source: "View mode",
                     kind: "read-only",
@@ -837,45 +1060,95 @@
             }
         });
 
-        publishReviewedFinding.addEventListener("click", async () => {
+        lifecycleStatusInput.addEventListener("change", updateLifecycleControls);
+        reviewedFindingInput.addEventListener("input", updateLifecycleControls);
+        datadogIncidentPicker.addEventListener(
+            "change",
+            updateDatadogAttachmentControls
+        );
+
+        confirmDatadogAttachment.addEventListener("click", async () => {
+            const incident = selectedDatadogIncident();
+            if (!selectedInvestigation || !incident) {
+                return;
+            }
+            if (!window.confirm(
+                `Attach Datadog incident ${incident.id} (${incident.title}) to this investigation?\n\n`
+                + `Exact Datadog state: ${incident.state}\n`
+                + `Cache freshness: ${latestDatadogSnapshot.freshness.toUpperCase()}\n\n`
+                + "This stores a local reference only and does not modify Datadog."
+            )) {
+                return;
+            }
+            confirmDatadogAttachment.disabled = true;
+            try {
+                const attached = await attachDatadogIncident(
+                    selectedInvestigation.creationShiftDate,
+                    selectedInvestigation.name,
+                    incident.id,
+                    investigationDate.value,
+                    true
+                );
+                selectedInvestigation = attached;
+                await loadInvestigations();
+                showInvestigationDetails(attached);
+                renderStatePanel(sourceStates, {
+                    source: "Datadog incident attachment",
+                    kind: "current",
+                    message: `Datadog incident ${incident.id} was attached to local investigation context.`
+                });
+            } catch (error) {
+                updateDatadogAttachmentControls();
+                renderStatePanel(sourceStates, {
+                    source: "Datadog incident attachment",
+                    kind: "error",
+                    message: error.message
+                });
+            }
+        });
+
+        confirmLifecycleChange.addEventListener("click", async () => {
             if (!selectedInvestigation) {
                 return;
             }
             const finding = reviewedFindingInput.value.trim();
-            const state = reviewedStateInput.value.trim();
-            if (!finding || !state) {
+            const lifecycleStatus = lifecycleStatusInput.value;
+            if (!finding || !lifecycleLabels[lifecycleStatus]) {
                 renderStatePanel(sourceStates, {
-                    source: "Reviewed context",
+                    source: "Investigation lifecycle",
                     kind: "error",
-                    message: "Enter a concise finding and state before publishing."
+                    message: "Enter a concise operator-reviewed finding before changing lifecycle."
                 });
                 return;
             }
             if (!window.confirm(
-                "Publish this concise reviewed finding to local NOC context and operational summaries?\n\n"
-                + "This does not modify evidence, Datadog, or Jira."
+                `Change lifecycle to ${lifecycleLabels[lifecycleStatus]}?\n\n`
+                + "This updates local investigation context only. It does not modify Datadog, Jira, Shift Notes, Local NOC Tracking, or email."
             )) {
                 return;
             }
+            confirmLifecycleChange.disabled = true;
             try {
-                const reviewed = await reviewInvestigation(
-                    investigationDate.value,
+                const reviewed = await updateInvestigationLifecycle(
+                    selectedInvestigation.creationShiftDate || investigationDate.value,
                     selectedInvestigation.name,
+                    lifecycleStatus,
                     finding,
-                    state,
+                    investigationDate.value,
                     true
                 );
                 selectedInvestigation = reviewed;
-                document.querySelector("#investigation-handover").textContent =
-                    `${reviewed.reviewedFinding.finding} (${reviewed.reviewedFinding.state})`;
+                await loadInvestigations();
+                showInvestigationDetails(reviewed);
                 renderStatePanel(sourceStates, {
-                    source: "Reviewed context",
+                    source: "Investigation lifecycle",
                     kind: "current",
-                    message: "Concise local reviewed context was published."
+                    message: `Lifecycle changed to ${lifecycleLabels[lifecycleStatus]}.`
                 });
             } catch (error) {
+                updateLifecycleControls();
                 renderStatePanel(sourceStates, {
-                    source: "Reviewed context",
+                    source: "Investigation lifecycle",
                     kind: "error",
                     message: error.message
                 });
@@ -883,10 +1156,15 @@
         });
 
         rejectAdvisory.addEventListener("click", async () => {
-            if (!selectedInvestigation || !window.confirm(
+            if (
+                !selectedInvestigation
+                || selectedInvestigation.lifecycleStatus !== "ready_for_review"
+                || selectedInvestigation.lifecycle?.reviewState !== "unreviewed"
+                || !window.confirm(
                 "Reject this advisory in local NOC context?\n\n"
                 + "This does not modify evidence, Datadog, or Jira."
-            )) {
+                )
+            ) {
                 return;
             }
             try {
@@ -912,6 +1190,7 @@
             "change",
             loadInvestigations
         );
+        investigationView.addEventListener("change", loadInvestigations);
 
 
         investigationDate.value =

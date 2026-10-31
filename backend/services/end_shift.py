@@ -166,6 +166,7 @@ def get_end_shift_preflight(
             "count": (
                 status["investigations"]["count"]
             ),
+            "items": status["investigations"].get("items", []),
             "needsReview": investigation_review_count,
             "needsReviewItems": status["investigations"].get("needsReviewItems", []),
         },

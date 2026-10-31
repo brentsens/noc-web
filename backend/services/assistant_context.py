@@ -201,6 +201,8 @@ def _project_investigations(shift_date: str) -> list[dict[str, Any]]:
         lifecycle = investigation.get("lifecycle", {})
         source = investigation.get("evidence", {})
         review_state = lifecycle.get("reviewState", "unreviewed")
+        if investigation.get("validationStatus") == "needs_review":
+            review_state = "unreviewed"
         source_availability = _availability(source.get("availability"))
         provenance = source.get("provenance")
         if provenance not in {"noc-inv", "copilot-mcp"}:
@@ -211,15 +213,19 @@ def _project_investigations(shift_date: str) -> list[dict[str, Any]]:
         summary: dict[str, Any] = {
             "name": name,
             "title": _bounded(investigation.get("title", "")),
-            "status": _bounded(lifecycle.get("state", "")),
+            "status": _bounded(investigation.get("lifecycleLabel", "")),
             "reviewState": review_state,
         }
         finding = investigation.get("reviewedFinding")
-        if review_state == "reviewed" and isinstance(finding, dict):
+        if (
+            review_state == "reviewed"
+            and investigation.get("validationStatus") != "needs_review"
+            and isinstance(finding, dict)
+        ):
             safe_finding = {
                 "investigation": name,
                 "finding": _bounded(finding.get("finding", "")),
-                "state": _bounded(finding.get("state", "")),
+                "state": _bounded(investigation.get("lifecycleLabel", "")),
                 "evidenceId": f"investigation:{name}",
             }
             summary["reviewedFinding"] = safe_finding
@@ -233,9 +239,7 @@ def _project_investigations(shift_date: str) -> list[dict[str, Any]]:
             _safe_reference(source.get("reference")),
             summary,
         ))
-        if _bounded(lifecycle.get("state", "")).casefold() not in {
-            "closed", "resolved", "complete", "completed",
-        }:
+        if investigation.get("lifecycleStatus") != "cured":
             active.append({
                 "name": name,
                 "title": summary["title"],

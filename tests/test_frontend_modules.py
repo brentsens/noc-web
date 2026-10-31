@@ -55,6 +55,134 @@ def test_browser_module_sources_have_valid_es_module_syntax():
         assert result.returncode == 0, result.stderr
 
 
+def test_investigation_lifecycle_requires_confirmation_and_uses_lifecycle_badges():
+    page = (FRONTEND / "investigations.html").read_text(encoding="utf-8")
+    api_exports = _exports(FRONTEND / "js" / "api.js")
+
+    assert 'id="lifecycle-status"' in page
+    assert 'id="confirm-lifecycle-change"' in page
+    assert 'id="reviewed-state"' not in page
+    assert "updateInvestigationLifecycle" in api_exports
+    assert "investigation.lifecycleLabel" in page
+
+    module_script = MODULE_SCRIPT_PATTERN.findall(page)[0]
+    selection_start = module_script.index('lifecycleStatusInput.addEventListener("change"')
+    confirmation_start = module_script.index(
+        'confirmLifecycleChange.addEventListener("click"', selection_start
+    )
+    selection_handler = module_script[selection_start:confirmation_start]
+    assert "updateInvestigationLifecycle(" not in selection_handler
+    assert "reviewInvestigation(" not in selection_handler
+
+    confirmation_handler = module_script[confirmation_start:]
+    assert "window.confirm(" in confirmation_handler
+    assert "updateInvestigationLifecycle(" in confirmation_handler
+
+
+def test_advisory_rejection_is_limited_and_does_not_lock_lifecycle_changes():
+    page = (FRONTEND / "investigations.html").read_text(encoding="utf-8")
+    module_script = MODULE_SCRIPT_PATTERN.findall(page)[0]
+    controls_start = module_script.index("function updateLifecycleControls()")
+    controls_end = module_script.index("function selectedDatadogIncident()", controls_start)
+    controls = module_script[controls_start:controls_end]
+
+    assert "rejectAdvisory.disabled =" in module_script
+    assert 'investigation.lifecycleStatus !== "ready_for_review"' in module_script
+    assert 'investigation.lifecycle?.reviewState !== "unreviewed"' in module_script
+    assert 'selectedInvestigation.lifecycle?.reviewState !== "rejected"' not in controls
+
+
+def test_datadog_attachment_is_selected_confirmed_and_links_safely():
+    page = (FRONTEND / "investigations.html").read_text(encoding="utf-8")
+    module_script = MODULE_SCRIPT_PATTERN.findall(page)[0]
+    api_exports = _exports(FRONTEND / "js" / "api.js")
+
+    assert "attachDatadogIncident" in api_exports
+    assert 'id="datadog-incident-picker"' in page
+    assert 'id="confirm-datadog-attachment"' in page
+    assert "Datadog incident resolved" in page
+    assert "Local investigation still Escalated to Incident" in page
+    assert "Operator review required" in page
+    assert 'target = "_blank"' in module_script
+    assert 'rel = "noopener noreferrer"' in module_script
+
+    selection_match = re.search(
+        r'datadogIncidentPicker\.addEventListener\(\s*"change"',
+        module_script,
+    )
+    assert selection_match
+    selection_start = selection_match.start()
+    confirmation_start = module_script.index(
+        'confirmDatadogAttachment.addEventListener("click"', selection_start
+    )
+    assert "attachDatadogIncident(" not in module_script[
+        selection_start:confirmation_start
+    ]
+    assert "window.confirm(" in module_script[confirmation_start:]
+    assert "attachDatadogIncident(" in module_script[confirmation_start:]
+
+
+def test_attached_datadog_reference_remains_visible_when_snapshot_fetch_fails():
+    page = (FRONTEND / "investigations.html").read_text(encoding="utf-8")
+    module_script = MODULE_SCRIPT_PATTERN.findall(page)[0]
+    assert "function renderAttachedDatadogIncident(investigation)" in module_script
+
+    load_start = module_script.index("async function loadDatadogAttachmentOptions")
+    load_end = module_script.index("function getLocalDateString()", load_start)
+    loader = module_script[load_start:load_end]
+    catch_start = loader.index("} catch (error) {")
+    catch = loader[catch_start:]
+
+    assert "renderAttachedDatadogIncident(investigation);" in catch
+    assert "selectedInvestigation?.name !== investigation.name" in catch
+    assert 'attachmentFreshness.textContent =\n                    "Datadog cache freshness: unavailable";' in catch
+    assert 'link.target = "_blank";' in module_script
+    assert 'link.rel = "noopener noreferrer";' in module_script
+
+
+def test_cured_investigation_history_shows_attached_link_without_attachment_controls():
+    page = (FRONTEND / "investigations.html").read_text(encoding="utf-8")
+    module_script = MODULE_SCRIPT_PATTERN.findall(page)[0]
+    assert 'id="datadog-attachment-controls"' in page
+
+    load_start = module_script.index("async function loadDatadogAttachmentOptions")
+    load_end = module_script.index("function getLocalDateString()", load_start)
+    loader = module_script[load_start:load_end]
+
+    assert re.search(
+        r'const canAttachDatadogIncident\s*=\s*investigation\.lifecycleStatus\s*'
+        r'===\s*"escalated_to_incident";',
+        loader,
+    )
+    assert re.search(
+        r"const hasAttachedDatadogIncident\s*=\s*"
+        r"Boolean\(investigation\.datadogIncidentReference\);",
+        loader,
+    )
+    assert 'attachmentControls.classList.toggle("hidden", !canAttachDatadogIncident);' in loader
+    assert "if (!canAttachDatadogIncident && !hasAttachedDatadogIncident)" in loader
+    assert (
+        "canAttachDatadogIncident\n"
+        "                        && snapshot.freshness === \"current\""
+    ) in loader
+
+
+def test_shift_lifecycle_views_render_the_shared_projection():
+    dashboard = (FRONTEND / "index.html").read_text(encoding="utf-8")
+    status = (FRONTEND / "status.html").read_text(encoding="utf-8")
+    end_shift = (FRONTEND / "end-shift.html").read_text(encoding="utf-8")
+
+    assert "dashboard.investigationLifecycle" in dashboard
+    assert "item.lifecycleLabel" in dashboard
+    assert "status.investigations.items" in status
+    assert "investigation.lifecycleLabel" in status
+    assert "preflight.investigations.items" in end_shift
+    assert "item.lifecycleLabel" in end_shift
+    assert "Carried from an earlier shift" in dashboard
+    assert "Cured this shift" in status
+    assert "Historical" in end_shift
+
+
 def test_assistant_context_requires_explicit_shift_without_changing_other_workflows():
     module = FRONTEND / "js" / "workflow-context.js"
     script = """

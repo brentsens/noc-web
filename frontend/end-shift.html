@@ -124,7 +124,7 @@
                     </div>
 
                     <div class="page-controls">
-
+                        <label class="form-label" for="end-shift-date">Selected Shift</label>
                         <input id="end-shift-date" class="date-control" type="date">
 
                         <span class="end-ready-badge">
@@ -254,6 +254,7 @@
                                     <p id="readiness-investigations-copy">
                                         Checking investigations...
                                     </p>
+                                    <div id="readiness-investigation-list"></div>
                                 </div>
 
                                 <span id="readiness-investigations-state" class="readiness-state success-text">
@@ -634,6 +635,9 @@
             document.querySelector(
                 "#readiness-investigations-state"
             );
+        const readinessInvestigationList = document.querySelector(
+            "#readiness-investigation-list"
+        );
 
         const generateButton =
             document.querySelector(
@@ -1166,6 +1170,24 @@
             );
         }
 
+        function renderReadinessInvestigations(items) {
+            readinessInvestigationList.replaceChildren();
+            const visibilityLabels = {
+                created_this_shift: "Created this shift",
+                carried: "Carried from an earlier shift",
+                cured_this_shift: "Cured this shift",
+                historical: "Historical"
+            };
+            for (const item of items) {
+                const entry = document.createElement("p");
+                entry.textContent =
+                    `${item.title}: ${item.lifecycleLabel} · `
+                    + `${visibilityLabels[item.visibility] || "Historical"} · `
+                    + `Created ${item.creationShiftDate}`;
+                readinessInvestigationList.appendChild(entry);
+            }
+        }
+
         async function loadReadiness() {
 
             generateButton.disabled = true;
@@ -1314,6 +1336,9 @@
                     preflight.investigations.needsReview || 0;
                 const reviewedFindingCount =
                     (preflight.reviewedFindings || []).length;
+                renderReadinessInvestigations(
+                    preflight.investigations.items || []
+                );
 
                 if (investigationReviews > 0) {
 

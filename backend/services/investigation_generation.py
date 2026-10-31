@@ -486,6 +486,17 @@ def create_investigation(
         (published / "generation-status.json").write_text(
             json.dumps(generation_metadata, indent=2) + "\n", encoding="utf-8"
         )
+        (published / "reviewed-context.json").write_text(
+            json.dumps({
+                "reviewState": "unreviewed",
+                "lifecycleStatus": "ready_for_review",
+                "finding": "",
+                "state": "",
+                "lastLifecycleChangedAt": None,
+                "lastLifecycleChangedShiftDate": None,
+            }, indent=2) + "\n",
+            encoding="utf-8",
+        )
         target_parent = target.parent
         try:
             target_parent.mkdir(parents=True, exist_ok=True)
@@ -503,6 +514,7 @@ def create_investigation(
         try:
             os.replace(published / "generation-status.json", target / "generation-status.json")
             os.replace(record_file, target / "investigation.md")
+            os.replace(published / "reviewed-context.json", target / "reviewed-context.json")
         except OSError:
             shutil.rmtree(target, ignore_errors=True)
             raise GenerationError(500, "storage-failed", "The investigation record could not be stored.") from None

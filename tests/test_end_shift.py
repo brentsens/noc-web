@@ -1,4 +1,7 @@
+import pytest
+
 from backend.services import end_shift
+from backend.services import status
 from backend.app import app
 from fastapi.testclient import TestClient
 
@@ -48,6 +51,58 @@ def test_generated_investigation_awaiting_review_blocks_end_shift(noc_root, monk
     assert result["investigations"]["needsReviewItems"][0]["id"] == (
         "investigation:checkout-latency"
     )
+
+
+@pytest.mark.parametrize(
+    ("lifecycle_status", "review_state", "expected_needs_review"),
+    [
+        ("ready_for_review", "unreviewed", 1),
+        ("escalated_to_incident", "reviewed", 0),
+        ("cured", "reviewed", 0),
+    ],
+)
+def test_end_shift_uses_operator_lifecycle_for_investigation_blockers(
+    investigation_factory,
+    noc_root,
+    monkeypatch,
+    lifecycle_status,
+    review_state,
+    expected_needs_review,
+):
+    create_workspace(noc_root)
+    investigation_factory(
+        shift_date=SHIFT_DATE,
+        name="lifecycle-item",
+        reviewed_context={
+            "reviewState": review_state,
+            "lifecycleStatus": lifecycle_status,
+            "finding": "Operator-reviewed finding" if review_state == "reviewed" else "",
+            "state": "legacy state",
+            "lastLifecycleChangedAt": "2099-12-31T12:00:00+00:00",
+            "lastLifecycleChangedShiftDate": SHIFT_DATE,
+        },
+    )
+    monkeypatch.setattr(status, "get_jira_ticket_queue", lambda: {"tickets": []})
+    monkeypatch.setattr(status, "get_jira_cache_health", lambda: {"freshness": "current"})
+    monkeypatch.setattr(status, "get_operational_work_summary", lambda: {"available": True, "items": []})
+    monkeypatch.setattr(end_shift, "get_status", status.get_status)
+    monkeypatch.setattr(
+        end_shift,
+        "get_health",
+        lambda shift: {
+            "result": {"health": "HEALTHY", "passed": 1, "warnings": 0, "failed": 0}
+        },
+    )
+    monkeypatch.setattr(
+        end_shift,
+        "get_ticket_sync_state",
+        lambda: {"synced": True, "success": True, "completedAt": "2099-12-31T12:00:00Z"},
+    )
+
+    result = end_shift.get_end_shift_preflight(SHIFT_DATE)
+
+    assert result["investigations"]["needsReview"] == expected_needs_review
+    assert result["ready"] is (expected_needs_review == 0)
 
 
 def create_workspace(

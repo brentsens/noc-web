@@ -113,6 +113,7 @@
 
                     <div class="page-controls">
 
+                        <label class="form-label" for="dashboard-date">Selected Shift</label>
                         <input id="dashboard-date" class="date-control" type="date">
 
                         <div id="shift-status" class="ready-badge">
@@ -139,7 +140,7 @@
                         <div id="investigation-count" class="metric-value purple">
                             -
                         </div>
-                        <div class="metric-subtitle">This shift</div>
+                        <div class="metric-subtitle">Active and carried</div>
                     </article>
 
                     <article class="metric-card">
@@ -167,6 +168,13 @@
 
                 </section>
 
+                <article class="panel">
+                    <div class="panel-header">
+                        <h2>Investigation Lifecycle</h2>
+                        <a href="investigations.html">View Investigations →</a>
+                    </div>
+                    <div id="dashboard-investigation-list"></div>
+                </article>
 
                 <section class="dashboard-grid">
 
@@ -414,6 +422,9 @@
             document.querySelector(
                 "#review-count"
             );
+        const investigationLifecycleList = document.querySelector(
+            "#dashboard-investigation-list"
+        );
 
         const handoverStatus =
             document.querySelector(
@@ -461,6 +472,29 @@
                     + `NOC Notes: ${item.nocNotes || "Not recorded"}`;
                 row.append(title, details);
                 localWorkList.appendChild(row);
+            }
+        }
+
+        function renderInvestigationLifecycle(items) {
+            investigationLifecycleList.replaceChildren();
+            if (!items.length) {
+                investigationLifecycleList.textContent =
+                    "No active investigations for this shift.";
+                return;
+            }
+            const visibilityLabels = {
+                created_this_shift: "Created this shift",
+                carried: "Carried from an earlier shift",
+                cured_this_shift: "Cured this shift",
+                historical: "Historical"
+            };
+            for (const item of items) {
+                const row = document.createElement("p");
+                row.textContent =
+                    `${item.title}: ${item.lifecycleLabel} · `
+                    + `${visibilityLabels[item.visibility] || "Historical"} · `
+                    + `Created ${item.creationShiftDate}`;
+                investigationLifecycleList.appendChild(row);
             }
         }
 
@@ -744,6 +778,10 @@
 
                 investigationCount.textContent =
                     dashboard.investigations;
+
+                renderInvestigationLifecycle(
+                    dashboard.investigationLifecycle || []
+                );
 
 
                 reviewCount.textContent =

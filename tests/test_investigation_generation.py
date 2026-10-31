@@ -1,3 +1,4 @@
+import json
 import subprocess
 
 from fastapi.testclient import TestClient
@@ -135,7 +136,22 @@ def test_successful_generation_uses_fixed_argv_and_starts_unreviewed(
     assert body["generationStatus"] == "completed"
     assert body["validationStatus"] == "ready_for_review"
     assert body["lifecycle"]["reviewState"] == "unreviewed"
+    assert body["lifecycleStatus"] == "ready_for_review"
     assert body["evidence"]["reference"] == BRINKS_URL
+    context = json.loads(
+        (
+            investigation_workspace.noc_root / SHIFT_DATE / "investigations"
+            / BRINKS_IDENTIFIER / "reviewed-context.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert context == {
+        "reviewState": "unreviewed",
+        "lifecycleStatus": "ready_for_review",
+        "finding": "",
+        "state": "",
+        "lastLifecycleChangedAt": None,
+        "lastLifecycleChangedShiftDate": None,
+    }
     record = (
         investigation_workspace.noc_root / SHIFT_DATE / "investigations"
         / BRINKS_IDENTIFIER / "investigation.md"
@@ -356,10 +372,19 @@ def test_malformed_record_is_retained_and_withheld_from_review_and_propagation(
     assert "TBD" in created.json()["advisory"]["content"]
     reviewed = client.post(
         f"/api/shifts/{SHIFT_DATE}/investigations/checkout-latency/review",
-        json={"confirmed": True, "finding": "Queue high", "state": "monitoring"},
+        json={
+            "confirmed": True,
+            "lifecycleStatus": "escalated_to_incident",
+            "finding": "Queue high",
+            "selectedShiftDate": SHIFT_DATE,
+        },
     )
     assert reviewed.status_code == 422
-    assert not (record_path.parent / "reviewed-context.json").exists()
+    context = __import__("json").loads(
+        (record_path.parent / "reviewed-context.json").read_text(encoding="utf-8")
+    )
+    assert context["reviewState"] == "unreviewed"
+    assert context["lifecycleStatus"] == "ready_for_review"
     assert investigation_generation.investigations.get_reviewed_findings(SHIFT_DATE) == []
 
     rejected = client.post(

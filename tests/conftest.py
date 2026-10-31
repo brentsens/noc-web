@@ -140,3 +140,46 @@ def noc_root(
     )
 
     return test_root
+
+
+@pytest.fixture
+def investigation_factory(noc_root):
+    """Create isolated source investigations with optional sidecar metadata."""
+
+    def create(
+        *,
+        shift_date="2099-12-31",
+        name="memory",
+        title="Memory pressure",
+        state="active",
+        source="noc-inv",
+        generation=None,
+        reviewed_context=None,
+    ):
+        import json
+
+        directory = noc_root / shift_date / "investigations" / name
+        directory.mkdir(parents=True)
+        (directory / "investigation.md").write_text(
+            f"# Investigation: {title}\n"
+            f"- Status: {state}\n"
+            f"- Source of truth: {source}\n"
+            "\n## Summary\n"
+            "Isolated test investigation content.\n",
+            encoding="utf-8",
+        )
+        if source == "noc-inv":
+            (directory / "noc-inv.log").write_text(
+                "isolated test provenance\n", encoding="utf-8"
+            )
+        if generation is not None:
+            (directory / "generation-status.json").write_text(
+                json.dumps(generation), encoding="utf-8"
+            )
+        if reviewed_context is not None:
+            (directory / "reviewed-context.json").write_text(
+                json.dumps(reviewed_context), encoding="utf-8"
+            )
+        return directory
+
+    return create

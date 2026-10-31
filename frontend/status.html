@@ -115,7 +115,7 @@
                     </div>
 
                     <div class="page-controls">
-
+                        <label class="form-label" for="status-date">Selected Shift</label>
                         <input id="status-date" class="date-control" type="date">
 
                         <div id="status-mode" class="ready-badge">
@@ -778,9 +778,16 @@
                             "p"
                         );
 
-                    entry.textContent =
-                        `${investigation.name}: ${investigation.status
-                        }`;
+                const visibilityLabels = {
+                    created_this_shift: "Created this shift",
+                    carried: "Carried from an earlier shift",
+                    cured_this_shift: "Cured this shift",
+                    historical: "Historical"
+                };
+                entry.textContent =
+                    `${investigation.name}: ${investigation.lifecycleLabel} · `
+                    + `${visibilityLabels[investigation.visibility] || "Historical"} · `
+                    + `Created ${investigation.creationShiftDate}`;
 
                     investigationList
                         .appendChild(

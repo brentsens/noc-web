@@ -6,6 +6,8 @@ from datetime import datetime
 from backend.config import NOC_ROOT
 from backend.services.tickets import get_operational_work_summary
 from backend.services.investigations import (
+    LIFECYCLE_STATUS_LABELS,
+    get_investigation,
     get_investigations,
     get_noc_root,
     get_reviewed_findings,
@@ -38,16 +40,6 @@ JIRA_REVIEW_METADATA_PATTERN = re.compile(
     r"^\s*(?:[-*]\s*)?(?:investigation(?: name)?|display title|evidence provenance|"
     r"capture method|shift date|source of truth)\s*:|"
     r"notebook\s*:|app\.datadoghq\.com/notebook",
-    re.IGNORECASE,
-)
-RESOLVED_STATE_PATTERN = re.compile(
-    r"^(?:cured|done|resolved|complete|completed|closed|fixed|recovered|"
-    r"cleared|remediated|fully cured|fully resolved|self-recovered)$",
-    re.IGNORECASE,
-)
-ACTIVE_STATE_PATTERN = re.compile(
-    r"^(?:active|open|ongoing|in progress|investigating|monitoring|escalated|unresolved|"
-    r"follow-up required|follow up required)$",
     re.IGNORECASE,
 )
 MONITORING_FOLLOWUP_PATTERN = re.compile(
@@ -138,16 +130,6 @@ def _replace_section_body(
         + "\n\n"
         + content[section_end:].lstrip("\n")
     )
-
-
-def _is_resolved_state(state: str) -> bool:
-    normalized = " ".join(state.casefold().split())
-    return bool(RESOLVED_STATE_PATTERN.fullmatch(normalized))
-
-
-def _is_active_state(state: str) -> bool:
-    normalized = " ".join(state.casefold().split())
-    return bool(ACTIVE_STATE_PATTERN.fullmatch(normalized))
 
 
 def _investigation_keywords(investigation: dict) -> set[str]:
@@ -243,7 +225,7 @@ def _canonical_investigation_section(content: str, investigations: list[dict]) -
         )
         lines.append(
             f"- **{title}** — Operator-reviewed finding: {reviewed['finding']}; "
-            f"state: {reviewed['state']}."
+            f"state: {LIFECYCLE_STATUS_LABELS[investigation['lifecycleStatus']]}."
         )
         reference = investigation.get("evidence", {}).get("reference")
         if reference:
@@ -355,7 +337,7 @@ def _append_active_reviewed_actions(content: str, investigations: list[dict]) ->
         if (
             investigation.get("lifecycle", {}).get("reviewState") != "reviewed"
             or not reviewed
-            or not _is_active_state(reviewed["state"])
+            or investigation.get("lifecycleStatus") != "escalated_to_incident"
         ):
             continue
         title = (
@@ -402,7 +384,7 @@ def _active_reviewed_monitoring_updates(investigations: list[dict]) -> list[str]
         if (
             investigation.get("lifecycle", {}).get("reviewState") != "reviewed"
             or not reviewed
-            or not _is_active_state(reviewed["state"])
+            or investigation.get("lifecycleStatus") != "escalated_to_incident"
             or not MONITORING_FOLLOWUP_PATTERN.search(reviewed["finding"])
         ):
             continue
@@ -460,7 +442,7 @@ def _correct_resolved_investigation_summary(content: str, investigations: list[d
         investigation for investigation in investigations
         if investigation.get("lifecycle", {}).get("reviewState") == "reviewed"
         and investigation.get("reviewedFinding")
-        and _is_resolved_state(investigation["reviewedFinding"]["state"])
+        and investigation.get("lifecycleStatus") == "cured"
     ]
     if not resolved:
         return content
@@ -468,7 +450,7 @@ def _correct_resolved_investigation_summary(content: str, investigations: list[d
     all_investigations_resolved = bool(investigations) and all(
         investigation.get("lifecycle", {}).get("reviewState") == "reviewed"
         and investigation.get("reviewedFinding")
-        and _is_resolved_state(investigation["reviewedFinding"]["state"])
+        and investigation.get("lifecycleStatus") == "cured"
         for investigation in investigations
     )
 
@@ -480,8 +462,7 @@ def _correct_resolved_investigation_summary(content: str, investigations: list[d
                 or investigation.get("title")
                 or investigation["name"]
             )
-            state = investigation["reviewedFinding"]["state"]
-            statements.append(f"Operator review marks {title} as {state}.")
+            statements.append(f"Operator review marks {title} as Cured.")
         return " ".join(statements)
 
     section_match, section_end = bounds
@@ -538,8 +519,7 @@ def _correct_resolved_investigation_summary(content: str, investigations: list[d
             or investigation.get("title")
             or investigation["name"]
         )
-        state = investigation["reviewedFinding"]["state"]
-        statement = f"Operator review marks {title} as {state}."
+        statement = f"Operator review marks {title} as Cured."
         if statement.casefold() not in updated.casefold():
             missing_statuses.append(statement)
     if missing_statuses:
@@ -561,12 +541,30 @@ def _correct_resolved_investigation_summary(content: str, investigations: list[d
 
 
 def _include_reviewed_findings(handover_file, shift_date: str) -> None:
-    investigations = get_investigations(shift_date)
+    investigations = []
+    for projection in get_investigations(shift_date):
+        source = projection.get("sourceReference")
+        if isinstance(source, dict):
+            detail = get_investigation(
+                source.get("creationShiftDate"),
+                source.get("investigationName"),
+                shift_date,
+            )
+            if detail and detail.get("advisory"):
+                projection["advisory"] = detail["advisory"]
+        investigations.append(projection)
     reviewed = [
         investigation for investigation in investigations
         if investigation.get("lifecycle", {}).get("reviewState") == "reviewed"
         and investigation.get("reviewedFinding") is not None
         and investigation.get("validationStatus") != "needs_review"
+        and (
+            investigation.get("lifecycleStatus") == "escalated_to_incident"
+            or (
+                investigation.get("lifecycleStatus") == "cured"
+                and investigation.get("lastLifecycleChangedShiftDate") == shift_date
+            )
+        )
     ]
 
     content = handover_file.read_text(encoding="utf-8")

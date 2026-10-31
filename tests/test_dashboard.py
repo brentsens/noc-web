@@ -1,4 +1,5 @@
 from backend.services import dashboard
+from backend.services import status
 
 
 SHIFT_DATE = "2099-12-31"
@@ -67,3 +68,37 @@ def test_dashboard_adds_read_only_jira_cache_health(
     result = dashboard.get_dashboard(SHIFT_DATE)
 
     assert result["jiraCache"]["freshness"] == "stale"
+
+
+def test_dashboard_and_status_share_operator_lifecycle_projection(
+    investigation_factory, monkeypatch
+):
+    investigation_factory(
+        shift_date=SHIFT_DATE,
+        name="escalated",
+        generation={
+            "generationStatus": "completed",
+            "validationStatus": "ready_for_review",
+        },
+        reviewed_context={
+            "reviewState": "reviewed",
+            "lifecycleStatus": "escalated_to_incident",
+            "finding": "Operator-reviewed finding",
+            "state": "legacy free-form state",
+            "lastLifecycleChangedAt": "2099-12-31T12:00:00+00:00",
+            "lastLifecycleChangedShiftDate": SHIFT_DATE,
+        },
+    )
+    monkeypatch.setattr(dashboard, "get_jira_ticket_queue", lambda: {"tickets": []})
+    monkeypatch.setattr(status, "get_jira_ticket_queue", lambda: {"tickets": []})
+    monkeypatch.setattr(status, "get_jira_cache_health", lambda: {"freshness": "current"})
+
+    dashboard_result = dashboard.get_dashboard(SHIFT_DATE)
+    status_result = status.get_status(SHIFT_DATE)
+
+    dashboard_item = dashboard_result["investigationLifecycle"][0]
+    status_item = status_result["investigations"]["items"][0]
+    assert dashboard_item["lifecycleStatus"] == "escalated_to_incident"
+    assert status_item["lifecycleStatus"] == dashboard_item["lifecycleStatus"]
+    assert status_item["lifecycleLabel"] == "Escalated to Incident"
+    assert status_item["validationStatus"] == "ready_for_review"

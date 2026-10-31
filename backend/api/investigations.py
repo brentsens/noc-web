@@ -1,17 +1,22 @@
 from datetime import date
+import re
+from typing import Literal
 
 from fastapi import (
     APIRouter,
     HTTPException,
+    Query,
 )
 from pydantic import BaseModel, StrictBool, StrictStr
 
 from backend.config import ConfigurationError
 from backend.services.investigations import (
+    InvestigationAttachmentError,
+    attach_datadog_incident,
     get_investigation,
     get_investigations,
     reject_investigation,
-    review_investigation,
+    transition_investigation,
 )
 from backend.services.investigation_generation import (
     GenerationError,
@@ -28,13 +33,20 @@ router = APIRouter(
 
 class ReviewInvestigationRequest(BaseModel):
     confirmed: StrictBool
-    finding: str
-    state: str
-    reviewedBy: str | None = None
+    lifecycleStatus: Literal["escalated_to_incident", "cured"]
+    finding: StrictStr
+    selectedShiftDate: StrictStr
+    reviewedBy: StrictStr | None = None
 
 
 class _ConfirmedRequest(BaseModel):
     confirmed: StrictBool
+
+
+class AttachDatadogIncidentRequest(BaseModel):
+    confirmed: StrictBool
+    incidentId: StrictStr
+    selectedShiftDate: StrictStr
 
 
 class PreviewInvestigationRequest(BaseModel):
@@ -49,6 +61,11 @@ class CreateInvestigationRequest(PreviewInvestigationRequest):
 def validate_shift_date(
     shift_date: str,
 ) -> None:
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", shift_date):
+        raise HTTPException(
+            status_code=400,
+            detail="shift_date must use YYYY-MM-DD format",
+        )
     try:
         date.fromisoformat(shift_date)
     except ValueError:
@@ -164,6 +181,7 @@ def create(
 )
 def investigations(
     shift_date: str,
+    view: Literal["active", "history"] = Query("active"),
 ):
 
     validate_shift_date(
@@ -172,13 +190,20 @@ def investigations(
 
 
     results = get_investigations(
-        shift_date
+        shift_date,
+        view,
     )
 
 
     return {
         "shiftDate":
             shift_date,
+
+        "selectedShiftDate":
+            shift_date,
+
+        "view":
+            view,
 
         "count":
             len(results),
@@ -195,16 +220,20 @@ def investigations(
 def investigation(
     shift_date: str,
     investigation_name: str,
+    selectedShiftDate: str | None = Query(None),
 ):
 
     validate_shift_date(
         shift_date
     )
+    if selectedShiftDate is not None:
+        validate_shift_date(selectedShiftDate)
 
 
     result = get_investigation(
         shift_date,
         investigation_name,
+        selectedShiftDate,
     )
 
 
@@ -237,11 +266,12 @@ def review(
             detail="This operation requires confirmed: true.",
         )
     try:
-        return review_investigation(
+        return transition_investigation(
             shift_date,
             investigation_name,
+            request.selectedShiftDate,
+            request.lifecycleStatus,
             request.finding,
-            request.state,
             request.reviewedBy,
         )
     except FileNotFoundError:
@@ -254,6 +284,11 @@ def review(
             status_code=422,
             detail=str(error),
         )
+    except OSError:
+        raise HTTPException(
+            status_code=500,
+            detail="Investigation lifecycle could not be stored.",
+        ) from None
 
 
 @router.post(
@@ -274,3 +309,41 @@ def reject(
         raise HTTPException(status_code=404, detail="Investigation not found")
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error))
+
+
+@router.post(
+    "/{shift_date}/investigations/"
+    "{investigation_name}/datadog-incident"
+)
+def attach_incident(
+    shift_date: str,
+    investigation_name: str,
+    request: AttachDatadogIncidentRequest,
+):
+    validate_shift_date(shift_date)
+    if request.confirmed is not True:
+        raise HTTPException(
+            status_code=422,
+            detail="This operation requires confirmed: true.",
+        )
+    try:
+        return attach_datadog_incident(
+            shift_date,
+            investigation_name,
+            request.selectedShiftDate,
+            request.incidentId,
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    except InvestigationAttachmentError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=str(error),
+        ) from None
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+    except OSError:
+        raise HTTPException(
+            status_code=500,
+            detail="Datadog incident attachment could not be stored.",
+        ) from None
