@@ -20,5 +20,5 @@ packaging/windows/*.exe
 packaging/windows/*.ico
 bootstrap-downloads/
 bootstrap-records/
-release/
+/release/
 first-release-verification/

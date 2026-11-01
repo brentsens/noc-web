@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,15 @@ def test_release_workflow_is_tag_gated_and_fail_closed():
     assert 'python -m pip install --requirement requirements-test.txt' in workflow
     assert workflow.index('requirements-test.txt') < workflow.index('python -m pytest -q')
     assert 'pytest==9.1.1' in (ROOT / 'requirements-test.txt').read_text()
+    assert 'python -m venv .venv' in workflow
+    for path in (
+        'scripts/release/build-archive.sh',
+        'scripts/release/verify-release.sh',
+        'scripts/release/verify-first-release.sh',
+    ):
+        assert path in subprocess.check_output(
+            ['git', 'ls-files', '--', path], cwd=ROOT, text=True
+        ).splitlines()
 
 
 def test_release_scripts_define_stable_safe_contract():

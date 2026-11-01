@@ -30,6 +30,7 @@ jobs:
           [[ "$(git rev-parse "${GITHUB_REF_NAME}^{commit}")" == "$GITHUB_SHA" ]]
       - name: Install application and test dependencies
         run: |
+          python -m venv .venv
           python -m pip install --requirement requirements.txt
           python -m pip install --requirement requirements-test.txt
       - name: Validate application
