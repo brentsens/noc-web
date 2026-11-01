@@ -31,11 +31,11 @@ jobs:
       - name: Install application and test dependencies
         run: |
           python -m venv .venv
-          python -m pip install --requirement requirements.txt
-          python -m pip install --requirement requirements-test.txt
+          .venv/bin/python -m pip install --requirement requirements.txt
+          .venv/bin/python -m pip install --requirement requirements-test.txt
       - name: Validate application
         run: |
-          python -m pytest -q
+          .venv/bin/python -m pytest -q
           git diff --check
       - name: Assemble verified release
         run: |

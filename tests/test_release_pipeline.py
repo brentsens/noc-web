@@ -13,7 +13,8 @@ def test_release_workflow_is_tag_gated_and_fail_closed():
     assert workflow.index('Validate application') < workflow.index('Publish release assets')
     assert workflow.index('Attest final archive') < workflow.index('Publish release assets')
     assert 'id-token: write' in workflow and 'attestations: write' in workflow
-    assert 'python -m pip install --requirement requirements-test.txt' in workflow
+    assert '.venv/bin/python -m pip install --requirement requirements.txt' in workflow
+    assert '.venv/bin/python -m pip install --requirement requirements-test.txt' in workflow
     assert workflow.index('requirements-test.txt') < workflow.index('python -m pytest -q')
     assert 'pytest==9.1.1' in (ROOT / 'requirements-test.txt').read_text()
     assert 'python -m venv .venv' in workflow

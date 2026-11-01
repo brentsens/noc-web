@@ -182,8 +182,8 @@ passes every independent contract check.
 - [ ] T029 Add clean-checkout regression coverage in `tests/test_release_pipeline.py` that rejects missing `scripts/release/build-archive.sh`, `scripts/release/verify-release.sh`, or `scripts/release/verify-first-release.sh` before release validation.
 - [ ] T030 Ensure `.github/workflows/release.yml`, `tests/test_release_pipeline.py`, and `scripts/release/build-archive.sh`, `scripts/release/verify-release.sh`, and `scripts/release/verify-first-release.sh` are tracked release implementation files and assert their tracked presence in `tests/test_release_pipeline.py`.
 - [ ] T031 Add isolated virtual-environment fixtures for Feature 011 runtime installer error-order tests in `tests/test_runtime_installer.py`, preserving the configured virtual-environment interpreter contract without relying on repository `.venv`.
-- [ ] T032 Update `.github/workflows/release.yml` to create the required project virtual environment deterministically with Python 3.10 before running clean-runner runtime tests, without committing or packaging `.venv`.
-- [ ] T033 Add clean-runner regression coverage in `tests/test_runtime_installer.py` proving shortcut-failure tests reach their intended shortcut failure after the isolated test virtual environment is available.
+- [ ] T032 Update `.github/workflows/release.yml` to create the required project virtual environment deterministically with Python 3.10 and install the pinned `requirements.txt` runtime dependencies, including uvicorn, into that `.venv` before running clean-runner Feature 011 runtime tests; retain separate pinned release/test dependency installation and never commit or package `.venv`.
+- [ ] T033 Add clean-runner regression coverage in `tests/test_runtime_installer.py` and `tests/test_runtime_service.py` proving shortcut-failure tests reach their intended shortcut failure and the configured `.venv/bin/python` can run the managed service with no `VIRTUAL_ENV` or `PYTHONPATH`, without falling back to the GitHub runner's global Python.
 - [ ] T034 [P] Document release-manager tag creation, failure handling,
   artifact retrieval, and no-secret policy in `docs/release-pipeline.md`.
 - [ ] T035 Run the focused release pipeline and runtime installer tests in
@@ -194,8 +194,8 @@ passes every independent contract check.
   exclusions, and consumer contract in `.github/workflows/release.yml`.
 - [ ] T037 Perform and record the first successful real release verification using
   `scripts/release/verify-first-release.sh` for a new immutable version after
-  this fix, leaving failed `v1.0.0` and `v1.0.1` unchanged and unpublished,
-  before enabling Feature 012 acquisition in
+  this fix, leaving failed `v1.0.0`, `v1.0.1`, and `v1.0.2` unchanged and
+  unpublished, before enabling Feature 012 acquisition in
   `packaging/windows/bootstrap-manifest.json`.
 
 ---
