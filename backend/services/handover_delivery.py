@@ -3,6 +3,10 @@ import shutil
 import subprocess
 
 from backend.config import NOC_ROOT
+from backend.services.dependencies import (
+    DependencyUnavailable,
+    ExternalOperationFailed,
+)
 
 
 EMAIL_PATTERN = re.compile(
@@ -35,9 +39,7 @@ def preview_handover_email(
     )
 
     if not command:
-        raise FileNotFoundError(
-            "m365 command not found"
-        )
+        raise DependencyUnavailable("microsoft365")
 
     subject = (
         f"NOC Shift Handover - {shift_date}"
@@ -97,16 +99,7 @@ def preview_handover_email(
     )
 
     if result.returncode != 0:
-
-        message = (
-            result.stderr.strip()
-            or result.stdout.strip()
-            or "M365 email preview failed"
-        )
-
-        raise RuntimeError(
-            message
-        )
+        raise ExternalOperationFailed("microsoft365")
 
     return {
         "shiftDate": shift_date,
@@ -142,9 +135,7 @@ def send_handover_email(
     )
 
     if not command:
-        raise FileNotFoundError(
-            "m365 command not found"
-        )
+        raise DependencyUnavailable("microsoft365")
 
     subject = (
         f"NOC Shift Handover - {shift_date}"
@@ -203,16 +194,7 @@ def send_handover_email(
     )
 
     if result.returncode != 0:
-
-        message = (
-            result.stderr.strip()
-            or result.stdout.strip()
-            or "M365 email send failed"
-        )
-
-        raise RuntimeError(
-            message
-        )
+        raise ExternalOperationFailed("microsoft365")
 
     return {
         "shiftDate": shift_date,

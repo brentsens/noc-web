@@ -7,6 +7,10 @@ from fastapi import (
 
 from pydantic import BaseModel
 
+from backend.services.dependencies import (
+    DependencyUnavailable,
+    ExternalOperationFailed,
+)
 from backend.services.jira_create import (
     build_description,
     create_jira_ticket,
@@ -70,6 +74,12 @@ def preview_ticket(
             detail=str(error),
         )
 
+    except DependencyUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
     except FileNotFoundError as error:
         raise HTTPException(
             status_code=404,
@@ -82,11 +92,17 @@ def preview_ticket(
             detail="Jira preview timed out.",
         )
 
-    except RuntimeError as error:
+    except ExternalOperationFailed as error:
         raise HTTPException(
-            status_code=500,
-            detail=str(error),
-        )
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
+    except RuntimeError:
+        raise HTTPException(
+            status_code=502,
+            detail="Atlas Jira preview returned an invalid response.",
+        ) from None
 
 @router.post("/create")
 def create_ticket(
@@ -127,6 +143,12 @@ def create_ticket(
             detail=str(error),
         )
 
+    except DependencyUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
     except FileNotFoundError as error:
         raise HTTPException(
             status_code=404,
@@ -139,8 +161,14 @@ def create_ticket(
             detail="Jira creation timed out.",
         )
 
-    except RuntimeError as error:
+    except ExternalOperationFailed as error:
         raise HTTPException(
-            status_code=500,
-            detail=str(error),
-        )    
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
+    except RuntimeError:
+        raise HTTPException(
+            status_code=502,
+            detail="Atlas Jira creation returned an invalid response.",
+        ) from None

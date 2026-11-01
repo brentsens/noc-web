@@ -30,15 +30,26 @@
       <section class="content">
         <div class="page-header">
           <div><h1>Workstation Readiness</h1><p>Read-only evidence before an operational workflow. A ready result is not action confirmation.</p></div>
-          <input id="readiness-date" class="date-control" type="date">
+          <div class="toolbar">
+            <input id="readiness-date" class="date-control" type="date">
+            <button id="readiness-recheck" class="button secondary" type="button" aria-label="Recheck workstation readiness">Recheck</button>
+          </div>
         </div>
         <section class="panel">
           <div class="panel-header"><h2>Decision</h2><span id="overall-status" class="count-badge">Loading</span></div>
           <p id="readiness-summary">Checking approved workstation capabilities.</p>
+          <p id="readiness-assessed-at" aria-live="polite"></p>
+          <p id="readiness-error" role="alert" aria-live="assertive"></p>
         </section>
         <section class="panel">
-          <div class="panel-header"><h2>Required capabilities</h2></div>
+          <div class="panel-header"><h2>Application and workstation</h2></div>
+          <div id="runtime-checks"></div>
           <div id="readiness-checks"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-header"><h2>External dependencies</h2></div>
+          <p>Optional integrations do not prevent unrelated NOC Web workflows.</p>
+          <div id="external-capabilities"></div>
         </section>
         <section class="panel">
           <div class="panel-header"><h2>Liveness diagnostics</h2></div>
@@ -55,33 +66,75 @@
     const dateInput = document.querySelector("#readiness-date");
     const overall = document.querySelector("#overall-status");
     const summary = document.querySelector("#readiness-summary");
+    const assessedAt = document.querySelector("#readiness-assessed-at");
+    const errorMessage = document.querySelector("#readiness-error");
+    const recheckButton = document.querySelector("#readiness-recheck");
+    const runtimeChecks = document.querySelector("#runtime-checks");
     const checks = document.querySelector("#readiness-checks");
+    const externalCapabilities = document.querySelector("#external-capabilities");
     const liveness = document.querySelector("#readiness-liveness");
     const today = new Date().toISOString().slice(0, 10);
     dateInput.value = new URLSearchParams(location.search).get("shift") || today;
     preserveSelectedShiftNavigation(dateInput.value);
 
     function renderCheck(check) {
+      const labels = {
+        ready: "READY",
+        setup_required: "SETUP REQUIRED",
+        unavailable: "UNAVAILABLE",
+        notReady: "NOT READY",
+        available: "AVAILABLE",
+        notConfigured: "NOT CONFIGURED"
+      };
+      const article = document.createElement("article");
+      article.className = "list-item";
+      const heading = document.createElement("strong");
+      heading.textContent = `${check.capability}: ${labels[check.status] || "UNKNOWN"}`;
+      const impact = document.createElement("p");
+      impact.textContent = check.impact;
+      const action = document.createElement("p");
       const age = Number.isInteger(check.ageSeconds) ? ` Cache age: ${check.ageSeconds}s.` : "";
-      return `<article class="list-item"><strong>${check.capability}: ${check.status}</strong><p>${check.impact}</p><p>${check.correctiveAction}${age}</p></article>`;
+      action.textContent = `${check.correctiveAction}${age}`;
+      article.append(heading, impact, action);
+      return article;
+    }
+    function renderChecks(container, items) {
+      container.replaceChildren(...items.map(renderCheck));
     }
     async function load() {
       overall.textContent = "Loading";
+      errorMessage.textContent = "";
+      recheckButton.disabled = true;
+      recheckButton.setAttribute("aria-busy", "true");
       try {
         const result = await getReadiness(dateInput.value);
-        overall.textContent = result.overallStatus;
+        overall.textContent = result.overallStatus === "ready" ? "READY" : "NOT READY";
         summary.textContent = result.overallStatus === "ready"
           ? "Required capability evidence is ready. Confirm any state-changing workflow separately."
           : "This workstation is not ready. Follow the capability recovery guidance below.";
-        checks.innerHTML = [result.configuration, ...result.checks].map(renderCheck).join("");
-        liveness.innerHTML = result.liveness.map(renderCheck).join("");
+        const checked = new Date(result.assessedAt);
+        assessedAt.textContent = Number.isNaN(checked.getTime())
+          ? "Assessment time unavailable."
+          : `Last checked: ${checked.toLocaleString()}`;
+        renderChecks(runtimeChecks, result.runtime || []);
+        renderChecks(checks, [result.configuration, ...result.checks]);
+        renderChecks(externalCapabilities, result.externalCapabilities || []);
+        renderChecks(liveness, result.liveness);
       } catch (error) {
-        overall.textContent = "notReady";
+        overall.textContent = "NOT READY";
         summary.textContent = requestErrorMessage(error);
-        checks.textContent = "Readiness assessment could not be completed.";
-        liveness.textContent = "";
+        errorMessage.textContent = requestErrorMessage(error);
+        assessedAt.textContent = "";
+        runtimeChecks.replaceChildren();
+        checks.replaceChildren();
+        externalCapabilities.replaceChildren();
+        liveness.replaceChildren();
+      } finally {
+        recheckButton.disabled = false;
+        recheckButton.removeAttribute("aria-busy");
       }
     }
+    recheckButton.addEventListener("click", load);
     dateInput.addEventListener("change", () => {
       history.replaceState(null, "", `?shift=${encodeURIComponent(dateInput.value)}`);
       preserveSelectedShiftNavigation(dateInput.value);

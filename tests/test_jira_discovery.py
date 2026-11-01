@@ -296,8 +296,7 @@ def test_atlas_failure(
             ),
     )
 
-    with pytest.raises(
-        RuntimeError,
-        match="Jira unavailable",
-    ):
+    with pytest.raises(RuntimeError) as error:
         jira_discovery.get_open_jira_tickets()
+    assert str(error.value) == "The Atlas Jira operation failed."
+    assert "Jira unavailable" not in str(error.value)

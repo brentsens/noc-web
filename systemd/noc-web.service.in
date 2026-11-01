@@ -1,0 +1,20 @@
+[Unit]
+Description=SESAMI NOC Web user service
+StartLimitIntervalSec=@START_LIMIT_INTERVAL@
+StartLimitBurst=@START_LIMIT_BURST@
+
+[Service]
+Type=simple
+WorkingDirectory=@REPOSITORY_ROOT@
+Environment=HOME=%h
+Environment=@XDG_CONFIG_HOME_ENV@
+Environment=PATH=%h/.local/bin:/home/linuxbrew/.linuxbrew/Homebrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=NOC_WEB_PORT=@PORT@
+Environment=@RUNTIME_CONFIG_ENV@
+ExecStart=@PYTHON@ -m scripts.run_service --config @CONFIG_PATH@
+Restart=on-failure
+RestartSec=@RESTART_DELAY@
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

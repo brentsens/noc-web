@@ -3,7 +3,12 @@ from datetime import date
 from fastapi import APIRouter, HTTPException
 
 from backend.config import ConfigurationError, resolve_readiness_profile
-from backend.services.readiness import assess_readiness, configuration_failure
+from backend.services.dependency_readiness import assess_external_capabilities
+from backend.services.readiness import (
+    assess_readiness,
+    assess_runtime_readiness,
+    configuration_failure,
+)
 
 
 router = APIRouter(prefix="/api/readiness", tags=["readiness"])
@@ -29,6 +34,27 @@ def readiness(shift_date: str):
                 "configuration": configuration_failure(error.setting).serialize(),
                 "checks": [],
                 "liveness": [],
+                "runtime": [],
+                "externalCapabilities": [],
             },
         ) from None
-    return assess_readiness(profile, shift_date)
+    result = assess_readiness(profile, shift_date)
+    runtime = assess_runtime_readiness()
+    external = assess_external_capabilities(
+        profile.noc_bin,
+        timeout_seconds=profile.command_timeout_seconds,
+    )
+    result["runtime"] = runtime
+    result["externalCapabilities"] = external
+    required_checks = [
+        check for check in result["checks"] if check.get("required", True)
+    ]
+    required_runtime = [
+        check for check in runtime if check.get("required", True)
+    ]
+    result["overallStatus"] = "ready" if (
+        result["configuration"]["status"] == "ready"
+        and all(check["status"] == "ready" for check in required_checks)
+        and all(check["status"] == "ready" for check in required_runtime)
+    ) else "notReady"
+    return result

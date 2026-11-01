@@ -41,6 +41,8 @@ def test_invalid_explicit_configuration_stops_all_probes(monkeypatch):
     detail = response.json()["detail"]
     assert detail["checks"] == []
     assert detail["liveness"] == []
+    assert detail["runtime"] == []
+    assert detail["externalCapabilities"] == []
     assert detail["configuration"]["id"] == "configuration.NOC_WEB_NOC_ROOT"
     assert called is False
 
@@ -75,3 +77,55 @@ def test_readiness_client_and_page_are_read_only():
     assert "getReadiness" in client
     assert "method:" not in page
     assert "Readiness page may render" not in page
+
+
+def test_readiness_api_returns_separate_runtime_and_external_capabilities(
+    tmp_path, monkeypatch
+):
+    runtime = [{
+        "id": "runtime.python",
+        "category": "core",
+        "capability": "Python environment",
+        "status": "ready",
+        "required": True,
+        "impact": "Python is available.",
+        "correctiveAction": "No action required.",
+        "checkedAt": "2099-12-31T00:00:00Z",
+    }]
+    external = [{
+        "id": "external.atlas",
+        "category": "external",
+        "capability": "Atlas Jira access",
+        "status": "setup_required",
+        "required": False,
+        "impact": "Jira refresh is unavailable.",
+        "correctiveAction": "Install and authenticate Atlas.",
+        "checkedAt": "2099-12-31T00:00:00Z",
+    }]
+    monkeypatch.setattr(readiness_api, "resolve_readiness_profile", lambda: _profile(tmp_path))
+    monkeypatch.setattr(
+        readiness_api,
+        "assess_readiness",
+        lambda *_args: {
+            "assessedAt": "2099-12-31T00:00:00Z",
+            "shiftDate": "2099-12-31",
+            "overallStatus": "ready",
+            "readOnly": True,
+            "configuration": {"id": "configuration.profile", "status": "ready"},
+            "checks": [],
+            "liveness": [],
+        },
+    )
+    monkeypatch.setattr(readiness_api, "assess_runtime_readiness", lambda: runtime)
+    monkeypatch.setattr(
+        readiness_api,
+        "assess_external_capabilities",
+        lambda *_args, **_kwargs: external,
+    )
+
+    response = TestClient(app).get("/api/readiness/2099-12-31")
+
+    assert response.status_code == 200
+    assert response.json()["runtime"] == runtime
+    assert response.json()["externalCapabilities"] == external
+    assert response.json()["overallStatus"] == "ready"

@@ -9,6 +9,10 @@ from fastapi import (
 
 from pydantic import BaseModel
 
+from backend.services.dependencies import (
+    DependencyUnavailable,
+    ExternalOperationFailed,
+)
 from backend.services.handover_delivery import (
     preview_handover_email,
     send_handover_email,
@@ -75,6 +79,12 @@ def send_delivery(
             detail=str(error),
         )
 
+    except DependencyUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
     except FileNotFoundError as error:
         raise HTTPException(
             status_code=404,
@@ -87,11 +97,17 @@ def send_delivery(
             detail="M365 email send timed out.",
         )
 
-    except RuntimeError as error:
+    except ExternalOperationFailed as error:
         raise HTTPException(
-            status_code=500,
-            detail=str(error),
-        )
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
+    except RuntimeError:
+        raise HTTPException(
+            status_code=502,
+            detail="Microsoft 365 email send failed.",
+        ) from None
 
 
 @router.post(
@@ -128,6 +144,12 @@ def preview_delivery(
             detail=str(error),
         )
 
+    except DependencyUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
     except FileNotFoundError as error:
         raise HTTPException(
             status_code=404,
@@ -140,8 +162,14 @@ def preview_delivery(
             detail="M365 email preview timed out.",
         )
 
-    except RuntimeError as error:
+    except ExternalOperationFailed as error:
         raise HTTPException(
-            status_code=500,
-            detail=str(error),
-        )
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
+    except RuntimeError:
+        raise HTTPException(
+            status_code=502,
+            detail="Microsoft 365 email preview failed.",
+        ) from None

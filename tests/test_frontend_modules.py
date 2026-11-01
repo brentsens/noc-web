@@ -55,6 +55,20 @@ def test_browser_module_sources_have_valid_es_module_syntax():
         assert result.returncode == 0, result.stderr
 
 
+def test_readiness_page_has_accessible_recheck_and_separate_optional_statuses():
+    page = (FRONTEND / "readiness.html").read_text(encoding="utf-8")
+    client = (FRONTEND / "js" / "api.js").read_text(encoding="utf-8")
+
+    assert 'id="readiness-recheck"' in page
+    assert 'aria-label="Recheck workstation readiness"' in page
+    assert 'id="readiness-error" role="alert"' in page
+    assert 'id="external-capabilities"' in page
+    assert "result.externalCapabilities" in page
+    assert "result.runtime" in page
+    assert "getReadiness" in client
+    assert "`/api/readiness/${shiftDate}`" in client
+
+
 def test_investigation_lifecycle_requires_confirmation_and_uses_lifecycle_badges():
     page = (FRONTEND / "investigations.html").read_text(encoding="utf-8")
     api_exports = _exports(FRONTEND / "js" / "api.js")

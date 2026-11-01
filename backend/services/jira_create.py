@@ -2,6 +2,11 @@ import json
 import shutil
 import subprocess
 
+from backend.services.dependencies import (
+    DependencyUnavailable,
+    ExternalOperationFailed,
+)
+
 
 PROJECT = "NOC"
 ISSUE_TYPE = "SES"
@@ -83,9 +88,7 @@ def preview_jira_ticket(
     )
 
     if not atlas:
-        raise FileNotFoundError(
-            "atlas command not found"
-        )
+        raise DependencyUnavailable("atlas")
 
     args = [
         atlas,
@@ -111,11 +114,7 @@ def preview_jira_ticket(
     )
 
     if result.returncode != 0:
-        raise RuntimeError(
-            result.stderr.strip()
-            or result.stdout.strip()
-            or "Jira ticket preview failed"
-        )
+        raise ExternalOperationFailed("atlas")
 
     return {
         "project": PROJECT,
@@ -148,9 +147,7 @@ def create_jira_ticket(
     )
 
     if not atlas:
-        raise FileNotFoundError(
-            "atlas command not found"
-        )
+        raise DependencyUnavailable("atlas")
 
     args = [
         atlas,
@@ -175,11 +172,7 @@ def create_jira_ticket(
     )
 
     if result.returncode != 0:
-        raise RuntimeError(
-            result.stderr.strip()
-            or result.stdout.strip()
-            or "Jira ticket creation failed"
-        )
+        raise ExternalOperationFailed("atlas")
 
     try:
         response = json.loads(
@@ -221,4 +214,3 @@ def create_jira_ticket(
         "summary": clean_summary,
         "created": True,
     }
-

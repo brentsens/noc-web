@@ -1,0 +1,86 @@
+Option Explicit
+
+Dim distribution, linuxUser, pythonPath, launcherPath, runtimeConfig
+Dim applicationUrl, healthTimeout, shell, wslPath, powerShellPath
+Dim powerShellCommand, command, result
+distribution = "@@DISTRIBUTION@@"
+linuxUser = "@@LINUX_USER@@"
+pythonPath = "@@PYTHON@@"
+launcherPath = "@@LAUNCHER@@"
+runtimeConfig = "@@RUNTIME_CONFIG@@"
+applicationUrl = "@@APPLICATION_URL@@"
+healthTimeout = "@@HEALTH_TIMEOUT@@"
+
+Set shell = CreateObject("WScript.Shell")
+wslPath = shell.ExpandEnvironmentStrings("%SystemRoot%\System32\wsl.exe")
+powerShellPath = shell.ExpandEnvironmentStrings( _
+    "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" _
+)
+powerShellCommand = "& " & QuotePowerShellLiteral(wslPath) & _
+    " --distribution " & QuotePowerShellLiteral(distribution) & _
+    " --user " & QuotePowerShellLiteral(linuxUser) & _
+    " --exec " & QuotePowerShellLiteral(pythonPath) & _
+    " " & QuotePowerShellLiteral(launcherPath) & _
+    " --runtime-config " & QuotePowerShellLiteral(runtimeConfig) & _
+    " --application-url " & QuotePowerShellLiteral(applicationUrl) & _
+    " --health-timeout " & QuotePowerShellLiteral(healthTimeout) & _
+    "; exit $LASTEXITCODE"
+command = QuoteArgument(powerShellPath) & _
+    " -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " & _
+    QuoteArgument(powerShellCommand)
+
+On Error Resume Next
+result = shell.Run(command, 0, True)
+If Err.Number <> 0 Then
+    ShowFailure "WINDOWS_LAUNCH_EXECUTION_FAILED"
+    WScript.Quit @@WINDOWS_EXECUTION_FAILURE_EXIT_CODE@@
+End If
+On Error GoTo 0
+
+If result <> 0 Then
+    Select Case result
+        Case 3
+            ShowFailure "NOC Web service unavailable"
+        Case 4
+            ShowFailure "NOC Web health check timed out"
+        Case 5
+            ShowFailure "Default browser could not be opened"
+        Case 6
+            ShowFailure "NOC Web runtime configuration is invalid"
+        Case Else
+            ShowFailure "WINDOWS_LAUNCH_EXECUTION_FAILED"
+            WScript.Quit @@WINDOWS_EXECUTION_FAILURE_EXIT_CODE@@
+    End Select
+End If
+WScript.Quit result
+
+Function QuoteArgument(value)
+    Dim quote, slash, resultText, index, slashCount, character
+    quote = Chr(34)
+    slash = Chr(92)
+    resultText = quote
+    slashCount = 0
+    For index = 1 To Len(value)
+        character = Mid(value, index, 1)
+        If character = slash Then
+            slashCount = slashCount + 1
+        ElseIf character = quote Then
+            resultText = resultText & String((slashCount * 2) + 1, slash) & quote
+            slashCount = 0
+        Else
+            resultText = resultText & String(slashCount, slash) & character
+            slashCount = 0
+        End If
+    Next
+    resultText = resultText & String(slashCount * 2, slash) & quote
+    QuoteArgument = resultText
+End Function
+
+Function QuotePowerShellLiteral(value)
+    QuotePowerShellLiteral = "'" & Replace(value, "'", "''") & "'"
+End Function
+
+Sub ShowFailure(message)
+    MsgBox message & ". Check the workstation runtime guide for recovery.", _
+        vbExclamation, "SESAMI NOC Operations"
+End Sub

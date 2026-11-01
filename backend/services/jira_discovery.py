@@ -2,6 +2,11 @@ import json
 import shutil
 import subprocess
 
+from backend.services.dependencies import (
+    DependencyUnavailable,
+    ExternalOperationFailed,
+)
+
 
 JQL = (
     "project = NOC "
@@ -17,9 +22,7 @@ def get_open_jira_tickets() -> dict:
     )
 
     if not atlas:
-        raise FileNotFoundError(
-            "atlas command not found"
-        )
+        raise DependencyUnavailable("atlas")
 
     tickets = []
     page_token = None
@@ -51,12 +54,7 @@ def get_open_jira_tickets() -> dict:
         )
 
         if result.returncode != 0:
-
-            raise RuntimeError(
-                result.stderr.strip()
-                or result.stdout.strip()
-                or "Jira discovery failed"
-            )
+            raise ExternalOperationFailed("atlas")
 
         try:
 

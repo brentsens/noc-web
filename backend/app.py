@@ -1,4 +1,8 @@
+import logging
+import time
+
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import FRONTEND_ROOT
@@ -71,11 +75,54 @@ from backend.api.assistant import (
 from backend.services.copilot_cli import answer_with_copilot_cli
 from backend.services.copilot_mcp import CopilotProvider
 
+
+runtime_logger = logging.getLogger("noc_web.runtime")
+
 app = FastAPI(
     title="SES NOC Operations API",
     version="0.1.0",
 )
 app.state.assistant_provider = answer_with_copilot_cli
+
+
+@app.middleware("http")
+async def safe_request_logging(request, call_next):
+    started = time.monotonic()
+    method = request.method if request.method in {
+        "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"
+    } else "OTHER"
+    try:
+        response = await call_next(request)
+    except Exception:
+        route = request.scope.get("route")
+        route_path = getattr(route, "path", "unmatched")
+        duration_ms = max(0, int((time.monotonic() - started) * 1000))
+        runtime_logger.error(
+            "http_request method=%s route=%s status=500 duration_ms=%d error=unhandled",
+            method,
+            route_path,
+            duration_ms,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": {
+                    "code": "internal-error",
+                    "message": "The request could not be completed.",
+                }
+            },
+        )
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", "unmatched")
+    duration_ms = max(0, int((time.monotonic() - started) * 1000))
+    runtime_logger.info(
+        "http_request method=%s route=%s status=%d duration_ms=%d",
+        method,
+        route_path,
+        response.status_code,
+        duration_ms,
+    )
+    return response
 
 
 def configure_assistant_provider(provider: CopilotProvider | None) -> None:

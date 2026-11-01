@@ -1,12 +1,18 @@
 import json
 import os
 import subprocess
+import sys
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from backend.config import ConfigurationProfile
+from backend.config import (
+    ConfigurationProfile,
+    PROJECT_ROOT,
+    RuntimeConfigurationError,
+    load_runtime_configuration,
+)
 from backend.services.jira_cache import read_jira_cache_from
 
 
@@ -168,6 +174,7 @@ def _command_checks(profile: ConfigurationProfile) -> list[ReadinessCheck]:
                 identifier, "command", "notReady", f"{command} command",
                 "A required operational command is unavailable.",
                 "Install or restore the documented command and run readiness again.",
+                required=command != "copilot",
             ))
             continue
         try:
@@ -199,6 +206,7 @@ def _command_checks(profile: ConfigurationProfile) -> list[ReadinessCheck]:
                 if command == "noc-inv" else
                 "Install or restore the documented command and run readiness again."
             ),
+            required=command != "copilot",
         ))
     return checks
 
@@ -291,6 +299,117 @@ def _liveness_checks(profile: ConfigurationProfile) -> list[ReadinessCheck]:
     return checks
 
 
+def _runtime_result(
+    identifier: str,
+    category: str,
+    capability: str,
+    status: str,
+    impact: str,
+    corrective_action: str,
+) -> dict:
+    return {
+        "id": identifier,
+        "category": category,
+        "capability": capability,
+        "status": status,
+        "required": True,
+        "impact": impact,
+        "correctiveAction": corrective_action,
+        "checkedAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def assess_runtime_readiness() -> list[dict]:
+    application_ready = sys.version_info >= (3, 10)
+    results = [_runtime_result(
+        "runtime.application",
+        "core",
+        "noc-web application runtime",
+        "ready" if application_ready else "unavailable",
+        "The application is running on a supported Python runtime."
+        if application_ready else
+        "The application runtime is below the supported Python version.",
+        "No action required." if application_ready else
+        "Install Python 3.10 or later and run the workstation setup again.",
+    )]
+
+    try:
+        configuration = load_runtime_configuration()
+        if configuration.repository_root != PROJECT_ROOT:
+            raise RuntimeConfigurationError("repositoryRoot")
+    except RuntimeConfigurationError:
+        configuration = None
+
+    results.append(_runtime_result(
+        "runtime.configuration",
+        "core",
+        "Workstation runtime configuration",
+        "ready" if configuration else "setup_required",
+        "Validated workstation configuration is available."
+        if configuration else
+        "The managed workstation runtime is not configured or needs repair.",
+        "No action required." if configuration else
+        "Run the NOC Web workstation setup from its validated checkout.",
+    ))
+
+    python_ready = (
+        configuration is not None
+        and application_ready
+        and Path(sys.prefix).resolve() == configuration.virtual_environment
+    )
+    results.append(_runtime_result(
+        "runtime.python",
+        "core",
+        "Python environment",
+        "ready" if python_ready else "setup_required",
+        "The application is using its configured virtual environment."
+        if python_ready else
+        "The configured NOC Web virtual environment is not active.",
+        "No action required." if python_ready else
+        "Run workstation setup to create or update the configured virtual environment.",
+    ))
+
+    if configuration is None:
+        service_status = "setup_required"
+        service_impact = "The managed user service cannot be verified without valid runtime configuration."
+        service_action = "Run workstation setup, then Recheck."
+    elif not hasattr(os, "getuid") or os.getuid() == 0:
+        service_status = "unavailable"
+        service_impact = "The application process is not running as an unprivileged user."
+        service_action = "Start NOC Web through the current operator's user service."
+    else:
+        try:
+            service = subprocess.run(
+                ["systemctl", "--user", "is-active", "--quiet", "noc-web.service"],
+                shell=False,
+                timeout=2,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            service_status = "ready" if service.returncode == 0 else "unavailable"
+        except (OSError, subprocess.TimeoutExpired):
+            service_status = "unavailable"
+        service_impact = (
+            "The user-owned NOC Web service is active."
+            if service_status == "ready" else
+            "The user-owned NOC Web service is not active or could not be checked."
+        )
+        service_action = (
+            "No action required." if service_status == "ready" else
+            "Start or restart the noc-web user service, then Recheck."
+        )
+    results.append(_runtime_result(
+        "service.noc-web",
+        "service",
+        "Background service",
+        service_status,
+        service_impact,
+        service_action,
+    ))
+    return results
+
+
 def assess_readiness(profile: ConfigurationProfile, shift_date: str) -> dict:
     configuration = profile_configuration_check(profile)
     checks = [_noc_data_check(profile, shift_date)]
@@ -304,7 +423,11 @@ def assess_readiness(profile: ConfigurationProfile, shift_date: str) -> dict:
         "shiftDate": shift_date,
         "overallStatus": "ready" if (
             configuration.status == "ready"
-            and all(check.status == "ready" for check in checks)
+            and all(
+                check.status == "ready"
+                for check in checks
+                if check.required
+            )
         ) else "notReady",
         "readOnly": True,
         "configuration": configuration.serialize(),

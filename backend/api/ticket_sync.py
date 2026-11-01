@@ -5,6 +5,10 @@ from fastapi import (
     HTTPException,
 )
 
+from backend.services.dependencies import (
+    DependencyUnavailable,
+    ExternalOperationFailed,
+)
 from backend.services.ticket_sync import (
     get_ticket_sync_state,
     sync_all_tickets,
@@ -28,6 +32,12 @@ def sync_tickets():
     try:
         return sync_all_tickets()
 
+    except DependencyUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
     except FileNotFoundError as error:
         raise HTTPException(
             status_code=404,
@@ -40,8 +50,14 @@ def sync_tickets():
             detail="Ticket sync timed out.",
         )
 
-    except RuntimeError as error:
+    except ExternalOperationFailed as error:
         raise HTTPException(
-            status_code=500,
-            detail=str(error),
-        )
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
+    except RuntimeError:
+        raise HTTPException(
+            status_code=502,
+            detail="The noc-tools sync operation failed.",
+        ) from None

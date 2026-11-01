@@ -1,6 +1,8 @@
 import os
 import stat
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -147,6 +149,77 @@ def test_readiness_reports_missing_copilot_command(readiness_workspace):
     assert next(
         item for item in result["checks"] if item["id"] == "command.copilot"
     )["status"] == "notReady"
+
+
+def test_missing_copilot_does_not_make_core_workstation_unready(readiness_workspace):
+    (readiness_workspace.noc_bin / "copilot").unlink()
+
+    result = readiness.assess_readiness(readiness_workspace, "2099-12-31")
+
+    copilot = next(item for item in result["checks"] if item["id"] == "command.copilot")
+    assert copilot["status"] == "notReady"
+    assert copilot["required"] is False
+    assert result["overallStatus"] == "ready"
+
+
+def test_runtime_readiness_reports_environment_configuration_and_user_service(
+    monkeypatch,
+):
+    configuration = SimpleNamespace(
+        repository_root=readiness.PROJECT_ROOT,
+        virtual_environment=Path(__import__("sys").prefix).resolve(),
+    )
+    calls = []
+
+    monkeypatch.setattr(
+        readiness,
+        "load_runtime_configuration",
+        lambda: configuration,
+    )
+    monkeypatch.setattr(
+        readiness.subprocess,
+        "run",
+        lambda arguments, **kwargs: (
+            calls.append((arguments, kwargs))
+            or SimpleNamespace(returncode=0)
+        ),
+    )
+
+    checks = {
+        check["id"]: check
+        for check in readiness.assess_runtime_readiness()
+    }
+
+    assert checks["runtime.application"]["status"] == "ready"
+    assert checks["runtime.configuration"]["status"] == "ready"
+    assert checks["runtime.python"]["status"] == "ready"
+    assert checks["service.noc-web"]["status"] == "ready"
+    assert calls[0][0] == [
+        "systemctl", "--user", "is-active", "--quiet", "noc-web.service"
+    ]
+    assert calls[0][1]["stdout"] is readiness.subprocess.DEVNULL
+    assert calls[0][1]["stderr"] is readiness.subprocess.DEVNULL
+
+
+def test_runtime_readiness_redacts_missing_config_and_service_probe_failure(
+    monkeypatch,
+):
+    from backend.config import RuntimeConfigurationError
+
+    monkeypatch.setattr(
+        readiness,
+        "load_runtime_configuration",
+        lambda: (_ for _ in ()).throw(RuntimeConfigurationError("secret-path")),
+    )
+    checks = {
+        check["id"]: check
+        for check in readiness.assess_runtime_readiness()
+    }
+
+    assert checks["runtime.configuration"]["status"] == "setup_required"
+    assert checks["runtime.python"]["status"] == "setup_required"
+    assert checks["service.noc-web"]["status"] == "setup_required"
+    assert "secret-path" not in str(checks)
 
 
 def test_missing_default_locations_are_configuration_not_ready(tmp_path):

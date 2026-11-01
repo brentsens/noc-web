@@ -5,6 +5,10 @@ from fastapi import (
     HTTPException,
 )
 
+from backend.services.dependencies import (
+    DependencyUnavailable,
+    ExternalOperationFailed,
+)
 from backend.services.jira_discovery import (
     get_open_jira_tickets,
 )
@@ -27,6 +31,12 @@ def open_jira_tickets():
     try:
         return get_open_jira_tickets()
 
+    except DependencyUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
     except FileNotFoundError as error:
         raise HTTPException(
             status_code=404,
@@ -39,17 +49,29 @@ def open_jira_tickets():
             detail="Jira discovery timed out.",
         )
 
-    except RuntimeError as error:
+    except ExternalOperationFailed as error:
         raise HTTPException(
-            status_code=500,
-            detail=str(error),
-        )
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
+    except RuntimeError:
+        raise HTTPException(
+            status_code=502,
+            detail="Atlas Jira search returned an invalid response.",
+        ) from None
 
 @router.get("/ticket-queue")
 def jira_ticket_queue():
 
     try:
         return get_jira_ticket_queue()
+
+    except DependencyUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
 
     except FileNotFoundError as error:
         raise HTTPException(
@@ -63,11 +85,17 @@ def jira_ticket_queue():
             detail="Jira queue refresh timed out.",
         )
 
-    except RuntimeError as error:
+    except ExternalOperationFailed as error:
         raise HTTPException(
-            status_code=500,
-            detail=str(error),
-        )
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
+    except RuntimeError:
+        raise HTTPException(
+            status_code=502,
+            detail="Atlas Jira refresh returned an invalid response.",
+        ) from None
 
 @router.post("/ticket-queue/refresh")
 def refresh_ticket_queue():
@@ -76,6 +104,12 @@ def refresh_ticket_queue():
 
         return refresh_jira_ticket_queue()
 
+    except DependencyUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
     except FileNotFoundError as error:
 
         raise HTTPException(
@@ -90,9 +124,15 @@ def refresh_ticket_queue():
             detail="Jira queue refresh timed out.",
         )
 
-    except RuntimeError as error:
+    except ExternalOperationFailed as error:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
+    except RuntimeError:
 
         raise HTTPException(
-            status_code=500,
-            detail=str(error),
-        )
+            status_code=502,
+            detail="Atlas Jira refresh returned an invalid response.",
+        ) from None

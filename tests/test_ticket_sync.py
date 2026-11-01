@@ -91,7 +91,7 @@ def test_successful_sync_persists_state(
     assert state["synced"] is True
     assert state["success"] is True
     assert state["completedAt"] is not None
-    assert state["output"] == "Checked: 5"
+    assert state["output"] == "Ticket sync completed."
 
 
 def test_missing_state_returns_unsynced(
