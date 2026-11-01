@@ -1,0 +1,1 @@
+Release pipeline supplies the approved public verification key before packaging.

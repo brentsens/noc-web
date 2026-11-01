@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "applicationRepository": "brentsens/noc-web",
+  "releasePublicKey": "release-public-key.txt",
+  "targetDistribution": "Ubuntu",
+  "releaseAssets": {
+    "archive": "noc-web-release.zip",
+    "checksums": "SHA256SUMS",
+    "signature": "SHA256SUMS.asc"
+  },
+  "brandingAsset": "assets/windows/sesami-noc-operations.png",
+  "toolEntries": []
+}
