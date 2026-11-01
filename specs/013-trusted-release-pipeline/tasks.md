@@ -62,13 +62,18 @@ tests pass, while failed validation produces no release.
 - [ ] T010 [US1] Add release publication failure-path fixtures ensuring
   test, archive, checksum, and upload failures cannot report success in
   `tests/test_release_pipeline.py`.
+- [ ] T011 [US1] Add clean-runner regression coverage in
+  `tests/test_release_pipeline.py` proving `.github/workflows/release.yml`
+  installs pytest from the approved pinned test-dependency source before
+  invoking `python -m pytest -q`.
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Create the tag-triggered release workflow in `.github/workflows/release.yml`, accepting only `v*` tags and rejecting non-`vX.Y.Z` references before release assembly.
-- [ ] T012 [US1] Run the complete repository pytest suite and `git diff --check` from `.github/workflows/release.yml` before any release asset or release record is created.
-- [ ] T013 [US1] Invoke `scripts/release/build-archive.sh` and `scripts/release/verify-release.sh` from `.github/workflows/release.yml` to produce the exact archive/checksum pair only after validation passes.
-- [ ] T014 [US1] Configure the final publication step in `.github/workflows/release.yml` to create one GitHub Release from the exact version tag and upload only the validated archive and checksum assets.
+- [ ] T012 [US1] Create the tag-triggered release workflow in `.github/workflows/release.yml`, accepting only `v*` tags and rejecting non-`vX.Y.Z` references before release assembly.
+- [ ] T013 [US1] Install the existing pinned application/runtime dependencies and pytest from an approved pinned test-dependency source in `.github/workflows/release.yml`, without assuming a developer `.venv`.
+- [ ] T014 [US1] Run the complete repository pytest suite and `git diff --check` from `.github/workflows/release.yml` before any release asset or release record is created.
+- [ ] T015 [US1] Invoke `scripts/release/build-archive.sh` and `scripts/release/verify-release.sh` from `.github/workflows/release.yml` to produce the exact archive/checksum pair only after validation passes.
+- [ ] T016 [US1] Configure the final publication step in `.github/workflows/release.yml` to create one GitHub Release from the exact version tag and upload only the validated archive and checksum assets.
 
 **Checkpoint**: A valid tag has a deterministic release pair; invalid or failed
 candidates publish nothing.
@@ -86,21 +91,21 @@ workflow identity fixtures before extraction.
 
 ### Tests for User Story 2
 
-- [ ] T015 [P] [US2] Add release contract tests for checksum-to-archive binding
+- [ ] T017 [P] [US2] Add release contract tests for checksum-to-archive binding
   and provenance identity pinning in `tests/test_release_pipeline.py`.
-- [ ] T016 [US2] Add altered archive, checksum, provenance, repository,
+- [ ] T018 [US2] Add altered archive, checksum, provenance, repository,
   workflow-identity, and tag-target rejection fixtures in
   `tests/test_release_pipeline.py`.
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Configure keyless artifact attestation for the final archive
+- [ ] T019 [US2] Configure keyless artifact attestation for the final archive
   in `.github/workflows/release.yml` with only the permissions required for
   release publication and provenance.
-- [ ] T018 [US2] Add the Feature 012 consumer verification identity, archive,
+- [ ] T020 [US2] Add the Feature 012 consumer verification identity, archive,
   checksum, repository, and tag requirements to
   `specs/013-trusted-release-pipeline/contracts/release-contract.md`.
-- [ ] T019 [US2] Implement provenance verification guidance that pins the
+- [ ] T021 [US2] Implement provenance verification guidance that pins the
   approved release workflow identity and exact tagged source in
   `scripts/release/verify-first-release.sh`.
 
@@ -120,19 +125,19 @@ bootstrap/runtime files are present.
 
 ### Tests for User Story 3
 
-- [ ] T020 [P] [US3] Add archive exclusion fixture cases for repository
+- [ ] T022 [P] [US3] Add archive exclusion fixture cases for repository
   metadata, virtual environments, caches, runtime configuration, credentials,
   tokens, logs, operator data, and temporary files in
   `tests/test_release_pipeline.py`.
-- [ ] T021 [US3] Add required Feature 011 installer and Feature 012
+- [ ] T023 [US3] Add required Feature 011 installer and Feature 012
   bootstrap-consumer content fixture cases in `tests/test_release_pipeline.py`.
 
 ### Implementation for User Story 3
 
-- [ ] T022 [US3] Harden the allowlist and exclusion validation in
+- [ ] T024 [US3] Harden the allowlist and exclusion validation in
   `scripts/release/build-archive.sh` so release assembly never reads files
   outside the tagged checkout or includes secret-like/operator-owned content.
-- [ ] T023 [US3] Extend `scripts/release/verify-release.sh` to fail closed on
+- [ ] T025 [US3] Extend `scripts/release/verify-release.sh` to fail closed on
   empty, malformed, unsafe, or incomplete archives and prevent downstream
   checksum, attestation, and publication steps.
 
@@ -152,16 +157,16 @@ approved record.
 
 ### Tests for User Story 4
 
-- [ ] T024 [P] [US4] Add first-release verifier approval and actionable
+- [ ] T026 [P] [US4] Add first-release verifier approval and actionable
   failure fixtures for archive name, checksum, provenance, tag target,
   safe-content, and consumer-verification checks in
   `tests/test_release_pipeline.py`.
 
 ### Implementation for User Story 4
 
-- [ ] T025 [US4] Implement the independent first-release verification and
+- [ ] T027 [US4] Implement the independent first-release verification and
   approval-record flow in `scripts/release/verify-first-release.sh`.
-- [ ] T026 [US4] Add first-real-release approval instructions and the
+- [ ] T028 [US4] Add first-real-release approval instructions and the
   Feature 012 unblock gate to
   `specs/013-trusted-release-pipeline/quickstart.md`.
 
@@ -174,14 +179,15 @@ passes every independent contract check.
 
 **Purpose**: Complete documentation and end-to-end validation.
 
-- [ ] T027 [P] Document release-manager tag creation, failure handling,
+- [ ] T029 [P] Document release-manager tag creation, failure handling,
   artifact retrieval, and no-secret policy in `docs/release-pipeline.md`.
-- [ ] T028 Run the focused release pipeline tests in
+- [ ] T030 Run the focused release pipeline tests in
   `tests/test_release_pipeline.py` and the full repository pytest suite.
-- [ ] T029 Run `git diff --check` and inspect the release workflow permissions,
+- [ ] T031 Run `git diff --check` and inspect the release workflow permissions,
   archive exclusions, and consumer contract in `.github/workflows/release.yml`.
-- [ ] T030 Perform and record the first real release verification using
-  `scripts/release/verify-first-release.sh` before enabling Feature 012
+- [ ] T032 Perform and record the first successful real release verification using
+  `scripts/release/verify-first-release.sh` for a new version after this fix,
+  leaving the failed `v1.0.0` attempt unchanged, before enabling Feature 012
   acquisition in `packaging/windows/bootstrap-manifest.json`.
 
 ---
@@ -209,8 +215,8 @@ passes every independent contract check.
 ### Parallel Opportunities
 
 - T002–T003 can run after T001.
-- T009–T010, T015–T016, and T020–T021 can run in parallel within their
-  respective story phases.
+- T009 and T017 are independent regression-policy work after their prior test
+  tasks complete; T026 can proceed independently once a release fixture exists.
 - US2 contract work and US3 archive-content work can proceed concurrently
   after a US1 archive fixture is available.
 
