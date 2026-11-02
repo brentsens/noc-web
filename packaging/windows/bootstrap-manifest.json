@@ -1,13 +1,26 @@
 {
   "schemaVersion": 1,
-  "applicationRepository": "brentsens/noc-web",
-  "releasePublicKey": "release-public-key.txt",
   "targetDistribution": "Ubuntu",
   "releaseAssets": {
-    "archive": "noc-web-release.zip",
-    "checksums": "SHA256SUMS",
-    "signature": "SHA256SUMS.asc"
+    "repository": "brentsens/noc-web",
+    "tag": "v1.0.3",
+    "archive": "noc-web-v1.0.3.tar.gz",
+    "checksum": "noc-web-v1.0.3.sha256",
+    "sha256": "ab55b3d776d760db3ea758d80b9fc7218ef3bd33a0723589d73b7f0a2171370f",
+    "signerWorkflow": "brentsens/noc-web/.github/workflows/release.yml"
   },
   "brandingAsset": "assets/windows/sesami-noc-operations.png",
-  "toolEntries": []
+  "toolEntries": [
+    {
+      "tool": "nocTools",
+      "version": "v1.0.1",
+      "source": "https://github.com/brentsens/noc-tools/releases/download/v1.0.1/noc-tools-v1.0.1.tar.gz",
+      "sha256": "9260a56c97a5ee8c00e9828c2f209c887072797bea7ef292ec9e58eb9745cbb4",
+      "target": ".local/lib/noc-tools/v1.0.1",
+      "compatibility": "noc-inv-contract=1",
+      "requiresConfirmation": true,
+      "readinessId": "external.nocTools",
+      "signerWorkflow": "brentsens/noc-tools/.github/workflows/noc-release.yml"
+    }
+  ]
 }

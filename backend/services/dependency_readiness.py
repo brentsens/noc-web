@@ -23,12 +23,14 @@ def _result(
     status: str,
     impact: str,
     corrective_action: str,
+    installation_status: str | None = None,
 ) -> dict:
     return {
         "id": identifier,
         "category": "external",
         "capability": capability,
         "status": status,
+        "installationStatus": installation_status or status,
         "required": False,
         "impact": impact,
         "correctiveAction": corrective_action,
@@ -74,6 +76,51 @@ def _probe(
     return result.returncode == 0 and (
         expected_output is None or result.stdout.strip() == expected_output
     )
+
+
+def _probe_state(
+    executable: str,
+    arguments: tuple[str, ...],
+    timeout_seconds: int,
+) -> str:
+    """Return a categorized probe outcome without retaining command output."""
+    try:
+        result = subprocess.run(
+            [executable, *arguments],
+            shell=False,
+            timeout=timeout_seconds,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            text=True,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unavailable"
+    if result.returncode != 0:
+        return "setup_required"
+    return "ready"
+
+
+def _configured_mcp_state(
+    executable: str,
+    timeout_seconds: int,
+    name: str,
+) -> tuple[str, bool]:
+    try:
+        result = subprocess.run(
+            [executable, "mcp", "list"],
+            shell=False,
+            timeout=timeout_seconds,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            text=True,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unavailable", False
+    if result.returncode != 0:
+        return "setup_required", False
+    return "ready", name.casefold() in result.stdout.casefold()
 
 
 def _atlas_auth_status(executable: str, timeout_seconds: int) -> str:
@@ -132,6 +179,7 @@ def assess_external_capabilities(
             "setup_required",
             "Jira refresh is unavailable because Atlas is not installed.",
             "Install and authenticate Atlas using its approved setup, then Recheck.",
+            "setup_required",
         ))
     else:
         atlas_status = _atlas_auth_status(atlas, timeout_seconds)
@@ -142,6 +190,7 @@ def assess_external_capabilities(
                 "ready",
                 "The authenticated Atlas session and Jira site access were verified.",
                 "No action required.",
+                "ready",
             ))
         elif atlas_status == "setup_required":
             results.append(_result(
@@ -150,6 +199,7 @@ def assess_external_capabilities(
                 "setup_required",
                 "Jira refresh is unavailable because Atlas sign-in or site access needs setup.",
                 "Sign in to Atlas and restore usable Jira site access, then Recheck.",
+                "installed",
             ))
         else:
             results.append(_result(
@@ -158,31 +208,41 @@ def assess_external_capabilities(
                 "unavailable",
                 "Jira refresh could not be verified; authentication or connectivity may be unavailable.",
                 "Check Atlas authentication and availability, then Recheck.",
+                "unavailable",
             ))
 
     copilot = _executable("copilot", noc_bin)
-    copilot_probe_succeeded = (
-        copilot is not None
-        and _probe(copilot, ("--version",), timeout_seconds)
-    )
     if copilot is None:
         copilot_status = "setup_required"
+        copilot_installation_status = "setup_required"
         copilot_impact = "AI Actions and Copilot-dependent workflows are unavailable."
         copilot_action = "Install and authenticate GitHub Copilot CLI using its approved setup, then Recheck."
-    elif not copilot_probe_succeeded:
+    elif _probe_state(copilot, ("--version",), timeout_seconds) != "ready":
         copilot_status = "unavailable"
+        copilot_installation_status = "unavailable"
         copilot_impact = "GitHub Copilot CLI could not complete its bounded availability check."
         copilot_action = "Check GitHub Copilot CLI availability, then Recheck."
     else:
-        copilot_status = "setup_required"
-        copilot_impact = "The CLI is installed, but authentication is not safely verifiable."
-        copilot_action = "Confirm Copilot CLI authentication using its approved setup, then Recheck."
+        copilot_status = _probe_state(copilot, ("auth", "status"), timeout_seconds)
+        if copilot_status == "ready":
+            copilot_installation_status = "ready"
+            copilot_impact = "GitHub Copilot CLI availability and authentication were verified."
+            copilot_action = "No action required."
+        elif copilot_status == "setup_required":
+            copilot_installation_status = "installed"
+            copilot_impact = "GitHub Copilot CLI is installed, but sign-in is required."
+            copilot_action = "Authenticate GitHub Copilot CLI using its approved setup, then Recheck."
+        else:
+            copilot_installation_status = "unavailable"
+            copilot_impact = "GitHub Copilot CLI authentication could not be verified."
+            copilot_action = "Check GitHub Copilot CLI availability, then Recheck."
     results.append(_result(
         "external.copilot",
         "GitHub Copilot CLI",
         copilot_status,
         copilot_impact,
         copilot_action,
+        copilot_installation_status,
     ))
 
     if copilot is None:
@@ -190,15 +250,38 @@ def assess_external_capabilities(
         datadog_impact = "Datadog MCP workflows require GitHub Copilot CLI."
         datadog_action = "Install Copilot CLI and configure Datadog MCP using approved setup, then Recheck."
     else:
-        datadog_status = "setup_required"
-        datadog_impact = "Datadog MCP configuration and authentication cannot be safely verified."
-        datadog_action = "Verify the Datadog MCP server in Copilot configuration using approved setup, then Recheck."
+        datadog_probe, datadog_configured = _configured_mcp_state(
+            copilot, timeout_seconds, "datadog"
+        )
+        if datadog_probe == "unavailable":
+            datadog_status = "unavailable"
+            datadog_impact = "Datadog MCP configuration could not be checked."
+            datadog_action = "Check GitHub Copilot CLI availability, then Recheck."
+            datadog_installation_status = "unavailable"
+        elif datadog_probe == "setup_required":
+            datadog_status = "setup_required"
+            datadog_impact = "Datadog MCP configuration or Copilot authentication needs setup."
+            datadog_action = "Authenticate Copilot and configure Datadog MCP using approved setup, then Recheck."
+            datadog_installation_status = "setup_required"
+        elif datadog_configured:
+            datadog_status = "ready"
+            datadog_impact = "The Datadog MCP server is configured in GitHub Copilot CLI."
+            datadog_action = "No action required."
+            datadog_installation_status = "ready"
+        else:
+            datadog_status = "setup_required"
+            datadog_impact = "Datadog MCP is not configured in GitHub Copilot CLI."
+            datadog_action = "Configure Datadog MCP using approved setup, then Recheck."
+            datadog_installation_status = "setup_required"
+    if copilot is None:
+        datadog_installation_status = "setup_required"
     results.append(_result(
         "external.datadogMcp",
         "Datadog MCP",
         datadog_status,
         datadog_impact,
         datadog_action,
+        datadog_installation_status,
     ))
 
     m365 = _executable("m365", noc_bin)
@@ -209,41 +292,68 @@ def assess_external_capabilities(
             "setup_required",
             "Email preview and send are unavailable because Microsoft 365 CLI is not installed.",
             "Install and authenticate Microsoft 365 CLI using its approved setup, then Recheck.",
-        ))
-    elif _probe(m365, ("status",), timeout_seconds):
-        results.append(_result(
-            "external.microsoft365",
-            "Microsoft 365 CLI",
-            "ready",
-            "The Microsoft 365 CLI status check completed successfully.",
-            "No action required.",
+            "setup_required",
         ))
     else:
-        results.append(_result(
-            "external.microsoft365",
-            "Microsoft 365 CLI",
-            "unavailable",
-            "Microsoft 365 CLI authentication or availability could not be verified.",
-            "Check Microsoft 365 CLI authentication and availability, then Recheck.",
-        ))
+        m365_status = _probe_state(m365, ("status",), timeout_seconds)
+        if m365_status == "ready":
+            results.append(_result(
+                "external.microsoft365",
+                "Microsoft 365 CLI",
+                "ready",
+                "The Microsoft 365 CLI status check completed successfully.",
+                "No action required.",
+                "ready",
+            ))
+        elif m365_status == "setup_required":
+            results.append(_result(
+                "external.microsoft365",
+                "Microsoft 365 CLI",
+                "setup_required",
+                "Microsoft 365 CLI is installed, but sign-in is required.",
+                "Authenticate Microsoft 365 CLI using its approved setup, then Recheck.",
+                "installed",
+            ))
+        else:
+            results.append(_result(
+                "external.microsoft365",
+                "Microsoft 365 CLI",
+                "unavailable",
+                "Microsoft 365 CLI authentication or availability could not be verified.",
+                "Check Microsoft 365 CLI authentication and availability, then Recheck.",
+                "unavailable",
+            ))
 
-    noc_tool_failures = []
+    noc_tools_missing = False
+    noc_tools_unavailable = False
     for command, arguments, expected_output in _NOC_TOOL_PROBES:
         executable = _executable(command, noc_bin, noc_tool=True)
-        if executable is None or not _probe(
+        if executable is None:
+            noc_tools_missing = True
+        elif not _probe(
             executable,
             arguments,
             timeout_seconds,
             expected_output=expected_output,
         ):
-            noc_tool_failures.append(command)
-    if noc_tool_failures:
+            noc_tools_unavailable = True
+    if noc_tools_unavailable:
+        results.append(_result(
+            "external.nocTools",
+            "noc-tools compatibility",
+            "unavailable",
+            "A required noc-tools command could not complete its compatibility check.",
+            "Repair the approved noc-tools installation and run Recheck.",
+            "unavailable",
+        ))
+    elif noc_tools_missing:
         results.append(_result(
             "external.nocTools",
             "noc-tools compatibility",
             "setup_required",
             "Workflows using one or more required noc-tools commands are unavailable.",
             "Restore the compatible noc-tools commands and run Recheck.",
+            "setup_required",
         ))
     else:
         results.append(_result(
@@ -252,5 +362,6 @@ def assess_external_capabilities(
             "ready",
             "Required noc-tools commands passed their bounded compatibility checks.",
             "No action required.",
+            "ready",
         ))
     return results

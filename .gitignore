@@ -19,6 +19,7 @@ packaging/windows/Output/
 packaging/windows/*.exe
 packaging/windows/*.ico
 bootstrap-downloads/
+bootstrap-verifier/
 bootstrap-records/
 /release/
 first-release-verification/

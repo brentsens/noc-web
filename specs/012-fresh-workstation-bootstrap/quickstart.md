@@ -16,6 +16,10 @@ Keep the approved `SESAMI-NOC-Operations-Setup.exe` package and its release
 assets available. Do not copy any configuration or credentials from another
 workstation.
 
+The package policy must pin NOC Web `v1.0.3` and noc-tools `v1.0.1`. Both
+archives must pass their pinned SHA-256, published checksum, and GitHub
+attestation checks before extraction.
+
 ## Core bootstrap
 
 1. Start `SESAMI-NOC-Operations-Setup.exe` from Windows.
@@ -34,16 +38,21 @@ workstation.
 
 ## Dependency and identity validation
 
-1. Run bootstrap with each optional tool absent and confirm its status is
+1. Begin with noc-tools absent. After core installation, explicitly confirm
+   the optional noc-tools action; confirm it installs the approved compatible
+   release at its managed non-checkout location and exposes `tix`, `noc-start`,
+   `noc-status`, `noc-inv`, and `noc-handover`. Confirm
+   `noc-inv --contract-version` prints `noc-inv-contract=1`.
+2. Run bootstrap with each optional tool absent and confirm its status is
    separate from core NOC Web success.
-2. For every approved installed tool that requires identity, confirm bootstrap
+3. For every approved installed tool that requires identity, confirm bootstrap
    reports setup required and does not authenticate or import identity.
-3. Authenticate only a test operator account through each tool's normal
+4. Authenticate only a test operator account through each tool's normal
    operator-controlled process. Run the existing readiness view and confirm
    statuses update independently.
-4. For Atlas, confirm the trusted Linuxbrew deployment is used and readiness
+5. For Atlas, confirm the trusted Linuxbrew deployment is used and readiness
    reports ready only for a usable authenticated session and approved site.
-5. Inspect package, bootstrap records, runtime configuration, logs, and
+6. Inspect package, bootstrap records, runtime configuration, logs, and
    shortcut arguments. Confirm no credentials, token values, session data,
    cookies, or raw subprocess output appear.
 

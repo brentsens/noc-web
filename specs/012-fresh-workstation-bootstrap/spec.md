@@ -19,6 +19,8 @@ operator authentication separate and visible."
 - Q: Which prerequisite actions may the installer perform automatically after a clear confirmation, and which must always be guided-only? → A: Guide platform setup; confirm application/tool changes.
 - Q: What source and version authority defines the approved noc-tools distribution for a fresh workstation? → A: A versioned NOC Web release manifest.
 - Q: How should a normal rerun handle a newer approved NOC Web release? → A: Offer a verified update with confirmation; otherwise repair or reuse the current release.
+- Q: What verification authority replaces the obsolete bundled public key? → A: GitHub SLSA provenance with pinned repository, tag, digest, and signer workflow.
+- Q: How is Atlas handled when no approved immutable artifact contract exists? → A: Guided operator setup; report SETUP REQUIRED and never copy credentials.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -179,8 +181,10 @@ configuration, and representative operator-owned data before and after.
   blocker, and application configuration failure with separate safe,
   actionable diagnostics.
 - **FR-005**: The installer MUST obtain application source only from the
-  approved signed GitHub release and verify its identity and completeness
-  against the published SHA-256 manifest before executing it.
+  approved GitHub release and verify its pinned repository, tag, SHA-256
+  digest, and fully qualified signer workflow through GitHub SLSA provenance
+  before executing it. It MUST NOT require or use a long-lived bundled
+  signing key.
 - **FR-006**: The installer MUST use one deterministic per-user WSL
   application location, reuse it on rerun, and reject unsafe or incompatible
   target paths.
@@ -209,9 +213,12 @@ configuration, and representative operator-owned data before and after.
   noc-tools only when an approved distribution contract exists; otherwise it
   MUST report safe setup guidance without an unapproved substitute.
 - **FR-014**: Atlas installation MUST preserve the Feature 011 trusted
-  Linuxbrew deployment model. Atlas readiness MUST distinguish missing,
-  authentication-required, unavailable, and ready states using the supported
-  machine-readable authentication-status result.
+  Linuxbrew deployment model. Until an approved immutable Atlas distribution
+  contract exists, a missing Atlas binary MUST be reported as guided
+  SETUP REQUIRED rather than downloaded from an invented source. Atlas
+  readiness MUST distinguish missing, authentication-required, unavailable,
+  and ready states using the supported machine-readable authentication-status
+  result; authentication remains operator-specific.
 - **FR-015**: The installer MUST report GitHub Copilot CLI, Microsoft 365 CLI,
   Datadog MCP, and noc-tools installation and readiness independently, using
   existing approved readiness behavior where applicable.

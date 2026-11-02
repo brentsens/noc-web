@@ -2,17 +2,20 @@
 
 ## Application release
 
-The package bootstrap manifest fixes the approved GitHub repository and
-release-verification public key. A downloaded release is executable only when:
+The package bootstrap manifest fixes the approved GitHub repository, immutable
+tag, archive name, checksum asset, archive SHA-256, and fully qualified GitHub
+Actions signer workflow. A downloaded release is executable only when:
 
-1. Its identity matches the approved repository and requested immutable release.
-2. Its published checksum manifest validates with the bundled public key.
-3. The application archive hash matches the verified checksum manifest.
+1. Its download URLs are derived only from the approved repository and tag.
+2. Its published checksum asset names the expected archive and matches the
+   manifest's SHA-256 trust anchor.
+3. GitHub SLSA provenance verifies with `gh attestation verify`, the exact
+   repository, `refs/tags/<tag>`, and the approved fully qualified signer workflow.
 4. Archive entries are safe relative paths and contain the required Feature 011
    installer artifacts.
 
 Failure of any condition is `SOURCE_VERIFICATION_FAILED`; bootstrap must not
-extract or execute the archive.
+extract, stage, or execute the archive.
 
 ## Tool provisioning entries
 

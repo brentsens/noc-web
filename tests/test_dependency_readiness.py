@@ -70,8 +70,10 @@ def test_external_capabilities_are_reported_independently_and_redacted(
         "external.nocTools",
     }
     assert by_id["external.atlas"]["status"] == "ready"
+    assert by_id["external.atlas"]["installationStatus"] == "ready"
     assert by_id["external.nocTools"]["status"] == "ready"
-    assert by_id["external.copilot"]["status"] == "setup_required"
+    assert by_id["external.nocTools"]["installationStatus"] == "ready"
+    assert by_id["external.copilot"]["status"] == "ready"
     assert by_id["external.datadogMcp"]["status"] == "setup_required"
     assert by_id["external.microsoft365"]["status"] == "ready"
     assert secret not in str(results)
@@ -81,13 +83,122 @@ def test_external_capabilities_are_reported_independently_and_redacted(
     assert all(
         call[1]["stdout"] is (
             subprocess.PIPE
-            if call[0][0].endswith(("/noc-inv", "/atlas"))
+            if (
+                call[0][0].endswith(("/noc-inv", "/atlas"))
+                or call[0][1:] == ["mcp", "list"]
+            )
             else subprocess.DEVNULL
         )
         for call in calls
     )
     assert all(call[1]["stderr"] is subprocess.DEVNULL for call in calls)
     assert all(call[1]["timeout"] == 2 for call in calls)
+
+
+def test_optional_capabilities_report_ready_independently(tmp_path, monkeypatch):
+    noc_bin = tmp_path / "bin"
+    noc_bin.mkdir()
+    for command in (
+        "atlas", "copilot", "m365", "tix", "noc-start", "noc-status",
+        "noc-inv", "noc-handover",
+    ):
+        executable = noc_bin / command
+        executable.touch()
+        executable.chmod(0o700)
+
+    def run(arguments, **_kwargs):
+        class Result:
+            returncode = 0
+            stdout = (
+                _atlas_status() if arguments[0].endswith("/atlas")
+                else "noc-inv-contract=1" if arguments[0].endswith("/noc-inv")
+                else "datadog production" if arguments[1:] == ["mcp", "list"]
+                else ""
+            )
+
+        return Result()
+
+    monkeypatch.setattr(dependency_readiness.subprocess, "run", run)
+
+    results = dependency_readiness.assess_external_capabilities(noc_bin, timeout_seconds=1)
+
+    assert {item["id"]: item["status"] for item in results} == {
+        "external.atlas": "ready",
+        "external.copilot": "ready",
+        "external.datadogMcp": "ready",
+        "external.microsoft365": "ready",
+        "external.nocTools": "ready",
+    }
+
+
+def test_optional_capabilities_classify_auth_setup_and_command_failure(
+    tmp_path, monkeypatch
+):
+    noc_bin = tmp_path / "bin"
+    noc_bin.mkdir()
+    for command in (
+        "atlas", "copilot", "m365", "tix", "noc-start", "noc-status",
+        "noc-inv", "noc-handover",
+    ):
+        executable = noc_bin / command
+        executable.touch()
+        executable.chmod(0o700)
+
+    def run(arguments, **_kwargs):
+        class Result:
+            returncode = 1 if (
+                (
+                    arguments[1:] in (["auth", "status"], ["mcp", "list"], ["status"])
+                    and not arguments[0].endswith("/atlas")
+                )
+                or arguments[0].endswith("/tix")
+            ) else 0
+            stdout = _atlas_status() if arguments[0].endswith("/atlas") else ""
+
+        return Result()
+
+    monkeypatch.setattr(dependency_readiness.subprocess, "run", run)
+
+    results = dependency_readiness.assess_external_capabilities(noc_bin, timeout_seconds=1)
+    by_id = {item["id"]: item["status"] for item in results}
+
+    assert by_id["external.atlas"] == "ready"
+    assert by_id["external.copilot"] == "setup_required"
+    assert by_id["external.datadogMcp"] == "setup_required"
+    assert by_id["external.microsoft365"] == "setup_required"
+    assert by_id["external.nocTools"] == "unavailable"
+
+
+def test_installed_but_unauthenticated_tools_have_safe_installation_status(
+    tmp_path, monkeypatch
+):
+    noc_bin = tmp_path / "bin"
+    noc_bin.mkdir()
+    for command in ("atlas", "copilot", "m365"):
+        executable = noc_bin / command
+        executable.touch()
+        executable.chmod(0o700)
+
+    def run(arguments, **_kwargs):
+        class Result:
+            returncode = 1 if arguments[1:] in (
+                ["auth", "status"], ["status"]
+            ) else 0
+            stdout = _atlas_status(session_usable=False, signed_in=False)
+
+        return Result()
+
+    monkeypatch.setattr(dependency_readiness.subprocess, "run", run)
+    by_id = {
+        item["id"]: item
+        for item in dependency_readiness.assess_external_capabilities(
+            noc_bin, timeout_seconds=1
+        )
+    }
+
+    assert by_id["external.atlas"]["installationStatus"] == "installed"
+    assert by_id["external.copilot"]["installationStatus"] == "installed"
+    assert by_id["external.microsoft365"]["installationStatus"] == "installed"
 
 
 def test_missing_and_failed_capability_probes_are_explicit(tmp_path, monkeypatch):

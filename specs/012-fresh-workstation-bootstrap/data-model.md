@@ -12,7 +12,7 @@ data and Feature 011 runtime configuration.
 | `releaseVersion` | Verified version presented before an update confirmation. |
 | `repository` | Exact approved GitHub repository from the package bootstrap manifest. |
 | `installRoot` | One validated per-user WSL application location; never an unsafe root, traversal path, or untrusted symlink. |
-| `archiveSha256` | SHA-256 verified against the signed release manifest. |
+| `archiveSha256` | SHA-256 verified against the approved release checksum asset and manifest trust anchor. |
 | `state` | `preflight`, `awaiting_confirmation`, `staging`, `handoff`, `ready`, or a safe failure state. |
 | `lastResult` | Safe non-secret category only; never raw command output, release contents, or credentials. |
 | `updatedAt` | UTC timestamp. |
@@ -21,6 +21,13 @@ Transitions proceed only forward after validation:
 `preflight → awaiting_confirmation → staging → handoff → ready`. A failed
 transition preserves the last verified installation and records a safe failure
 category.
+
+The state file is atomically serialized with exactly the fields above. It
+contains no URLs, command output, credentials, or operator data. Before a
+rerun changes application-owned content, it is classified without mutation as
+`current`, `older`, `incompatible`, `interrupted`, `failed`, or `corrupt`.
+`current` requires the exact approved release and a complete installed release;
+an invalid record or incomplete installation is `corrupt`.
 
 ## Source Verification Record
 
@@ -33,7 +40,7 @@ staged.
 | `assetName` | Exact expected release archive name. |
 | `manifestSha256` | Hash of the downloaded checksum manifest. |
 | `archiveSha256` | Hash of the downloaded release archive. |
-| `signatureVerified` | Boolean; must be true before extraction. |
+| `provenanceVerified` | Boolean; GitHub SLSA provenance must verify the exact repository, tag ref, and approved signer workflow before extraction. |
 | `archiveValidated` | Boolean; must be true after entry/path validation. |
 | `verifiedAt` | UTC timestamp. |
 
@@ -73,8 +80,7 @@ A package-bundled, versioned non-secret policy document.
 | Field | Constraints |
 |---|---|
 | `applicationRepository` | Exact approved GitHub repository. |
-| `releasePublicKey` | Identifier for the bundled verification key. |
-| `releaseAssets` | Expected application archive, checksum manifest, and signature names. |
+| `releaseAssets` | Exact approved repository, immutable tag, application archive, checksum asset, SHA-256, and fully qualified signer workflow. |
 | `targetDistribution` | Exact approved Ubuntu distribution identity. |
 | `toolEntries` | Optional per-tool version, source, checksum, target location, and compatibility range. |
 | `brandingAsset` | Must identify only `assets/windows/sesami-noc-operations.png`. |
