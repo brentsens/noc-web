@@ -1,73 +1,127 @@
 # SESAMI NOC Operations
 
-SESAMI NOC Operations is a Windows-launched NOC Web workstation application.
-It keeps operational workflows read-only by default and requires explicit
-operator confirmation for state-changing actions. The FastAPI backend and
-static web UI run in a managed Ubuntu WSL runtime; Windows provides the
-operator-facing installer, icon, shortcut, and default browser.
+SESAMI NOC Operations is a Windows-accessible NOC operations application backed
+by a managed WSL/Ubuntu runtime. Operators use a branded Windows shortcut and
+browser UI while noc-web runs locally in WSL.
 
-## Architecture and normal launch
+The application, Windows launcher, installer build, automated tests, and
+Windows regression tests are validated. **T050 genuine clean-workstation
+acceptance remains pending.**
 
-Feature 011 owns the managed runtime: the Python virtual environment,
-`noc-web.service`, `runtime.json`, localhost health check, controlled PATH,
-hidden launcher, and one Desktop shortcut. Feature 012 acquires a verified
-release and hands it to Feature 011; it does not create a competing service,
-runtime configuration, or shortcut.
+## Screenshots
 
-Normal launch is:
+<!-- SCREENSHOT: Main NOC Status dashboard
+Future file: docs/images/noc-status.png
+-->
+<!-- ![Main NOC Status dashboard](docs/images/noc-status.png) -->
+
+<!-- SCREENSHOT: Health and readiness page
+Future file: docs/images/noc-health.png
+-->
+<!-- ![Health and readiness page](docs/images/noc-health.png) -->
+
+<!-- SCREENSHOT: Windows SESAMI NOC Operations shortcut and browser launch
+Future file: docs/images/windows-launch.png
+-->
+<!-- ![Windows SESAMI NOC Operations shortcut and browser launch](docs/images/windows-launch.png) -->
+
+## What It Does
+
+SESAMI NOC Operations supports the operational workflow from shift startup to
+handover:
+
+- Shift startup, NOC status/dashboard, and health/readiness checks
+- Ticket workflow and investigations
+- AI-assisted operational work, with human review
+- Shift notes and handover/end-shift workflow
+
+## How It Works
 
 ```text
+Windows
+  |
 SESAMI NOC Operations shortcut
-  -> hidden WSL launcher
-  -> noc-web.service
-  -> localhost health check
-  -> default Windows browser
+  |
+hidden Windows launcher
+  |
+WSL / Ubuntu
+  |
+noc-web.service
+  |
+localhost health check
+  |
+default Windows browser
+  |
+SESAMI NOC Operations
 ```
 
-The shortcut is installed through the Windows known Desktop folder, including
-OneDrive-redirected Desktops. Its hidden launcher is stored under the current
-user's Local AppData and runs without a persistent console window.
+NOC Web listens only on `127.0.0.1:8000`. Normal operators do not need to keep
+a WSL terminal open.
 
-## Install or repair on a Windows workstation
+## Architecture
 
-The built installer is:
+**Windows**
+
+- `SESAMI-NOC-Operations-Setup.exe`
+- Branded SESAMI NOC Operations shortcut
+- Hidden Windows launcher
+- Default browser
+
+**WSL / Ubuntu**
+
+- noc-web
+- Python `.venv`
+- `noc-web.service` systemd user service
+- noc-tools
+- Operational CLI integrations
+
+Feature 011 owns the managed runtime, health checks, launcher, service,
+`runtime.json`, shortcut, and controlled environment. Feature 012 owns fresh
+installation, trusted acquisition, provisioning, repair/rerun behavior,
+Windows packaging, and the Feature 011 handoff.
+
+## Fresh Installation
 
 ```text
-dist/windows/SESAMI-NOC-Operations-Setup.exe
+SESAMI-NOC-Operations-Setup.exe
+  |
+Windows / WSL preflight
+  |
+verified trusted releases
+  |
+noc-web v1.0.3 + noc-tools v1.0.1
+  |
+provisioning
+  |
+Feature 011 managed runtime
+  |
+SESAMI NOC Operations shortcut
+  |
+browser
 ```
 
-Use a supported Windows workstation with the approved Ubuntu WSL distribution
-and user systemd enabled. Run the installer, then explicitly approve or decline
-the proposed NOC Web repair/install and the separate optional noc-tools install.
-WSL and Ubuntu platform setup are guide-only; the installer does not enable
-WSL, install Ubuntu, reboot Windows, or sign in to any service.
+Run the installer from Windows. Operators should not need to manually clone
+noc-web or noc-tools. Consequential WSL and prerequisite changes remain
+operator-controlled.
 
-Rerunning the installer reuses or repairs the deterministic per-user WSL
-installation. It preserves valid `runtime.json`, the managed virtual
-environment where appropriate, operator-owned NOC data, investigations,
-shift/handover records, and compatible noc-tools. It does not duplicate the
-service, runtime configuration, hidden launcher, or shortcut.
+## Trusted Distribution
 
-The installer uses the approved SESAMI branding asset to create the
-multi-resolution installer icon and branded shortcut. The installer is
-currently **NotSigned** by Authenticode; do not treat it as Authenticode
-code-signed.
+| Component | Repository | Release |
+|---|---|---|
+| noc-web | `brentsens/noc-web` | `v1.0.3` |
+| noc-tools | `brentsens/noc-tools` | `v1.0.1` |
 
-## Trusted release inputs
+Trusted acquisition verifies the pinned SHA-256 digest and GitHub SLSA
+provenance, including repository identity, tag identity, and approved
+signer-workflow identity. The required noc-tools compatibility result is:
 
-The bootstrap policy pins immutable approved releases:
+```text
+noc-inv-contract=1
+```
 
-| Component | Approved release |
-|---|---|
-| noc-web | `v1.0.3` |
-| noc-tools | `v1.0.1` |
+## noc-tools
 
-Before content is executed, bootstrap verifies the pinned SHA-256 digest and
-published checksum asset, then verifies GitHub SLSA provenance against the
-pinned repository, tag, and fully qualified signer workflow. Do not substitute
-mutable branches, package-manager artifacts, or unapproved download sources.
-
-The approved noc-tools distribution supplies:
+The approved distribution provides:
 
 ```text
 tix
@@ -77,114 +131,134 @@ noc-inv
 noc-handover
 ```
 
-`noc-inv --contract-version` must return:
+Installation does not require a `~/code/noc-tools` checkout.
 
-```text
-noc-inv-contract=1
-```
+## Integrations and Readiness
 
-## Identity and readiness
-
-Software installation is separate from operator authentication. The installer
-never bundles, copies, reads, migrates, or logs credentials, tokens, cookies,
-sessions, or another operator's authentication material.
-
-Atlas, GitHub Copilot CLI, Microsoft 365 CLI, Datadog MCP, and noc-tools are
-independently assessed after core NOC Web setup:
-
-| Status | Meaning |
+| State | Meaning |
 |---|---|
-| `READY` | The bounded availability and applicable authentication/compatibility check succeeded. |
-| `SETUP_REQUIRED` | The software, operator sign-in, site access, or configuration needs operator action. |
+| `READY` | The bounded availability and applicable authentication or compatibility check succeeded. |
+| `SETUP_REQUIRED` | The software, operator sign-in, site access, or configuration needs action. |
 | `UNAVAILABLE` | A command, approved artifact, compatibility check, or bounded probe failed. |
 
-Atlas remains an operator-managed trusted Linuxbrew integration. A missing
-Atlas binary is guided setup, not an installer-provided binary; Atlas readiness
-uses `atlas auth status --json`. Missing optional integrations do not block
-core NOC Web availability.
+Readiness independently reports Atlas Jira, GitHub Copilot CLI, Microsoft 365,
+Datadog MCP, and noc-tools. Authentication is operator-specific. Credentials,
+tokens, cookies, sessions, and another operator's authentication are never
+bundled or copied by the installer.
 
-## Operator troubleshooting
+## Safety Model
 
-From Windows PowerShell, replace `Ubuntu` only when your approved distribution
-uses another configured name:
+- Localhost-only binding
+- Read-only defaults and explicit confirmation for consequential actions
+- AI output is advisory and human-reviewed
+- Fail-closed release verification
+- No bundled credentials, tokens, or sessions
+- Controlled systemd PATH
+- Failed repair preserves the previous valid installation
+- Pytest regression coverage isolates operational state
+- Backend API and frontend UI contracts change together
+
+## Repair and Reinstall
+
+Installer reruns are idempotent. They preserve valid:
+
+- `runtime.json`
+- Operator configuration and operational records
+- Investigations and shift/handover data
+- Authentication and session material
+- Compatible noc-tools
+
+Reruns avoid duplicate services, launchers, shortcuts, virtual environments,
+runtime configurations, and tools.
+
+## Building the Windows Installer
+
+Prerequisites:
+
+- Windows PowerShell 5.1
+- Inno Setup 6
+- Approved SESAMI branding asset
 
 ```powershell
-wsl.exe -d Ubuntu -- systemctl --user status noc-web --no-pager
-wsl.exe -d Ubuntu -- systemctl --user is-active noc-web
-wsl.exe -d Ubuntu -- curl -fsS http://127.0.0.1:8000/api/health
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\bootstrap-status.ps1 -Distribution Ubuntu
+powershell.exe -ExecutionPolicy Bypass -File .\packaging\windows\generate-icon.ps1
+
+powershell.exe -ExecutionPolicy Bypass -File .\packaging\windows\build-installer.ps1
 ```
 
-For shortcut or launcher issues, verify the `SESAMI NOC Operations.lnk` file
-in the Windows Desktop known folder and the launcher at:
+Output:
+
+```text
+dist\windows\SESAMI-NOC-Operations-Setup.exe
+```
+
+ICO generation was validated on Windows, and Inno Setup 6.7.3 compilation was
+validated. The current EXE is **NotSigned** by Authenticode. Do not treat the
+installer as digitally signed.
+
+## Development
+
+WSL/Ubuntu is the development and runtime environment. From the repository:
+
+```bash
+source .venv/bin/activate
+python -m pytest -q
+```
+
+## Validation
+
+Current validated state:
+
+- pytest: **526 passed**
+- `git diff --check`: passed
+- Windows Pester 6.2.0: **9 passed, 0 failed, 0 skipped**
+- Windows ICO generation: passed
+- Inno Setup 6.7.3 build: passed
+- Installer artifact generated successfully
+- **T050 clean-workstation acceptance: PENDING**
+
+T050 must execute on a genuinely clean supported Windows/WSL workstation. Do
+not claim fresh-machine acceptance until that result is recorded.
+
+## Troubleshooting
+
+Run these commands in the WSL/Ubuntu runtime:
+
+```bash
+systemctl --user status noc-web --no-pager -l
+journalctl --user -u noc-web -n 100 --no-pager
+curl -sS http://127.0.0.1:8000/api/health
+systemd-analyze --user verify ~/.config/systemd/user/noc-web.service
+command -v atlas
+command -v copilot
+command -v noc-inv
+noc-inv --contract-version
+```
+
+The hidden Windows launcher is stored under:
 
 ```text
 %LOCALAPPDATA%\SESAMI\NOC Operations\launch-hidden.vbs
 ```
 
-Relevant recovery state is per-user and must be inspected without copying
-secrets:
+The shortcut uses the Windows Desktop known folder and supports a
+OneDrive-redirected Desktop.
 
-```text
-~/.local/share/sesami-noc-operations/noc-web/
-~/.local/state/sesami-noc-operations/installation-state.json
-~/.config/noc-web/runtime.json
-```
+## Repository Layout
 
-If service or health recovery is needed, use the commands above before
-reinstalling. Do not delete operational data or authentication material as a
-first recovery step.
+| Path | Purpose |
+|---|---|
+| `backend/` | FastAPI application, services, and operational logic |
+| `frontend/` | Static browser UI |
+| `scripts/` | Runtime, bootstrap, and Windows launcher scripts |
+| `packaging/windows/` | Inno Setup package, manifest, icon, and build tooling |
+| `assets/windows/` | Approved SESAMI branding asset |
+| `tests/` | Python and Windows Pester regression coverage |
+| `specs/` | Feature specifications, plans, contracts, and task records |
 
-## Development and maintenance
+## Project Status
 
-Develop inside the repository's WSL checkout:
+Feature 011: implemented and accepted.
 
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install --requirement requirements.txt
-.venv/bin/python -m uvicorn backend.app:app --reload
-```
+Feature 012: implemented and converged.
 
-Run automated checks:
-
-```bash
-.venv/bin/pytest -q
-git diff --check
-```
-
-Run the non-destructive Windows package regression suite from Windows
-PowerShell with Pester 6.2.0:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\run-pester-regression.ps1
-```
-
-The runner stages only allowlisted test and package-contract resources in a
-native temporary Windows directory, so it works when the repository is hosted
-through `\\wsl$\`.
-
-To build the installer, install Inno Setup 6 on Windows (the build script
-discovers a per-user installation at
-`$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe`), then run:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\generate-icon.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\build-installer.ps1
-```
-
-The trusted-release pipeline updates the pinned repository, tag, archive,
-SHA-256, and signer workflow together; it then independently verifies
-provenance and builds the package. Never publish credentials or private
-download URLs in release inputs.
-
-## Validation status
-
-- Python tests: **526 passed**
-- `git diff --check`: passed
-- Windows Pester 6.2.0: **9 passed, 0 failed, 0 skipped**
-- Windows ICO generation: passed
-- Inno Setup 6.7.3 compilation: passed; the installer was produced
-- **T050 clean-workstation acceptance remains pending.** It must run on a
-  genuinely clean supported Windows/WSL workstation with no prior NOC Web
-  checkout, Feature 011 runtime, shortcut, NOC data, noc-tools, or third-party
-  authentication.
+T050: pending genuine clean-workstation acceptance.
