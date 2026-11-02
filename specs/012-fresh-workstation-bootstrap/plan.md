@@ -8,8 +8,10 @@
 ## Summary
 
 Deliver a signed Windows setup executable that can bootstrap a fresh supported
-workstation without an existing NOC Web checkout. The package guides WSL and
-Ubuntu platform setup, verifies an approved signed GitHub release and its
+workstation without an existing NOC Web checkout. The package guides WSL
+platform setup, accepts any WSL2 distribution that already passes the runtime
+capability contract, and offers only Ubuntu the approved, confirmed runtime
+remediation path. It verifies an approved signed GitHub release and its
 SHA-256 manifest before staging it in a fixed per-user WSL location, then
 delegates all managed runtime, health, launcher, localhost, and shortcut
 behavior to Feature 011. Tool provisioning is manifest-controlled, confirmed
@@ -36,8 +38,10 @@ Feature 011 handoff; Windows PowerShell 5.1 package/bootstrap tests; clean
 Windows/WSL acceptance with no checkout, runtime, or shortcut; full pytest and
 `git diff --check`.
 
-**Target Platform**: Windows 10/11 with supported WSL2 Ubuntu; Windows
-PowerShell 5.1; an unprivileged WSL operator and systemd-enabled distribution.
+**Target Platform**: Windows 10/11 with WSL2; Windows PowerShell 5.1; an
+unprivileged WSL operator and systemd-enabled distribution. Ubuntu is the
+supported automatic-provisioning distribution; another distribution is
+accepted only when all runtime capabilities are already present.
 
 **Project Type**: Windows desktop setup package plus Windows/WSL bootstrap
 scripts that provision the existing local web application.
@@ -49,16 +53,21 @@ download, verification, and health operations have bounded deadlines.
 **Constraints**: The package is named `SESAMI-NOC-Operations-Setup.exe` and
 uses only `assets/windows/sesami-noc-operations.png` for its multi-resolution
 ICO. Release archives, checksum manifests, and signatures must verify before
-execution. Platform WSL/Ubuntu setup is guide-only. Application replacement
-and optional tool installation require explicit confirmation. No credentials,
-interactive PATH inheritance, or unapproved tool source may enter generated
-files, logs, or process environments. Atlas uses only the existing trusted
+execution. WSL platform setup and non-Ubuntu remediation are guide-only.
+Ubuntu-only remediation for missing approved runtime packages or GitHub CLI
+attestation support requires separate explicit confirmation and a post-action
+capability recheck. Application replacement and optional tool installation
+require explicit confirmation. No credentials, interactive PATH inheritance,
+or unapproved tool source may enter generated files, logs, or process
+environments. Atlas uses only the existing trusted
 `/home/linuxbrew/.linuxbrew/Homebrew/bin` service location; bootstrap must not
 derive or inherit a broader Linuxbrew, interactive-shell, or Windows PATH.
 
-**Scale/Scope**: One operator and one approved WSL Ubuntu distribution per
-installation. The feature adds bootstrap acquisition and provisioning only; it
-does not replace Feature 011 runtime ownership or introduce fleet management.
+**Scale/Scope**: One operator and one selected WSL2 distribution per
+installation. Ubuntu is the approved automatic-provisioning distribution; a
+different distribution must already satisfy the runtime capability contract.
+The feature adds bootstrap acquisition and provisioning only; it does not
+replace Feature 011 runtime ownership or introduce fleet management.
 
 ## Constitution Check
 

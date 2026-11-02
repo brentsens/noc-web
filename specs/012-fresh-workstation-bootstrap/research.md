@@ -35,20 +35,28 @@ alone does not meet the signed-release and fail-closed requirement. Cloning a
 mutable branch violates deterministic acquisition and requires Git on the
 fresh workstation.
 
-## Decision 3: Keep WSL and Ubuntu setup guide-only
+## Decision 3: Use capability-based WSL support with Ubuntu-only remediation
 
-**Decision**: Bootstrap detects WSL2, the approved Ubuntu distribution, and
-systemd readiness. It presents approved remediation instructions and exits
-without initiating platform installation. After platform readiness, it asks
-for confirmation before application replacement or optional tool provisioning.
+**Decision**: Bootstrap accepts any selected WSL2 distribution that has Python
+3.10+, real venv/pip bootstrap, Python CA/SSL, systemd user services, and a
+usable `gh attestation verify` capability. It derives distribution family from
+`/etc/os-release`. Only Ubuntu may offer the explicit, confirmed package
+remediation for missing `python3`, `python3-venv`, and `ca-certificates`; other
+distributions receive missing-capability guidance without package-manager
+commands.
 
-**Rationale**: Installing WSL or a Linux distribution can require elevation,
-restart, policy acceptance, and operator choice. Guided remediation respects
-the explicit confirmation boundary while still producing a clear next action.
+**Rationale**: A capable non-Ubuntu distribution does not need replacement,
+while unapproved package-manager actions would be unsafe. `gh` is required
+because Feature 012 invokes `gh attestation verify`; on Ubuntu only, the
+official GitHub CLI signed apt repository is the approved, separately
+confirmed remediation contract. noc-tools v1.0.1 uses `jq` in optional
+workflows, so its availability is reported independently and cannot block core
+NOC Web installation.
 
-**Alternatives considered**: Silently running platform-install commands is a
-consequential workstation change. Treating missing prerequisites as a generic
-installation failure hides the corrective action.
+**Alternatives considered**: Rejecting every non-Ubuntu distribution is
+unnecessary. Silently running platform-install commands or assuming apt is
+safe based on its presence violates the confirmation and approved-source
+boundaries.
 
 ## Decision 4: Delegate managed runtime ownership to Feature 011
 

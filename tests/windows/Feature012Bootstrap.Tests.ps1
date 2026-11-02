@@ -23,6 +23,7 @@ Describe 'Feature 012 Windows bootstrap package contracts' {
         $statusSource = Get-Content -LiteralPath (Get-StagedResourcePath 'scripts/windows/bootstrap-status.ps1') -Raw
         $shortcutSource = Get-Content -LiteralPath (Get-StagedResourcePath 'scripts/windows/install-shortcut.ps1') -Raw
         $manifestSource = Get-Content -LiteralPath (Get-StagedResourcePath 'packaging/windows/bootstrap-manifest.json') -Raw
+        $issSource = Get-Content -LiteralPath (Get-StagedResourcePath 'packaging/windows/SESAMI-NOC-Operations-Setup.iss') -Raw
     }
 
     It 'is guide-only for WSL and distribution prerequisites' {
@@ -31,6 +32,45 @@ Describe 'Feature 012 Windows bootstrap package contracts' {
         $installSource | Should -Match 'WSL_SETUP_REQUIRED'
         $installSource | Should -Match 'DISTRIBUTION_SETUP_REQUIRED'
         $installSource | Should -Match 'RUNTIME_SETUP_REQUIRED'
+    }
+
+    It 'only provisions missing core runtime packages after explicit confirmation' {
+        $installSource | Should -Match '\[switch\]\$ConfirmPrerequisites'
+        $installSource | Should -Match 'check_runtime_prerequisites\.sh'
+        $installSource | Should -Match 'APPROVED_UBUNTU_PREREQUISITE_INSTALL='
+        $installSource | Should -Match 'sudo apt-get update && sudo apt-get install --yes'
+        $installSource.IndexOf('ConfirmPrerequisites') |
+            Should -BeLessThan $installSource.IndexOf('scripts.bootstrap.acquire_release')
+        $installSource | Should -Not -Match '(?im)\b(apt|sudo)\b.*(atlas|copilot|m365|datadog|noc-tools)'
+        $issSource | Should -Match 'check_runtime_prerequisites\.sh'
+        $issSource | Should -Match 'ConfirmPrerequisites'
+        $issSource | Should -Match 'ConfirmGitHubCli'
+    }
+
+    It 'uses capability detection and keeps apt provisioning Ubuntu-only' {
+        $installSource | Should -Match 'microsoft-standard-WSL2'
+        $installSource | Should -Match 'DETECTED_DISTRIBUTION_FAMILY='
+        $installSource | Should -Match "DistributionFamily -eq 'ubuntu'"
+        $installSource | Should -Match 'MISSING_RUNTIME_CAPABILITIES='
+        $installSource | Should -Not -Match '(?im)\bapt-get\b.*(debian|fedora|suse)'
+    }
+
+    It 'uses a confirmed official GitHub CLI prerequisite action' {
+        $installSource | Should -Match '\[switch\]\$ConfirmGitHubCli'
+        $installSource | Should -Match 'GH_ATTESTATION='
+        $installSource | Should -Match 'APPROVED_GITHUB_CLI_SOURCE=https://cli\.github\.com/packages'
+        $installSource | Should -Match 'Confirm-GitHubCliProvisioning'
+        $issSource | Should -Match 'provision_github_cli\.sh'
+        $issSource | Should -Match 'ConfirmGitHubCli'
+    }
+
+    It 'uses supported Inno Setup wizard APIs for the WSL distribution choice' {
+        $issSource | Should -Not -Match '(?i)\bInputQuery\b'
+        $issSource | Should -Match '\bCreateInputQueryPage\b'
+        $issSource | Should -Match '\bTInputQueryWizardPage\b'
+        $issSource | Should -Match '\bInitializeWizard\b'
+        $issSource | Should -Match '\bNextButtonClick\b'
+        $issSource | Should -Match 'DistributionPage\.Values\[0\]'
     }
 
     It 'reports categorized bootstrap failures without raw subprocess output' {

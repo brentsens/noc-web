@@ -15,7 +15,7 @@ The Windows bootstrap returns one safe terminal category:
 |---|---|---|
 | `BOOTSTRAP_READY` | Verified release handed off to Feature 011 and core health succeeded. | Launch SESAMI NOC Operations. |
 | `WSL_SETUP_REQUIRED` | WSL is missing, disabled, or unsupported. | Follow guided platform setup. |
-| `DISTRIBUTION_SETUP_REQUIRED` | Approved Ubuntu distribution is absent or unsupported. | Follow guided distribution setup. |
+| `DISTRIBUTION_SETUP_REQUIRED` | The selected WSL distribution cannot be started. | Follow guided distribution setup. |
 | `RUNTIME_SETUP_REQUIRED` | Required WSL runtime/systemd prerequisite is unavailable. | Correct the stated prerequisite. |
 | `SOURCE_VERIFICATION_FAILED` | Release signature, identity, checksum, or archive validation failed. | Obtain a current approved package/release. |
 | `CONFIRMATION_DECLINED` | Operator declined a workstation-changing action. | Rerun and approve the stated change if desired. |
@@ -28,9 +28,25 @@ authentication material are never included in this contract.
 
 ## Bootstrap sequence
 
-1. Validate package manifest and inspect WSL/distribution/runtime prerequisites.
-2. Guide and exit for missing platform prerequisites; do not initiate WSL or
-   Ubuntu installation.
+1. Validate package manifest and inspect WSL 2, the selected distribution's
+   `/etc/os-release` family, and the complete runtime capability contract.
+2. Any WSL 2 distribution may continue when Python 3.10+, real venv/pip
+   bootstrap, Python SSL/CA support, systemd user services, and
+   `gh attestation verify --help` all pass. For missing core Ubuntu packages
+   only, show the exact approved command
+   `sudo apt-get update && sudo apt-get install --yes <missing packages>` and
+   require separate explicit operator confirmation before running it. Declining
+   this prerequisite action returns `RUNTIME_SETUP_REQUIRED`. The
+   allowed package set is `python3`, `python3-venv`, and `ca-certificates`;
+   recheck every prerequisite after installation and before any release,
+   noc-tools, or optional-integration action. Non-Ubuntu distributions never
+   receive apt remediation: missing capabilities are reported safely instead.
+   On Ubuntu only, missing `gh` or an installed `gh` without attestation
+   support offers a separate confirmed action that downloads the official
+   `https://cli.github.com/packages` signing key, configures that signed apt
+   repository, then runs `apt-get update` and `apt-get install --yes gh`.
+   It neither signs in nor reads authentication files, and rechecks
+   `gh attestation verify --help` before acquisition.
 3. Resolve the current verified installation. If an update is available, show
    its version and request confirmation.
 4. Download release archive, checksum manifest, and signature to a temporary
@@ -41,7 +57,9 @@ authentication material are never included in this contract.
 6. Invoke the staged Feature 011 installer and consume its safe health,
    service, launcher, and shortcut result.
 7. With separate confirmation, provision only tool artifacts listed in the
-   verified release manifest; never sign in or migrate identity.
+   verified release manifest; never sign in or migrate identity. noc-tools
+   checks its optional `bash`, `jq`, `timeout`, and `mktemp` capabilities
+   before mutation; missing tools report setup-required and do not block core.
 8. Request the existing Feature 011 readiness assessment and present each
    optional result independently.
 

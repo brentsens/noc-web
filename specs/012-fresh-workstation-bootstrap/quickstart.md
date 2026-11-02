@@ -5,8 +5,11 @@ environment. It is not a development-machine migration guide.
 
 ## Clean acceptance baseline
 
-Before beginning, use a Windows 10/11 test user and supported WSL2 Ubuntu
-distribution with systemd enabled. Confirm all of the following are absent:
+Before beginning, use a Windows 10/11 test user and a WSL2 distribution with
+systemd enabled. Ubuntu is the supported distribution for automatic
+prerequisite provisioning; another distribution may be used only when it
+already satisfies the complete runtime capability contract. Confirm all of the
+following are absent:
 
 - NOC Web checkout at the Feature 012 target location.
 - Feature 011 runtime configuration, `noc-web.service`, launcher, and shortcut.
@@ -23,8 +26,14 @@ attestation checks before extraction.
 ## Core bootstrap
 
 1. Start `SESAMI-NOC-Operations-Setup.exe` from Windows.
-2. Confirm it reports WSL and approved Ubuntu readiness; if either is missing,
-   verify it provides guide-only remediation and makes no platform change.
+2. Confirm it reports WSL 2, the `/etc/os-release` distribution family,
+   Python 3.10+, real venv/pip, CA/SSL, systemd user-service, and `gh`
+   attestation readiness. On Ubuntu, verify only missing approved packages are
+   shown with their exact command and an explicit confirmation. If gh is
+   missing or lacks attestation support, verify its separate prompt identifies
+   GitHub's official apt source, makes no identity change, and rechecks the
+   capability. On another distribution, verify a missing capability produces
+   guidance without apt.
 3. Confirm any application staging or optional dependency installation prompt
    clearly identifies the proposed workstation change. Decline once and verify
    the safe declined result, then rerun and approve.

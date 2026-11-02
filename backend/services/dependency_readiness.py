@@ -355,6 +355,15 @@ def assess_external_capabilities(
             "Restore the compatible noc-tools commands and run Recheck.",
             "setup_required",
         ))
+    elif _executable("jq", noc_bin) is None:
+        results.append(_result(
+            "external.nocTools",
+            "noc-tools compatibility",
+            "setup_required",
+            "noc-tools workflows require jq for local ticket JSON.",
+            "Install jq using your distribution's approved process, then Recheck.",
+            "setup_required",
+        ))
     else:
         results.append(_result(
             "external.nocTools",

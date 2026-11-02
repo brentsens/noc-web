@@ -53,11 +53,16 @@ A transient result for one bootstrap prerequisite.
 
 | Field | Constraints |
 |---|---|
-| `id` | Stable value: `wsl`, `distribution`, `systemd`, `runtime`, `source`, `permission`, or `confirmation`. |
+| `id` | Stable value: `wsl2`, `distribution`, `systemd`, `runtime`, `source`, `permission`, or `confirmation`. |
 | `status` | `ready`, `setup_required`, or `unavailable`. |
 | `impact` | Safe operator-facing effect. |
 | `correctiveAction` | Safe next step; platform setup instructions are guide-only. |
 | `required` | Boolean; optional tools are never core blockers. |
+
+The detected `/etc/os-release` distribution family is bounded non-secret
+diagnostic metadata. It determines whether missing packages can use the
+Ubuntu-only approved provisioning path; it does not determine whether an
+otherwise capable WSL 2 distribution can run NOC Web.
 
 ## Dependency Provisioning Result
 

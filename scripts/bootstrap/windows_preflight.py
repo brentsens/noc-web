@@ -19,12 +19,13 @@ class WindowsContext:
     permission_available: bool
     confirmed: bool
     source_verified: bool
+    wsl2_available: bool = True
 
 
 def assess(context: WindowsContext) -> str:
     if not context.wsl_available:
         return "WSL_SETUP_REQUIRED"
-    if context.requested_distribution != "Ubuntu" or context.requested_distribution not in context.distributions:
+    if not context.wsl2_available or context.requested_distribution not in context.distributions:
         return "DISTRIBUTION_SETUP_REQUIRED"
     if (
         not context.windows_user

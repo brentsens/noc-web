@@ -267,3 +267,20 @@ Task: "Add Windows dependency-status acceptance coverage in tests/windows/test_b
 ## Phase 10: Convergence
 
 - [X] T053 Preserve valid apostrophe-containing per-user Windows paths by using a double-quote-free POSIX single-quote escape compatible with `Invoke-WslSafe`, with regression coverage, per FR-006 and T051 (partial).
+
+## Phase 11: Fresh Ubuntu Runtime Prerequisites
+
+- [X] T054 Detect Python 3.10+, real virtual-environment/pip bootstrap, certificate support, and systemd user services before release acquisition; when only approved Ubuntu runtime packages are missing, display the exact `sudo apt-get` command, require separate confirmation, recheck after installation, and keep optional tools out of the core gate.
+
+## Phase 12: Capability-Based Distribution Support
+
+- [X] T055 Accept any WSL 2 distribution that passes the complete core runtime capability preflight; detect the family from `/etc/os-release`, retain Ubuntu-only confirmed apt remediation, require `gh attestation verify --help` for trusted provenance, and report optional noc-tools `jq` readiness separately.
+
+## Phase 13: GitHub CLI Provenance Prerequisite
+
+- [X] T056 Distinguish missing and attestation-unsupported gh, provide a separate confirmed Ubuntu-only official GitHub CLI apt remediation, recheck attestation support, and preserve non-Ubuntu capability-only behavior.
+
+## Phase 14: Convergence
+
+- [ ] T057 CRITICAL: Execute and record the clean supported Windows/WSL acceptance flow, including core acquisition, Feature 011 handoff, shortcut launch/reuse, noc-tools validation, dependency reporting, and credential isolation per FR-024 / T050 (missing).
+- [X] T058 Reconcile Feature 012 plan platform-policy language with FR-028's capability-based WSL2 acceptance and Ubuntu-only confirmed remediation per plan: Target Platform and Constraints (contradicts).

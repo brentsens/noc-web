@@ -259,6 +259,31 @@ configuration, and representative operator-owned data before and after.
   Windows or WSL PATH; it MUST use controlled, approved locations only.
 - **FR-026**: The installer MUST use the approved noc-tools distribution and
   compatibility contract defined by the versioned NOC Web release manifest.
+- **FR-027**: Before application provisioning, the installer MUST verify
+  Python 3.10+, actual `python3 -m venv` and pip bootstrap support, the Ubuntu
+  CA certificate bundle used by Python HTTPS acquisition, and systemd user
+  services. It MUST assess but not require external `curl`, `tar`, or
+  `sha256sum`, because approved acquisition uses Python standard libraries.
+  When only missing approved Ubuntu packages can correct the condition, it
+  MUST show the exact missing-package `sudo apt-get` command, obtain separate
+  operator confirmation, run no `sudo` or `apt` action on decline, and recheck
+  every prerequisite before release acquisition. The approved package set is
+  limited to `python3`, `python3-venv`, and `ca-certificates`.
+- **FR-028**: Any selected WSL 2 distribution that satisfies the full core
+  capability contract MUST be accepted. The installer MUST derive the
+  distribution family from `/etc/os-release`, not the WSL display name, and
+  may retain that family only as non-secret diagnostic metadata. Ubuntu is the
+  only distribution eligible for confirmed automatic package provisioning;
+  other distributions with a missing capability MUST receive safe guidance
+  without an apt action. Trusted acquisition requires a `gh` executable that
+  passes   `gh attestation verify --help`. On Ubuntu only, missing or unsupported gh
+  MAY be installed or upgraded from GitHub CLI's official signed apt source
+  after displaying the exact action and receiving separate confirmation; it
+  MUST be rechecked afterward and MUST NOT authenticate, copy, or inspect
+  operator gh identity data. Non-Ubuntu distributions never receive a
+  distro-specific gh action. `jq` is required by approved noc-tools v1.0.1
+  workflows but is an optional noc-tools/readiness prerequisite, never a core
+  NOC Web installation blocker.
 
 ### Key Entities
 

@@ -140,7 +140,7 @@ def test_feature011_handoff_reports_safe_failure_without_raw_subprocess_output(t
         )
 
 
-def test_windows_preflight_categorizes_wsl_distribution_and_redirected_desktop():
+def test_windows_preflight_categorizes_wsl2_capability_and_redirected_desktop():
     context = WindowsContext(
         wsl_available=True, distributions=("Ubuntu",), requested_distribution="Ubuntu",
         windows_user="different-user", profile_path=r"C:\Users\different-user",
@@ -150,7 +150,8 @@ def test_windows_preflight_categorizes_wsl_distribution_and_redirected_desktop()
     assert assess(context) == "READY"
     assert assess(WindowsContext(**{**context.__dict__, "wsl_available": False})) == "WSL_SETUP_REQUIRED"
     assert assess(WindowsContext(**{**context.__dict__, "distributions": ("Debian",)})) == "DISTRIBUTION_SETUP_REQUIRED"
-    assert assess(WindowsContext(**{**context.__dict__, "requested_distribution": "Debian"})) == "DISTRIBUTION_SETUP_REQUIRED"
+    assert assess(WindowsContext(**{**context.__dict__, "requested_distribution": "Debian", "distributions": ("Debian",)})) == "READY"
+    assert assess(WindowsContext(**{**context.__dict__, "wsl2_available": False})) == "DISTRIBUTION_SETUP_REQUIRED"
     assert assess(WindowsContext(**{**context.__dict__, "systemd_available": False})) == "RUNTIME_SETUP_REQUIRED"
     assert assess(WindowsContext(**{**context.__dict__, "permission_available": False})) == "PERMISSION_REQUIRED"
     assert assess(WindowsContext(**{**context.__dict__, "confirmed": False})) == "CONFIRMATION_DECLINED"
