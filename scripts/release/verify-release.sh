@@ -15,6 +15,7 @@ entries="$(tar -tzf "$archive")"
 ! grep -Eq '(^|/)(\.git|\.venv|__pycache__|\.pytest_cache|\.env[^/]*|.*\.log|tmp)(/|$)|(^|/)\.\.(/|$)' <<<"$entries"
 for required in requirements.txt backend/app.py scripts/install_runtime.py \
   scripts/windows/install-shortcut.ps1 scripts/windows/launch-hidden.vbs.in \
+  scripts/windows/sesami_noc_launch.py \
   systemd/noc-web.service.in; do
   grep -Eq "/${required}$" <<<"$entries"
 done
