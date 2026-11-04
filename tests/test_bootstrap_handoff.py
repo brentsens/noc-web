@@ -6,10 +6,19 @@ from scripts.bootstrap.handoff import (
     HandoffError,
     LinuxIdentity,
     create_verified_venv_and_install,
+    discover_linux_identity,
     install_location,
     handoff_feature011,
 )
-from scripts.bootstrap.windows_preflight import WindowsContext, assess
+from scripts.bootstrap.windows_preflight import (
+    WSL_RESOLUTION_MISSING,
+    WSL_RESOLUTION_NATIVE_SYSTEM32,
+    WSL_RESOLUTION_SYSNATIVE,
+    WindowsContext,
+    assess,
+    parse_and_validate_account,
+    resolve_wsl_executable,
+)
 
 
 def _identity(tmp_path: Path) -> LinuxIdentity:
@@ -156,3 +165,237 @@ def test_windows_preflight_categorizes_wsl2_capability_and_redirected_desktop():
     assert assess(WindowsContext(**{**context.__dict__, "permission_available": False})) == "PERMISSION_REQUIRED"
     assert assess(WindowsContext(**{**context.__dict__, "confirmed": False})) == "CONFIRMATION_DECLINED"
     assert assess(WindowsContext(**{**context.__dict__, "source_verified": False})) == "SOURCE_VERIFICATION_FAILED"
+
+
+def test_wsl_executable_64bit_process_selects_system32():
+    system_root = r"C:\Windows"
+    native = r"C:\Windows\System32\wsl.exe"
+    result = resolve_wsl_executable(
+        system_root=system_root,
+        is_64bit_os=True,
+        is_64bit_process=True,
+        path_exists={native: True, r"C:\Windows\Sysnative\wsl.exe": True},
+        path_entries=(r"C:\evil",),
+    )
+    assert result.path == native
+    assert result.resolution == WSL_RESOLUTION_NATIVE_SYSTEM32
+    assert result.category is None
+
+
+def test_wsl_executable_32bit_process_on_64bit_os_selects_sysnative():
+    system_root = r"C:\Windows"
+    sysnative = r"C:\Windows\Sysnative\wsl.exe"
+    redirected_system32 = r"C:\Windows\System32\wsl.exe"
+    result = resolve_wsl_executable(
+        system_root=system_root,
+        is_64bit_os=True,
+        is_64bit_process=False,
+        # Wow64: System32 view is redirected; real wsl.exe is only via Sysnative.
+        path_exists={sysnative: True, redirected_system32: False},
+        path_entries=(r"C:\Users\operator\evil-bin",),
+    )
+    assert result.path == sysnative
+    assert result.resolution == WSL_RESOLUTION_SYSNATIVE
+    assert result.category is None
+
+
+def test_wsl_executable_genuinely_missing_returns_wsl_setup_required():
+    result = resolve_wsl_executable(
+        system_root=r"C:\Windows",
+        is_64bit_os=True,
+        is_64bit_process=True,
+        path_exists={
+            r"C:\Windows\System32\wsl.exe": False,
+            r"C:\Windows\Sysnative\wsl.exe": False,
+        },
+        path_entries=(r"C:\fake\with\wsl.exe",),
+    )
+    assert result.path is None
+    assert result.resolution == WSL_RESOLUTION_MISSING
+    assert result.category == "WSL_SETUP_REQUIRED"
+    assert result.reason == "wsl-not-found"
+    assert result.stage == "platform-check"
+
+
+def test_wsl_executable_ignores_malicious_path_entries():
+    planted = r"C:\Users\attacker\bin\wsl.exe"
+    result = resolve_wsl_executable(
+        system_root=r"C:\Windows",
+        is_64bit_os=True,
+        is_64bit_process=True,
+        path_exists={planted: True, r"C:\Windows\System32\wsl.exe": False},
+        path_entries=(r"C:\Users\attacker\bin", planted),
+    )
+    assert result.path is None
+    assert result.resolution == WSL_RESOLUTION_MISSING
+    assert result.category == "WSL_SETUP_REQUIRED"
+    assert result.reason == "wsl-not-found"
+
+
+def test_wsl_executable_t050_inno_setup_32bit_context_with_existing_ubuntu():
+    """T050: WSL2 Ubuntu is present, but bootstrap runs under Inno's 32-bit process.
+
+    Wow64 redirection makes System32\\wsl.exe appear missing while Sysnative works.
+    Discovery must select Sysnative rather than emitting a false wsl-not-found.
+    """
+    system_root = r"C:\WINDOWS"
+    sysnative = r"C:\WINDOWS\Sysnative\wsl.exe"
+    result = resolve_wsl_executable(
+        system_root=system_root,
+        is_64bit_os=True,
+        is_64bit_process=False,
+        path_exists={
+            sysnative: True,
+            # Redirected System32 check fails even though real WSL exists.
+            r"C:\WINDOWS\System32\wsl.exe": False,
+            r"C:\WINDOWS\SysWOW64\wsl.exe": False,
+            r"C:\evil\wsl.exe": True,
+        },
+        path_entries=(r"C:\evil",),
+    )
+    assert result.path == sysnative
+    assert result.resolution == WSL_RESOLUTION_SYSNATIVE
+    assert result.category is None
+    assert result.reason is None
+
+
+def test_wsl_executable_32bit_windows_uses_native_system32():
+    native = r"C:\Windows\System32\wsl.exe"
+    result = resolve_wsl_executable(
+        system_root=r"C:\Windows",
+        is_64bit_os=False,
+        is_64bit_process=False,
+        path_exists={native: True, r"C:\Windows\Sysnative\wsl.exe": False},
+    )
+    assert result.path == native
+    assert result.resolution == WSL_RESOLUTION_NATIVE_SYSTEM32
+
+
+def test_wsl_executable_wow64_does_not_trust_redirected_system32():
+    redirected = r"C:\Windows\System32\wsl.exe"
+    result = resolve_wsl_executable(
+        system_root=r"C:\Windows",
+        is_64bit_os=True,
+        is_64bit_process=False,
+        # A planted SysWOW64 binary must not be accepted via redirected System32.
+        path_exists={redirected: True, r"C:\Windows\Sysnative\wsl.exe": False},
+    )
+    assert result.path is None
+    assert result.resolution == WSL_RESOLUTION_MISSING
+    assert result.category == "WSL_SETUP_REQUIRED"
+    assert result.reason == "wsl-not-found"
+
+
+def test_preflight_accepts_authoritative_passwd_home_with_inconsistent_inherited_home():
+    """Reproduces exact clean-workstation condition:
+    username = brent
+    uid = 1000
+    passwd home = /home/brent
+    inherited HOME = /home/brentn
+    Expected behavior: accepted using /home/brent and proceeds to runtime prerequisite
+    assessment rather than returning DISTRIBUTION_SETUP_REQUIRED.
+    """
+    context = WindowsContext(
+        wsl_available=True,
+        distributions=("Ubuntu",),
+        requested_distribution="Ubuntu",
+        windows_user="brent",
+        profile_path=r"C:\Users\brent",
+        desktop_path=r"C:\Users\brent\Desktop",
+        linux_user="brent",
+        linux_uid=1000,
+        systemd_available=True,
+        permission_available=True,
+        confirmed=True,
+        source_verified=True,
+        passwd_home="/home/brent",
+        inherited_home="/home/brentn",
+        home_exists=True,
+        account_valid=True,
+        record_valid=True,
+    )
+    assert assess(context) == "READY"
+
+    # Fails safely with DISTRIBUTION_SETUP_REQUIRED when account record is invalid, missing, or home unusable
+    assert assess(WindowsContext(**{**context.__dict__, "account_valid": False})) == "DISTRIBUTION_SETUP_REQUIRED"
+    assert assess(WindowsContext(**{**context.__dict__, "record_valid": False})) == "DISTRIBUTION_SETUP_REQUIRED"
+    assert assess(WindowsContext(**{**context.__dict__, "home_exists": False})) == "DISTRIBUTION_SETUP_REQUIRED"
+    assert assess(WindowsContext(**{**context.__dict__, "passwd_home": "/root"})) == "DISTRIBUTION_SETUP_REQUIRED"
+    assert assess(WindowsContext(**{**context.__dict__, "passwd_home": ""})) == "DISTRIBUTION_SETUP_REQUIRED"
+    assert assess(WindowsContext(**{**context.__dict__, "passwd_home": "relative/path"})) == "DISTRIBUTION_SETUP_REQUIRED"
+    assert assess(WindowsContext(**{**context.__dict__, "passwd_home": "/home/brent/../other"})) == "DISTRIBUTION_SETUP_REQUIRED"
+
+
+def test_parse_and_validate_account_tolerates_inconsistent_inherited_home():
+    home = parse_and_validate_account(
+        username="brent",
+        uid=1000,
+        passwd_record="brent:x:1000:1000::/home/brent:/bin/bash",
+        inherited_home="/home/brentn",
+        home_exists=True,
+    )
+    assert home == "/home/brent"
+
+    # Does not assume /home/<username>
+    custom_home = parse_and_validate_account(
+        username="custom_operator",
+        uid=1005,
+        passwd_record="custom_operator:x:1005:1005::/var/data/custom_operator:/bin/bash",
+        inherited_home="/tmp/bogus",
+        home_exists=True,
+    )
+    assert custom_home == "/var/data/custom_operator"
+
+    # Mismatched UID (ambiguous relationship) fails safely
+    with pytest.raises(ValueError, match="ambiguous-account-relationship"):
+        parse_and_validate_account(
+            username="brent",
+            uid=1000,
+            passwd_record="brent:x:1001:1000::/home/brent:/bin/bash",
+            home_exists=True,
+        )
+
+    # Malformed record fails safely
+    with pytest.raises(ValueError, match="malformed-passwd-record"):
+        parse_and_validate_account(
+            username="brent",
+            uid=1000,
+            passwd_record="brent:x:1000",
+            home_exists=True,
+        )
+
+    # Unusable home fails safely
+    with pytest.raises(ValueError, match="home-directory-unusable"):
+        parse_and_validate_account(
+            username="brent",
+            uid=1000,
+            passwd_record="brent:x:1000:1000::/home/brent:/bin/bash",
+            home_exists=False,
+        )
+
+
+def test_discover_linux_identity_reproduces_clean_workstation_evidence(monkeypatch, tmp_path):
+    real_home = tmp_path / "home" / "brent"
+    real_home.mkdir(parents=True)
+    monkeypatch.setenv("HOME", "/home/brentn")
+
+    class FakeRun:
+        def __init__(self, stdout, returncode=0):
+            self.stdout = stdout
+            self.returncode = returncode
+
+    def fake_subprocess_run(cmd, *args, **kwargs):
+        if cmd == ["id", "-un"]:
+            return FakeRun("brent\n")
+        if cmd == ["id", "-u"]:
+            return FakeRun("1000\n")
+        if cmd == ["getent", "passwd", "brent"] or cmd == ["getent", "passwd", "1000"]:
+            return FakeRun(f"brent:x:1000:1000::{real_home}:/bin/bash\n")
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    identity = discover_linux_identity("Ubuntu", runner=fake_subprocess_run)
+    assert identity.user == "brent"
+    assert identity.uid == 1000
+    assert identity.home == real_home
+    assert identity.distribution == "Ubuntu"
+    assert install_location(identity) == real_home / ".local/share/sesami-noc-operations/noc-web"

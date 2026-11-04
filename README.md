@@ -1,12 +1,20 @@
 # SESAMI NOC Operations
 
 SESAMI NOC Operations is a Windows-accessible NOC operations application backed
-by a managed WSL/Ubuntu runtime. Operators use a branded Windows shortcut and
-browser UI while noc-web runs locally in WSL.
+by a managed WSL runtime. Operators use a branded Windows shortcut and browser
+UI while noc-web runs locally in WSL.
 
-The application, Windows launcher, installer build, automated tests, and
-Windows regression tests are validated. **T050 genuine clean-workstation
-acceptance remains pending.**
+Two installation frontends share the same trusted-release and Feature 011
+runtime engine:
+
+1. **WSL-native bootstrap** (`scripts/install-sesami.sh`) — supported baseline
+   and unsigned-install fallback when a Windows EXE is blocked.
+2. **`SESAMI-NOC-Operations-Setup.exe`** — existing Windows wizard frontend.
+   May require Authenticode signing or application-control approval on systems
+   enforcing Smart App Control.
+
+Automated tests and packaging regressions are validated. **Genuine
+clean-workstation acceptance for both frontends remains pending.**
 
 ## Screenshots
 
@@ -38,49 +46,94 @@ handover:
 ## How It Works
 
 ```text
-Windows
+Windows Desktop
   |
 SESAMI NOC Operations shortcut
   |
-hidden Windows launcher
+Microsoft wsl.exe
   |
-WSL / Ubuntu
+SESAMI Linux launcher (~/.local/bin/sesami-noc-launch)
   |
 noc-web.service
   |
-localhost health check
+/api/health
   |
 default Windows browser
   |
-SESAMI NOC Operations
+http://127.0.0.1:8000
 ```
 
+The Windows EXE path may still install Feature 011's hidden `wscript` launcher
+for compatibility. The WSL-native path creates a Desktop shortcut that targets
+Microsoft's installed `wsl.exe` only — no custom unsigned Windows executable is
+required for daily launch.
+
 NOC Web listens only on `127.0.0.1:8000`. Normal operators do not need to keep
-a WSL terminal open.
+a WSL terminal open after installation.
 
 ## Architecture
 
 **Windows**
 
-- `SESAMI-NOC-Operations-Setup.exe`
-- Branded SESAMI NOC Operations shortcut
-- Hidden Windows launcher
+- Optional `SESAMI-NOC-Operations-Setup.exe` wizard frontend
+- Branded SESAMI NOC Operations Desktop shortcut
+- Microsoft `wsl.exe` (WSL-native daily launch path)
 - Default browser
 
-**WSL / Ubuntu**
+**WSL**
 
-- noc-web
+- `scripts/install-sesami.sh` bootstrap frontend
+- noc-web (`v1.0.3`)
 - Python `.venv`
 - `noc-web.service` systemd user service
-- noc-tools
-- Operational CLI integrations
+- `~/.local/bin/sesami-noc-launch`
+- Optional noc-tools (`v1.0.1`)
+- Operational CLI integrations (Atlas/Copilot/M365/Datadog remain optional)
 
-Feature 011 owns the managed runtime, health checks, launcher, service,
-`runtime.json`, shortcut, and controlled environment. Feature 012 owns fresh
-installation, trusted acquisition, provisioning, repair/rerun behavior,
-Windows packaging, and the Feature 011 handoff.
+Feature 011 owns the managed runtime, health checks, service, `runtime.json`,
+and controlled environment. Feature 012 owns fresh installation frontends,
+trusted acquisition, provisioning, repair/rerun behavior, Windows packaging,
+and the Feature 011 handoff.
 
 ## Fresh Installation
+
+### 1. WSL-native bootstrap (supported baseline / unsigned fallback)
+
+Do **not** use `curl | bash`. Download the pinned release assets explicitly,
+verify integrity, then run the installer from the verified tree:
+
+```bash
+# From Windows, open your WSL2 distribution terminal as a non-root operator.
+gh release download v1.0.3 -R brentsens/noc-web \
+  -p noc-web-v1.0.3.tar.gz -p noc-web-v1.0.3.sha256
+
+# Optional helper shipped in a trusted checkout or prior verified tree:
+# ./scripts/bootstrap/verify_bootstrap_bundle.sh \
+#   --archive noc-web-v1.0.3.tar.gz \
+#   --checksum noc-web-v1.0.3.sha256
+
+# Or verify manually (pinned digest from packaging/windows/bootstrap-manifest.json):
+sha256sum -c noc-web-v1.0.3.sha256
+gh attestation verify noc-web-v1.0.3.tar.gz \
+  --repo brentsens/noc-web \
+  --signer-workflow brentsens/noc-web/.github/workflows/release.yml \
+  --source-ref refs/tags/v1.0.3
+
+tar -xzf noc-web-v1.0.3.tar.gz
+cd noc-web-*   # extracted verified package root
+
+./scripts/install-sesami.sh \
+  --confirm-prerequisites \
+  --github-cli-approved \
+  --confirm-replacement \
+  --confirm-noc-tools
+```
+
+That path reuses Feature 012 trusted acquisition and Feature 011 runtime
+ownership, installs `~/.local/bin/sesami-noc-launch`, and creates the Desktop
+shortcut targeting Windows-owned `wsl.exe`.
+
+### 2. Windows EXE wizard
 
 ```text
 SESAMI-NOC-Operations-Setup.exe
@@ -91,18 +144,20 @@ verified trusted releases
   |
 noc-web v1.0.3 + noc-tools v1.0.1
   |
-provisioning
-  |
 Feature 011 managed runtime
   |
 SESAMI NOC Operations shortcut
-  |
-browser
 ```
 
-Run the installer from Windows. Operators should not need to manually clone
-noc-web or noc-tools. Consequential WSL and prerequisite changes remain
-operator-controlled.
+Run the EXE from Windows when application-control policy permits it. On
+managed or Smart App Control systems, the unsigned EXE may be blocked until
+Authenticode signing or an allowlisting exception is approved. Use the
+WSL-native path above as the supported fallback.
+
+Operators should not need to manually clone noc-web or noc-tools. Consequential
+WSL and prerequisite changes remain operator-controlled. Homebrew remains
+optional and is never installed automatically; `jq` remains optional and does
+not block core noc-web installation.
 
 ## Trusted Distribution
 
@@ -173,6 +228,9 @@ runtime configurations, and tools.
 
 ## Building the Windows Installer
 
+The Inno Setup source and build scripts remain supported. Keep them for the
+Windows wizard frontend even when the WSL-native path is preferred.
+
 Prerequisites:
 
 - Windows PowerShell 5.1
@@ -193,7 +251,9 @@ dist\windows\SESAMI-NOC-Operations-Setup.exe
 
 ICO generation was validated on Windows, and Inno Setup 6.7.3 compilation was
 validated. The current EXE is **NotSigned** by Authenticode. Do not treat the
-installer as digitally signed.
+installer as digitally signed. Environments that enforce Smart App Control or
+similar application control may require Authenticode signing or an explicit
+allowlisting exception before the EXE can run.
 
 ## Development
 
@@ -208,16 +268,18 @@ python -m pytest -q
 
 Current validated state:
 
-- pytest: **526 passed**
+- pytest: **569 passed**
 - `git diff --check`: passed
-- Windows Pester 6.2.0: **9 passed, 0 failed, 0 skipped**
-- Windows ICO generation: passed
-- Inno Setup 6.7.3 build: passed
-- Installer artifact generated successfully
-- **T050 clean-workstation acceptance: PENDING**
+- focused WSL-native / bootstrap / launcher regressions: passed
+- Windows Pester 6.2.0 suite: available via
+  `packaging/windows/run-pester-regression.ps1` (includes WSL-native shortcut
+  contract checks; re-run on Windows after pulling these changes)
+- Windows ICO generation / Inno Setup build: previously validated; EXE source
+  retained
+- **T050 clean-workstation acceptance (EXE and WSL-native): PENDING**
 
-T050 must execute on a genuinely clean supported Windows/WSL workstation. Do
-not claim fresh-machine acceptance until that result is recorded.
+Do not claim fresh-machine acceptance for either frontend until that result is
+recorded on a genuine clean supported Windows/WSL workstation.
 
 ## Troubleshooting
 
@@ -234,7 +296,15 @@ command -v noc-inv
 noc-inv --contract-version
 ```
 
-The hidden Windows launcher is stored under:
+WSL-native daily launch uses:
+
+```text
+Desktop\SESAMI NOC Operations.lnk
+  -> %SystemRoot%\System32\wsl.exe
+  -> --distribution <WSL_DISTRO_NAME> --exec ~/.local/bin/sesami-noc-launch
+```
+
+The EXE/Feature 011 path may still place a compatibility launcher under:
 
 ```text
 %LOCALAPPDATA%\SESAMI\NOC Operations\launch-hidden.vbs

@@ -44,7 +44,7 @@ Describe 'Feature 012 Windows bootstrap package contracts' {
         $installSource | Should -Not -Match '(?im)\b(apt|sudo)\b.*(atlas|copilot|m365|datadog|noc-tools)'
         $issSource | Should -Match 'check_runtime_prerequisites\.sh'
         $issSource | Should -Match 'ConfirmPrerequisites'
-        $issSource | Should -Match 'ConfirmGitHubCli'
+        $issSource | Should -Not -Match 'ConfirmGitHubCli'
     }
 
     It 'uses capability detection and keeps apt provisioning Ubuntu-only' {
@@ -56,12 +56,26 @@ Describe 'Feature 012 Windows bootstrap package contracts' {
     }
 
     It 'uses a confirmed official GitHub CLI prerequisite action' {
-        $installSource | Should -Match '\[switch\]\$ConfirmGitHubCli'
+        $installSource | Should -Match '\[switch\]\$GitHubCliApproved'
+        $installSource | Should -Match '\[string\]\$PrerequisiteResultPath'
         $installSource | Should -Match 'GH_ATTESTATION='
         $installSource | Should -Match 'APPROVED_GITHUB_CLI_SOURCE=https://cli\.github\.com/packages'
-        $installSource | Should -Match 'Confirm-GitHubCliProvisioning'
+        $installSource | Should -Match "Write-PrerequisiteResult -Action 'GITHUB_CLI'"
         $issSource | Should -Match 'provision_github_cli\.sh'
-        $issSource | Should -Match 'ConfirmGitHubCli'
+        $issSource | Should -Match 'LoadStringFromFile'
+        $issSource | Should -Match 'GitHub CLI attestation support is required before trusted release acquisition'
+        $issSource | Should -Match -- '-GitHubCliApproved'
+        $installSource | Should -Match 'GH_ATTESTATION_EXIT='
+        $installSource | Should -Match 'GhAttestationExit'
+    }
+
+    It 'fails visibly when bootstrap returns a nonzero exit code' {
+        $issSource | Should -Not -Match '(?m)^\[Run\]$'
+        $issSource | Should -Match 'procedure CurStepChanged'
+        $issSource | Should -Match 'ewWaitUntilTerminated'
+        $issSource | Should -Match 'if ResultCode = 0 then'
+        $issSource | Should -Match 'FailBootstrap'
+        $issSource | Should -Match 'No application runtime or shortcut was created'
     }
 
     It 'uses supported Inno Setup wizard APIs for the WSL distribution choice' {
@@ -120,6 +134,47 @@ Describe 'Feature 012 Windows bootstrap package contracts' {
         $shortcutSource | Should -Match 'Assert-ShortcutDirectoryPolicy'
         $shortcutSource | Should -Not -Match '(?im)Start-Process.*python'
         $installSource | Should -Not -Match '(?im)systemctl\s+--user\s+(start|enable)'
+    }
+
+    It 'discovers Linux identity from authoritative passwd record and validates home exists' {
+        $installSource | Should -Match 'id -un'
+        $installSource | Should -Match 'id -u'
+        $installSource | Should -Match 'getent passwd'
+        $installSource | Should -Match 'test -d'
+        $installSource | Should -Match '\$Script:WslHome'
+        $installSource | Should -Match 'STAGE='
+        $installSource | Should -Match 'CATEGORY='
+    }
+
+    It 'resolves wsl.exe from Windows-owned System32 or Sysnative without PATH' {
+        $installSource | Should -Match 'function Resolve-WslExecutable'
+        $installSource | Should -Match '\[Environment\]::Is64BitOperatingSystem'
+        $installSource | Should -Match '\[Environment\]::Is64BitProcess'
+        $installSource | Should -Match 'Sysnative\\wsl\.exe'
+        $installSource | Should -Match 'System32\\wsl\.exe'
+        $installSource | Should -Match 'WSL_RESOLUTION='
+        $installSource | Should -Match 'native-system32'
+        $installSource | Should -Match "Resolution = 'sysnative'"
+        $installSource | Should -Match "Resolution = 'missing'"
+        $installSource | Should -Match 'wsl-not-found'
+        $installSource | Should -Not -Match 'Get-Command\s+wsl'
+        $installSource | Should -Not -Match '(?im)\$env:Path.*wsl'
+        $installSource | Should -Not -Match '(?im)where\.exe.*wsl'
+    }
+
+    It 'defines a WSL-native shortcut contract targeting Windows-owned wsl.exe' {
+        $wslShortcut = Get-Content -LiteralPath (Get-StagedResourcePath 'scripts/bootstrap/install_wsl_shortcut.ps1') -Raw
+        $wslInstall = Get-Content -LiteralPath (Get-StagedResourcePath 'scripts/install-sesami.sh') -Raw
+        $wslShortcut | Should -Match 'System32\\wsl\.exe'
+        $wslShortcut | Should -Match 'Sysnative\\wsl\.exe'
+        $wslShortcut | Should -Match 'SESAMI NOC Operations\.lnk'
+        $wslShortcut | Should -Match '--distribution '
+        $wslShortcut | Should -Match '--exec '
+        $wslShortcut | Should -Match 'SHORTCUT_TARGET=wsl\.exe'
+        $wslShortcut | Should -Not -Match 'wscript\.exe'
+        $wslShortcut | Should -Not -Match 'SESAMI-NOC-Operations-Setup\.exe'
+        $wslInstall | Should -Match 'scripts\.bootstrap\.wsl_native'
+        $wslInstall | Should -Not -Match 'curl\s*\|\s*bash'
     }
 }
 

@@ -2,9 +2,10 @@
 param(
     [Parameter(Mandatory = $true)][string]$BootstrapManifest,
     [Parameter(Mandatory = $true)][string]$Distribution,
+    [string]$PrerequisiteResultPath,
     [switch]$ConfirmReplacement,
     [switch]$ConfirmPrerequisites,
-    [switch]$ConfirmGitHubCli,
+    [switch]$GitHubCliApproved,
     [switch]$ConfirmNocTools
 )
 
@@ -17,12 +18,120 @@ $SafeCategories = @(
 )
 $ControlledLinuxPath = '/usr/local/bin:/usr/bin:/bin'
 $WslTimeoutMilliseconds = 30000
-$WslExecutable = Join-Path $env:SystemRoot 'System32\wsl.exe'
+$Script:WslExecutable = $null
+$Script:WslResolution = 'missing'
+$Script:WslHome = $null
 
-function Write-BootstrapResult([string]$Category) {
+# Subprocess execution suppresses raw error streams (2>$null equivalent via stderr redirect)
+# Delegates runtime ownership to Feature 011 installer scripts.install_runtime via acquire_release
+
+function Resolve-WslExecutable {
+    # Windows-owned locations only. Never consult PATH or Get-Command.
+    # 32-bit processes on 64-bit Windows must use Sysnative to bypass Wow64
+    # redirection of System32 (the Inno Setup / T050 failure mode).
+    $systemRoot = $env:SystemRoot
+    if ([string]::IsNullOrWhiteSpace($systemRoot)) {
+        return [pscustomobject]@{
+            Path = $null
+            Resolution = 'missing'
+        }
+    }
+
+    $native = Join-Path $systemRoot 'System32\wsl.exe'
+    $sysnative = Join-Path $systemRoot 'Sysnative\wsl.exe'
+    $is64BitOs = [Environment]::Is64BitOperatingSystem
+    $is64BitProcess = [Environment]::Is64BitProcess
+
+    if ($is64BitProcess) {
+        if (Test-Path -LiteralPath $native -PathType Leaf) {
+            return [pscustomobject]@{
+                Path = $native
+                Resolution = 'native-system32'
+            }
+        }
+        return [pscustomobject]@{
+            Path = $null
+            Resolution = 'missing'
+        }
+    }
+
+    if ($is64BitOs) {
+        if (Test-Path -LiteralPath $sysnative -PathType Leaf) {
+            return [pscustomobject]@{
+                Path = $sysnative
+                Resolution = 'sysnative'
+            }
+        }
+        return [pscustomobject]@{
+            Path = $null
+            Resolution = 'missing'
+        }
+    }
+
+    if (Test-Path -LiteralPath $native -PathType Leaf) {
+        return [pscustomobject]@{
+            Path = $native
+            Resolution = 'native-system32'
+        }
+    }
+    return [pscustomobject]@{
+        Path = $null
+        Resolution = 'missing'
+    }
+}
+
+function Write-BootstrapResult(
+    [string]$Category,
+    [string]$Stage = '',
+    [string]$Reason = ''
+) {
     if ($SafeCategories -notcontains $Category) { $Category = 'RUNTIME_SETUP_REQUIRED' }
+    if (-not [string]::IsNullOrWhiteSpace($PrerequisiteResultPath)) {
+        try {
+            $parent = Split-Path -Parent $PrerequisiteResultPath
+            if ([System.IO.Path]::IsPathRooted($PrerequisiteResultPath) -and
+                (Test-Path -LiteralPath $parent -PathType Container)) {
+                $existingLines = if (Test-Path -LiteralPath $PrerequisiteResultPath -PathType Leaf) {
+                    @(Get-Content -LiteralPath $PrerequisiteResultPath -ErrorAction SilentlyContinue)
+                } else { @() }
+                $hasAction = @($existingLines | Where-Object { $_ -match '^ACTION=GITHUB_CLI' }).Count -gt 0
+                if (-not $hasAction) {
+                    $lines = @("CATEGORY=$Category")
+                    if ($Stage) { $lines += "STAGE=$Stage" }
+                    if ($Reason) { $lines += "REASON=$Reason" }
+                    if ($Script:WslResolution) { $lines += "WSL_RESOLUTION=$($Script:WslResolution)" }
+                    [System.IO.File]::WriteAllLines(
+                        $PrerequisiteResultPath,
+                        [string[]]$lines,
+                        [System.Text.UTF8Encoding]::new($false)
+                    )
+                }
+            }
+        } catch { }
+    }
     [Console]::Out.WriteLine($Category)
     exit $(if ($Category -eq 'BOOTSTRAP_READY') { 0 } else { 1 })
+}
+
+function Write-PrerequisiteResult(
+    [ValidateSet('GITHUB_CLI', 'GITHUB_CLI_FAILED')][string]$Action,
+    [string]$Command = '',
+    [string]$Reason = ''
+) {
+    if ([string]::IsNullOrWhiteSpace($PrerequisiteResultPath)) { return }
+    $parent = Split-Path -Parent $PrerequisiteResultPath
+    if (-not [System.IO.Path]::IsPathRooted($PrerequisiteResultPath) -or
+        -not (Test-Path -LiteralPath $parent -PathType Container)) {
+        throw 'invalid-prerequisite-result-path'
+    }
+    $lines = @("ACTION=$Action")
+    if ($Command) { $lines += "COMMAND=$Command" }
+    if ($Reason) { $lines += "REASON=$Reason" }
+    [System.IO.File]::WriteAllLines(
+        $PrerequisiteResultPath,
+        [string[]]$lines,
+        [System.Text.UTF8Encoding]::new($false)
+    )
 }
 
 function Test-SafeValue([string]$Value) {
@@ -36,18 +145,22 @@ function Invoke-WslSafe([string]$LinuxCommand, [switch]$Capture) {
         $LinuxCommand.Contains('"')) {
         throw 'invalid-input'
     }
-    if (-not (Test-Path -LiteralPath $WslExecutable -PathType Leaf)) {
+    if ([string]::IsNullOrWhiteSpace($Script:WslExecutable) -or
+        -not (Test-Path -LiteralPath $Script:WslExecutable -PathType Leaf)) {
         throw 'wsl-not-available'
     }
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $WslExecutable
+    $startInfo.FileName = $Script:WslExecutable
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
+    $envArgs = @("PATH=$ControlledLinuxPath")
+    if ($Script:WslHome) {
+        $envArgs += "HOME=$Script:WslHome"
+    }
     $arguments = @(
-            '--distribution', $Distribution, '--exec', '/usr/bin/env', '-i',
-            "PATH=$ControlledLinuxPath", '/bin/sh', '-lc', $LinuxCommand
-        )
+            '--distribution', $Distribution, '--cd', '/', '--exec', '/usr/bin/env', '-i'
+        ) + $envArgs + @('/bin/sh', '-lc', $LinuxCommand)
     if ($null -ne $startInfo.PSObject.Properties['ArgumentList']) {
         foreach ($argument in $arguments) {
             [void]$startInfo.ArgumentList.Add($argument)
@@ -125,12 +238,52 @@ function Get-WindowsBootstrapContext {
 function Get-WslIdentity {
     $linuxUser = Get-SafeWslValue 'id -un' '^[a-z_][a-z0-9_-]{0,63}$'
     $linuxUid = Get-SafeWslValue 'id -u' '^[1-9][0-9]*$'
-    $linuxHome = Get-SafeWslValue 'getent passwd $(id -u) | cut -d: -f6' '^/[A-Za-z0-9._/-]{1,240}$'
     if (-not (Test-SafeValue $linuxUser) -or $linuxUser -eq 'root' -or
-        $linuxUid -notmatch '^[1-9][0-9]*$' -or -not $linuxHome.StartsWith('/')) {
+        $linuxUid -notmatch '^[1-9][0-9]*$') {
         throw 'invalid-linux-identity'
     }
-    [pscustomobject]@{ LinuxUser = $linuxUser; LinuxUid = $linuxUid; LinuxHome = $linuxHome }
+
+    $passwdLines = @(Invoke-WslSafe "getent passwd $(ConvertTo-PosixShellLiteral $linuxUser)" -Capture)
+    if ($passwdLines.Count -ne 1) {
+        throw 'invalid-linux-identity'
+    }
+    $parts = $passwdLines[0] -split ':'
+    if ($parts.Count -ne 7) {
+        throw 'invalid-linux-identity'
+    }
+    $recUser = $parts[0]
+    $recUid = $parts[2]
+    $recHome = $parts[5]
+    if ($recUser -ne $linuxUser -or $recUid -ne $linuxUid) {
+        throw 'invalid-linux-identity'
+    }
+
+    $uidLines = @(Invoke-WslSafe "getent passwd $linuxUid" -Capture)
+    if ($uidLines.Count -ne 1) {
+        throw 'invalid-linux-identity'
+    }
+    $uidParts = $uidLines[0] -split ':'
+    if ($uidParts.Count -ne 7 -or $uidParts[0] -ne $linuxUser -or $uidParts[2] -ne $linuxUid -or $uidParts[5] -ne $recHome) {
+        throw 'invalid-linux-identity'
+    }
+
+    if (-not (Test-SafeValue $recHome) -or -not $recHome.StartsWith('/') -or
+        $recHome.Contains('..') -or $recHome -notmatch '^/[A-Za-z0-9._/-]{1,240}$' -or
+        $recHome -eq '/' -or $recHome -eq '/root') {
+        throw 'invalid-linux-identity'
+    }
+
+    try {
+        Invoke-WslSafe "test -d $(ConvertTo-PosixShellLiteral $recHome)" | Out-Null
+    } catch {
+        throw 'invalid-linux-identity'
+    }
+
+    return [pscustomobject]@{
+        LinuxUser = $linuxUser
+        LinuxUid = $linuxUid
+        LinuxHome = $recHome
+    }
 }
 
 function Get-RuntimePrerequisiteAssessment(
@@ -144,6 +297,7 @@ function Get-RuntimePrerequisiteAssessment(
     ) -Capture)
     $family = $null
     $ghAttestation = $null
+    $ghAttestationExit = $null
     $packages = @()
     $capabilities = @()
     $ready = $false
@@ -152,6 +306,8 @@ function Get-RuntimePrerequisiteAssessment(
             $family = $Matches[1]
         } elseif ($line -match '^GH_ATTESTATION=(ready|missing|unsupported)$' -and $null -eq $ghAttestation) {
             $ghAttestation = $Matches[1]
+        } elseif ($line -match '^GH_ATTESTATION_EXIT=([0-9]{1,3})$' -and $null -eq $ghAttestationExit) {
+            $ghAttestationExit = [int]$Matches[1]
         } elseif ($line -match '^MISSING_UBUNTU_PACKAGES=([a-z0-9-]+(?: [a-z0-9-]+)*)$' -and $packages.Count -eq 0) {
             $packages = @($Matches[1] -split ' ')
         } elseif ($line -match '^MISSING_CAPABILITIES=([a-z0-9.+-]+(?: [a-z0-9.+-]+)*)$' -and $capabilities.Count -eq 0) {
@@ -162,13 +318,16 @@ function Get-RuntimePrerequisiteAssessment(
             throw 'invalid-prerequisite-result'
         }
     }
-    if ($null -eq $family -or $null -eq $ghAttestation -or
-        (($packages.Count -gt 0 -or $capabilities.Count -gt 0) -and $ready)) {
+    if ($null -eq $family -or $null -eq $ghAttestation -or $null -eq $ghAttestationExit -or
+        (($packages.Count -gt 0 -or $capabilities.Count -gt 0) -and $ready) -or
+        (($ghAttestation -eq 'ready') -and $ghAttestationExit -ne 0) -or
+        (($ghAttestation -ne 'ready') -and $ghAttestationExit -eq 0)) {
         throw 'invalid-prerequisite-result'
     }
     return [pscustomobject]@{
         DistributionFamily = $family
         GhAttestation = $ghAttestation
+        GhAttestationExit = $ghAttestationExit
         Packages = $packages
         Capabilities = $capabilities
         Ready = $ready
@@ -188,48 +347,46 @@ function Confirm-UbuntuPrerequisiteInstallation([string]$InstallCommand) {
     }
 }
 
-function Confirm-GitHubCliProvisioning([string]$InstallCommand) {
-    if (-not $ConfirmGitHubCli) { return $false }
-    try {
-        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
-        $message = "The following official GitHub CLI action will run in WSL:`n`n" +
-            "$InstallCommand`n`nIt configures https://cli.github.com/packages, then runs apt-get update and apt-get install --yes gh."
-        return [System.Windows.Forms.MessageBox]::Show(
-            $message, 'SESAMI NOC Operations', 'YesNo', 'Warning'
-        ) -eq 'Yes'
-    } catch {
-        return $false
-    }
-}
-
 try {
-    if (-not (Test-Path -LiteralPath $WslExecutable -PathType Leaf)) {
-        Write-BootstrapResult 'WSL_SETUP_REQUIRED'
+    $wslDiscovery = Resolve-WslExecutable
+    $Script:WslResolution = $wslDiscovery.Resolution
+    $Script:WslExecutable = $wslDiscovery.Path
+    if ([string]::IsNullOrWhiteSpace($Script:WslExecutable) -or
+        -not (Test-Path -LiteralPath $Script:WslExecutable -PathType Leaf)) {
+        Write-BootstrapResult 'WSL_SETUP_REQUIRED' 'platform-check' 'wsl-not-found'
     }
-    if (-not (Test-SafeValue $Distribution)) { Write-BootstrapResult 'DISTRIBUTION_SETUP_REQUIRED' }
+    if (-not (Test-SafeValue $Distribution)) {
+        Write-BootstrapResult 'DISTRIBUTION_SETUP_REQUIRED' 'distribution-validation' 'unsafe-distribution-name'
+    }
     try {
         Invoke-WslSafe 'true' | Out-Null
     } catch {
-        Write-BootstrapResult 'DISTRIBUTION_SETUP_REQUIRED'
+        Write-BootstrapResult 'DISTRIBUTION_SETUP_REQUIRED' 'distribution-start' 'distribution-unavailable'
     }
     $windowsContext = Get-WindowsBootstrapContext
     if (-not (Test-SafeValue $windowsContext.WindowsUser) -or
         -not (Test-Path -LiteralPath $windowsContext.UserProfile -PathType Container)) {
-        Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED'
+        Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED' 'windows-context' 'invalid-user-profile'
     }
-    $identity = Get-WslIdentity
+    try {
+        $identity = Get-WslIdentity
+    } catch {
+        Write-BootstrapResult 'DISTRIBUTION_SETUP_REQUIRED' 'linux-identity' 'account-record-invalid'
+    }
+    $Script:WslHome = $identity.LinuxHome
+
     $packageRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
     $linuxPackageRoot = ConvertTo-SafeWslPath $packageRoot
     try {
         $kernel = Get-SafeWslValue 'uname -r' '^[A-Za-z0-9._+-]{1,120}$'
         if ($kernel -notmatch 'microsoft-standard-WSL2') { throw 'wsl1' }
     } catch {
-        Write-BootstrapResult 'WSL_SETUP_REQUIRED'
+        Write-BootstrapResult 'WSL_SETUP_REQUIRED' 'kernel-check' 'wsl1-unsupported'
     }
     try {
         Invoke-WslSafe 'systemctl --user show-environment >/dev/null' | Out-Null
     } catch {
-        Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED'
+        Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED' 'systemd-user' 'systemd-user-inactive'
     }
 
     $prerequisites = Get-RuntimePrerequisiteAssessment $linuxPackageRoot
@@ -238,22 +395,22 @@ try {
         $packages = $prerequisites.Packages
         $approvedPackages = @('python3', 'python3-venv', 'ca-certificates')
         if ($packages.Count -eq 0 -or @($packages | Where-Object { $_ -notin $approvedPackages }).Count -ne 0) {
-            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED'
+            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED' 'runtime-packages' 'packages-unapproved'
         }
         $installCommand = 'sudo apt-get update && sudo apt-get install --yes ' + ($packages -join ' ')
         [Console]::Out.WriteLine("APPROVED_UBUNTU_PREREQUISITE_INSTALL=$installCommand")
         if (-not (Confirm-UbuntuPrerequisiteInstallation $installCommand)) {
-            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED'
+            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED' 'runtime-packages' 'operator-declined'
         }
         try {
             Invoke-WslSafe $installCommand | Out-Null
         } catch {
-            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED'
+            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED' 'runtime-packages' 'install-failed'
         }
         try {
             $prerequisites = Get-RuntimePrerequisiteAssessment $linuxPackageRoot
         } catch {
-            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED'
+            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED' 'runtime-packages' 'recheck-failed'
         }
     }
     $nonGitHubCapabilities = @(
@@ -264,35 +421,40 @@ try {
         if ($missingCapabilities) {
             [Console]::Out.WriteLine("MISSING_RUNTIME_CAPABILITIES=$missingCapabilities")
         }
-        Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED'
+        Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED' 'runtime-capabilities' 'missing-capabilities'
     }
     if ($prerequisites.GhAttestation -ne 'ready') {
         if ($prerequisites.DistributionFamily -ne 'ubuntu') {
             [Console]::Out.WriteLine("MISSING_RUNTIME_CAPABILITIES=gh-attestation-$($prerequisites.GhAttestation)")
-            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED'
+            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED' 'gh-attestation' 'unsupported-distro-gh'
         }
         $githubCliScript = "$linuxPackageRoot/scripts/bootstrap/provision_github_cli.sh"
         $githubCliCommand = "sudo /bin/sh $(ConvertTo-PosixShellLiteral $githubCliScript)"
         [Console]::Out.WriteLine("GITHUB_CLI_CAPABILITY=$($prerequisites.GhAttestation)")
         [Console]::Out.WriteLine('APPROVED_GITHUB_CLI_SOURCE=https://cli.github.com/packages')
         [Console]::Out.WriteLine("APPROVED_GITHUB_CLI_COMMAND=$githubCliCommand")
-        if (-not (Confirm-GitHubCliProvisioning $githubCliCommand)) {
-            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED'
+        if (-not $GitHubCliApproved) {
+            Write-PrerequisiteResult -Action 'GITHUB_CLI' -Command $githubCliCommand
+            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED' 'gh-attestation' 'approval-pending'
         }
         try {
             Invoke-WslSafe $githubCliCommand | Out-Null
             $prerequisites = Get-RuntimePrerequisiteAssessment $linuxPackageRoot
         } catch {
-            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED'
+            Write-PrerequisiteResult -Action 'GITHUB_CLI_FAILED' -Reason 'provisioning-failed'
+            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED' 'gh-attestation' 'provisioning-failed'
         }
         if ($prerequisites.GhAttestation -ne 'ready') {
-            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED'
+            Write-PrerequisiteResult -Action 'GITHUB_CLI_FAILED' -Reason 'attestation-unavailable'
+            Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED' 'gh-attestation' 'attestation-unavailable'
         }
     }
     if (-not $prerequisites.Ready) {
-        Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED'
+        Write-BootstrapResult 'RUNTIME_SETUP_REQUIRED' 'prerequisites' 'not-ready'
     }
-    if (-not $ConfirmReplacement) { Write-BootstrapResult 'CONFIRMATION_DECLINED' }
+    if (-not $ConfirmReplacement) {
+        Write-BootstrapResult 'CONFIRMATION_DECLINED' 'release-confirmation' 'operator-declined'
+    }
 
     try {
         $approvedRelease = (Get-Content -LiteralPath $BootstrapManifest -Raw -ErrorAction Stop |
@@ -300,7 +462,7 @@ try {
         if ($approvedRelease -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'invalid-release' }
         [Console]::Out.WriteLine("APPROVED_RELEASE=$approvedRelease")
     } catch {
-        Write-BootstrapResult 'SOURCE_VERIFICATION_FAILED'
+        Write-BootstrapResult 'SOURCE_VERIFICATION_FAILED' 'source-verification' 'invalid-release-tag'
     }
     $linuxManifest = ConvertTo-SafeWslPath $BootstrapManifest
     $linuxRoot = "$($identity.LinuxHome)/.local/share/sesami-noc-operations/noc-web"
@@ -308,31 +470,31 @@ try {
     try {
         Invoke-WslSafe "cd $(ConvertTo-PosixShellLiteral $linuxPackageRoot) && exec python3 -m scripts.bootstrap.acquire_release --manifest $(ConvertTo-PosixShellLiteral $linuxManifest) --install-root $(ConvertTo-PosixShellLiteral $linuxRoot) --record-path $(ConvertTo-PosixShellLiteral $recordPath) --distribution $(ConvertTo-PosixShellLiteral $Distribution)" | Out-Null
     } catch {
-        Write-BootstrapResult 'SOURCE_VERIFICATION_FAILED'
+        Write-BootstrapResult 'SOURCE_VERIFICATION_FAILED' 'release-acquisition' 'download-or-staging-failed'
     }
     if ($ConfirmNocTools) {
         try {
-        $nocToolsPrerequisites = Get-RuntimePrerequisiteAssessment $linuxPackageRoot -IncludeNocTools
-        if (-not $nocToolsPrerequisites.Ready) {
-            $missingCapabilities = @(
-                $nocToolsPrerequisites.Capabilities + $nocToolsPrerequisites.Packages
-            ) -join ' '
-            if ($missingCapabilities) {
-                [Console]::Out.WriteLine("MISSING_OPTIONAL_NOC_TOOLS_CAPABILITIES=$missingCapabilities")
+            $nocToolsPrerequisites = Get-RuntimePrerequisiteAssessment $linuxPackageRoot -IncludeNocTools
+            if (-not $nocToolsPrerequisites.Ready) {
+                $missingCapabilities = @(
+                    $nocToolsPrerequisites.Capabilities + $nocToolsPrerequisites.Packages
+                ) -join ' '
+                if ($missingCapabilities) {
+                    [Console]::Out.WriteLine("MISSING_OPTIONAL_NOC_TOOLS_CAPABILITIES=$missingCapabilities")
+                }
+                Write-BootstrapResult 'DEPENDENCY_SETUP_REQUIRED' 'noc-tools' 'prerequisites-missing'
             }
-            Write-BootstrapResult 'DEPENDENCY_SETUP_REQUIRED'
+            Invoke-WslSafe "cd $(ConvertTo-PosixShellLiteral $linuxRoot) && exec python3 -m scripts.bootstrap.provision_dependencies --manifest $(ConvertTo-PosixShellLiteral $linuxManifest) --install-root $(ConvertTo-PosixShellLiteral $identity.LinuxHome) --noc-bin $(ConvertTo-PosixShellLiteral "$($identity.LinuxHome)/.local/bin") --confirmed" | Out-Null
+            foreach ($command in @('tix', 'noc-start', 'noc-status', 'noc-handover')) {
+                Invoke-WslSafe "command -v '$command' >/dev/null" | Out-Null
+            }
+            $contract = Get-SafeWslValue "noc-inv --contract-version" '^noc-inv-contract=[0-9]+$'
+            if ($contract -ne 'noc-inv-contract=1') { throw 'noc-tools-contract' }
+        } catch {
+            Write-BootstrapResult 'DEPENDENCY_SETUP_REQUIRED' 'noc-tools' 'provisioning-failed'
         }
-        Invoke-WslSafe "cd $(ConvertTo-PosixShellLiteral $linuxRoot) && exec python3 -m scripts.bootstrap.provision_dependencies --manifest $(ConvertTo-PosixShellLiteral $linuxManifest) --install-root $(ConvertTo-PosixShellLiteral $identity.LinuxHome) --noc-bin $(ConvertTo-PosixShellLiteral "$($identity.LinuxHome)/.local/bin") --confirmed" | Out-Null
-        foreach ($command in @('tix', 'noc-start', 'noc-status', 'noc-handover')) {
-            Invoke-WslSafe "command -v '$command' >/dev/null" | Out-Null
-        }
-        $contract = Get-SafeWslValue "noc-inv --contract-version" '^noc-inv-contract=[0-9]+$'
-        if ($contract -ne 'noc-inv-contract=1') { throw 'noc-tools-contract' }
-    } catch {
-        Write-BootstrapResult 'DEPENDENCY_SETUP_REQUIRED'
     }
-    }
-    Write-BootstrapResult 'BOOTSTRAP_READY'
+    Write-BootstrapResult 'BOOTSTRAP_READY' 'completion' 'success'
 } catch {
-    Write-BootstrapResult 'FEATURE011_HANDOFF_FAILED'
+    Write-BootstrapResult 'FEATURE011_HANDOFF_FAILED' 'bootstrap-execution' 'unexpected-failure'
 }

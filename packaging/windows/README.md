@@ -1,5 +1,16 @@
 # Windows bootstrap package
 
+Feature 012 provides two installation frontends over the same trusted-release
+engine:
+
+1. **WSL-native baseline** — `scripts/install-sesami.sh` inside a verified
+   package tree. Supported unsigned-install fallback when Windows application
+   control blocks an EXE.
+2. **Windows EXE wizard** — `SESAMI-NOC-Operations-Setup.exe` built from this
+   directory. Keep the Inno Setup source and build scripts. The EXE may require
+   Authenticode signing or Smart App Control / application-control approval on
+   managed Windows systems.
+
 On Windows, install Inno Setup 6, then run:
 `powershell -ExecutionPolicy Bypass -File .\packaging\windows\generate-icon.ps1`
 and `powershell -ExecutionPolicy Bypass -File .\packaging\windows\build-installer.ps1`.

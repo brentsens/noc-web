@@ -79,11 +79,17 @@ elif command -v python3 >/dev/null 2>&1 &&
 fi
 
 gh_attestation=ready
-if ! command -v gh >/dev/null 2>&1; then
+gh_attestation_exit=0
+if command -v gh >/dev/null 2>&1; then
+    gh attestation verify --help >/dev/null 2>&1
+    gh_attestation_exit=$?
+    if [ "$gh_attestation_exit" -ne 0 ]; then
+        gh_attestation=unsupported
+        add_missing_capability gh-attestation
+    fi
+else
     gh_attestation=missing
-    add_missing_capability gh-attestation
-elif ! gh attestation verify --help >/dev/null 2>&1; then
-    gh_attestation=unsupported
+    gh_attestation_exit=127
     add_missing_capability gh-attestation
 fi
 
@@ -97,6 +103,7 @@ fi
 
 printf 'DISTRO_FAMILY=%s\n' "$distribution_family"
 printf 'GH_ATTESTATION=%s\n' "$gh_attestation"
+printf 'GH_ATTESTATION_EXIT=%s\n' "$gh_attestation_exit"
 if [ -n "$missing_packages" ]; then
     printf 'MISSING_UBUNTU_PACKAGES=%s\n' "$missing_packages"
 fi

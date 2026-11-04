@@ -41,8 +41,23 @@ function Test-ApprovedNocToolsArtifact {
     }
 }
 
-function Get-Feature011Readiness {
-    $command = 'cd "$HOME/.local/share/sesami-noc-operations/noc-web" && exec .venv/bin/python -c ''import json; from pathlib import Path; from backend.services.dependency_readiness import assess_external_capabilities; print(json.dumps(assess_external_capabilities(Path.home() / ".local" / "bin", timeout_seconds=15), separators=(",", ":")))'''
+function Get-WslAuthoritativeHome {
+    try {
+        $uid = (& wsl.exe --distribution $Distribution --exec /bin/sh -c 'id -u' 2>$null).Trim()
+        if ($LASTEXITCODE -ne 0 -or $uid -notmatch '^[1-9][0-9]*$') { return $null }
+        $entry = (& wsl.exe --distribution $Distribution --exec /bin/sh -c "getent passwd $uid" 2>$null).Trim()
+        if ($LASTEXITCODE -ne 0) { return $null }
+        $parts = $entry -split ':'
+        if ($parts.Count -eq 7 -and $parts[5] -and $parts[5].StartsWith('/') -and -not $parts[5].Contains('..') -and $parts[5] -ne '/' -and $parts[5] -ne '/root') {
+            return $parts[5]
+        }
+    } catch { }
+    return $null
+}
+
+function Get-Feature011Readiness([string]$AuthoritativeHome) {
+    $homePath = if ($AuthoritativeHome) { $AuthoritativeHome } else { '$HOME' }
+    $command = "cd '$homePath/.local/share/sesami-noc-operations/noc-web' && exec /usr/bin/env HOME='$homePath' .venv/bin/python -c 'import json; from pathlib import Path; from backend.services.dependency_readiness import assess_external_capabilities; print(json.dumps(assess_external_capabilities(Path(''$homePath'') / ''.local'' / ''bin'', timeout_seconds=15), separators=('','', '':'')))'"
     try {
         $payload = (Invoke-WslSafe $command) -join "`n" | ConvertFrom-Json -ErrorAction Stop
         $result = @{}
@@ -69,12 +84,16 @@ try {
     if ($LASTEXITCODE -ne 0 -or $distributions -notcontains $Distribution) {
         Write-Status 'DISTRIBUTION_SETUP_REQUIRED'
     }
+    $authoritativeHome = Get-WslAuthoritativeHome
+    if (-not $authoritativeHome) {
+        Write-Status 'DISTRIBUTION_SETUP_REQUIRED'
+    }
     & wsl.exe --distribution $Distribution --exec systemctl --user is-active noc-web 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Status 'RUNTIME_SETUP_REQUIRED'
     }
 
-    $readiness = Get-Feature011Readiness
+    $readiness = Get-Feature011Readiness $authoritativeHome
     $hasApprovedNocToolsArtifact = Test-ApprovedNocToolsArtifact
     'BOOTSTRAP_READY'
     foreach ($toolId in $ToolIds) {

@@ -25,7 +25,12 @@ def test_packaging_uses_only_approved_branding_and_allowlisted_inputs():
     assert "MB_YESNO" in project
     assert "-ConfirmReplacement" in project
     assert "-ConfirmNocTools" in project
-    assert 'Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\\scripts\\windows\\bootstrap-install.ps1"" {code:BootstrapParameters}"' in project
+    assert "procedure RunBootstrap" in project
+    assert "AddQuotes(ExpandConstant('{app}\\scripts\\windows\\bootstrap-install.ps1'))" in project
+    assert "BootstrapParameters('')" in project
+    assert "ewWaitUntilTerminated" in project
+    assert "if ResultCode = 0 then" in project
+    assert "FailBootstrap(" in project
     for excluded in (".git", ".venv", "cache", "credential", "token", "session"):
         assert excluded not in project.lower()
 
@@ -80,6 +85,23 @@ def test_bootstrap_install_uses_bounded_controlled_subprocesses_and_safe_categor
     assert 'APPROVED_RELEASE=$approvedRelease' in install
     assert "if (-not $ConfirmReplacement)" in install
     assert "& wsl.exe" not in install
+    assert "function Resolve-WslExecutable" in install
+    assert "[Environment]::Is64BitOperatingSystem" in install
+    assert "[Environment]::Is64BitProcess" in install
+    assert "Sysnative\\wsl.exe" in install
+    assert "System32\\wsl.exe" in install
+    assert "WSL_RESOLUTION=" in install
+    assert "native-system32" in install
+    assert "sysnative" in install
+    assert "Get-Command wsl" not in install
+    assert "where.exe" not in install
+    resolve_block = install.split("function Resolve-WslExecutable", 1)[1].split(
+        "function Write-BootstrapResult", 1
+    )[0]
+    assert "$env:Path" not in resolve_block
+    assert "Get-Command wsl" not in resolve_block
+    assert "Sysnative" in resolve_block
+    assert "Never consult PATH" in resolve_block
 
 
 def test_windows_pester_regression_suite_is_versioned_and_non_destructive():
@@ -120,5 +142,7 @@ def test_windows_pester_regression_suite_is_versioned_and_non_destructive():
     assert "bootstrap-install.ps1" in runner
     assert "bootstrap-status.ps1" in runner
     assert "install-shortcut.ps1" in runner
+    assert "install_wsl_shortcut.ps1" in runner
+    assert "install-sesami.sh" in runner
     assert "bootstrap-manifest.json" in runner
     assert "Copy-Item -Recurse" not in runner

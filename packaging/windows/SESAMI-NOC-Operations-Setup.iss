@@ -19,9 +19,6 @@ Source: "..\..\scripts\bootstrap\provision_github_cli.sh"; DestDir: "{app}\scrip
 Source: "bootstrap-manifest.json"; DestDir: "{app}"
 Source: "sesami-noc-operations.ico"; DestDir: "{app}"
 
-[Run]
-Filename: "powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\scripts\windows\bootstrap-install.ps1"" {code:BootstrapParameters}"; Flags: waituntilterminated
-
 [Code]
 var
   DistributionPage: TInputQueryWizardPage;
@@ -64,12 +61,6 @@ begin
     Result := Result + ' -ConfirmPrerequisites';
 
   if MsgBox(
-      'If needed, install or update GitHub CLI from GitHub''s official Ubuntu package source? ' +
-      'The installer will show the exact action before it runs.',
-      mbConfirmation, MB_YESNO) = IDYES then
-    Result := Result + ' -ConfirmGitHubCli';
-
-  if MsgBox(
       'Install or repair the verified NOC Web release in your WSL environment?',
       mbConfirmation, MB_YESNO) = IDYES then
   begin
@@ -79,4 +70,98 @@ begin
         mbConfirmation, MB_YESNO) = IDYES then
       Result := Result + ' -ConfirmNocTools';
   end;
+end;
+
+function ReadBootstrapResultValue(const Content, Name: AnsiString): AnsiString;
+var
+  StartPosition: Integer;
+  EndPosition: Integer;
+  Prefix: String;
+begin
+  Result := '';
+  Prefix := Name + '=';
+  StartPosition := Pos(Prefix, Content);
+  if StartPosition = 0 then
+    Exit;
+  StartPosition := StartPosition + Length(Prefix);
+  EndPosition := Pos(#13#10, Copy(Content, StartPosition, MaxInt));
+  if EndPosition = 0 then
+    Result := Copy(Content, StartPosition, MaxInt)
+  else
+    Result := Copy(Content, StartPosition, EndPosition - 1);
+end;
+
+procedure FailBootstrap(const Detail: String);
+begin
+  MsgBox(
+      'SESAMI NOC Operations bootstrap failed before application setup. ' +
+      Detail + ' No application runtime or shortcut was created.',
+      mbError, MB_OK);
+  RaiseException('Bootstrap failed.');
+end;
+
+procedure RunBootstrap;
+var
+  ResultCode: Integer;
+  Parameters: String;
+  PowerShell: String;
+  ResultFile: String;
+  ResultContent: AnsiString;
+  Action: AnsiString;
+  Command: AnsiString;
+  Reason: AnsiString;
+  Category: AnsiString;
+  Stage: AnsiString;
+begin
+  ResultFile := ExpandConstant('{tmp}\sesami-bootstrap-prerequisite-result.txt');
+  DeleteFile(ResultFile);
+  Parameters := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ' +
+      AddQuotes(ExpandConstant('{app}\scripts\windows\bootstrap-install.ps1')) +
+      ' ' + BootstrapParameters('') + ' -PrerequisiteResultPath ' + AddQuotes(ResultFile);
+  PowerShell := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  if not Exec(PowerShell, Parameters, '', SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode) then
+    FailBootstrap('The bootstrap process could not start.');
+  if ResultCode = 0 then
+    Exit;
+
+  ResultContent := '';
+  if LoadStringFromFile(ResultFile, ResultContent) then
+  begin
+    Action := ReadBootstrapResultValue(ResultContent, 'ACTION');
+    Command := ReadBootstrapResultValue(ResultContent, 'COMMAND');
+    Reason := ReadBootstrapResultValue(ResultContent, 'REASON');
+    Category := ReadBootstrapResultValue(ResultContent, 'CATEGORY');
+    Stage := ReadBootstrapResultValue(ResultContent, 'STAGE');
+    if (Action = 'GITHUB_CLI') and (Command <> '') then
+    begin
+      if MsgBox(
+          'GitHub CLI attestation support is required before trusted release acquisition. ' +
+          'The following approved action will run in WSL:'#13#10#13#10 + Command + #13#10#13#10 +
+          'It configures the official GitHub CLI package source, then runs apt-get update and apt-get install --yes gh.',
+          mbConfirmation, MB_YESNO) <> IDYES then
+        FailBootstrap('GitHub CLI setup was declined (RUNTIME_SETUP_REQUIRED).');
+      DeleteFile(ResultFile);
+      if not Exec(PowerShell, Parameters + ' -GitHubCliApproved', '', SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode) then
+        FailBootstrap('The approved GitHub CLI action could not start.');
+      if ResultCode = 0 then
+        Exit;
+      ResultContent := '';
+      LoadStringFromFile(ResultFile, ResultContent);
+      Reason := ReadBootstrapResultValue(ResultContent, 'REASON');
+      if Reason = 'attestation-unavailable' then
+        FailBootstrap('GitHub CLI was provisioned but gh attestation verify remains unavailable. Verify WSL setup and rerun.');
+      FailBootstrap('The approved GitHub CLI action failed. Verify WSL network access and sudo authorization, then rerun.');
+    end;
+    if (Category <> '') and (Stage <> '') then
+      FailBootstrap('Bootstrap failed during stage ' + Stage + ' (' + Category + '). Review the prerequisite guidance and rerun setup.');
+    if Category <> '' then
+      FailBootstrap('Bootstrap failed (' + Category + '). Review the prerequisite guidance and rerun setup.');
+  end;
+  FailBootstrap('Review the prerequisite guidance and rerun setup.');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    RunBootstrap;
 end;

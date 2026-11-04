@@ -497,22 +497,28 @@ def install_runtime(
     )
     _wait_for_health(configuration, health_check, monotonic, sleep)
 
-    launcher_source = render_hidden_launcher(configuration, config_path)
-    if shortcut_installer is None:
-        _install_windows_shortcut(
-            configuration,
-            config_path,
-            launcher_source,
-            root=root,
-            runner=runner,
-        )
+    shortcut_mode = environment.get("NOC_WEB_SHORTCUT_MODE", "hidden-vbs")
+    if shortcut_mode == "wsl-native":
+        # WSL-native bootstrap owns the Desktop shortcut (wsl.exe -> sesami-noc-launch).
+        # Feature 011 still owns the managed service, runtime.json, and health gate.
+        pass
     else:
-        try:
-            shortcut_installer(configuration, config_path, launcher_source)
-        except InstallerError:
-            raise
-        except Exception:
-            raise InstallerError("shortcut_install_failed") from None
+        launcher_source = render_hidden_launcher(configuration, config_path)
+        if shortcut_installer is None:
+            _install_windows_shortcut(
+                configuration,
+                config_path,
+                launcher_source,
+                root=root,
+                runner=runner,
+            )
+        else:
+            try:
+                shortcut_installer(configuration, config_path, launcher_source)
+            except InstallerError:
+                raise
+            except Exception:
+                raise InstallerError("shortcut_install_failed") from None
 
     assessor = (
         assess_external_capabilities

@@ -3,6 +3,16 @@
 This guide validates Feature 012 on a disposable supported Windows and WSL
 environment. It is not a development-machine migration guide.
 
+Feature 012 supports two installation frontends that share the same trusted
+release engine:
+
+1. **WSL-native** — `scripts/install-sesami.sh` (supported baseline / unsigned fallback)
+2. **Windows EXE** — `SESAMI-NOC-Operations-Setup.exe` (wizard frontend; may need
+   Authenticode or application-control approval)
+
+Do not claim clean-machine acceptance for either frontend until it is executed
+on a genuine clean workstation.
+
 ## Clean acceptance baseline
 
 Before beginning, use a Windows 10/11 test user and a WSL2 distribution with
@@ -15,15 +25,36 @@ following are absent:
 - Feature 011 runtime configuration, `noc-web.service`, launcher, and shortcut.
 - NOC operational data and third-party authentication.
 
-Keep the approved `SESAMI-NOC-Operations-Setup.exe` package and its release
-assets available. Do not copy any configuration or credentials from another
-workstation.
+Keep the approved release assets available. For the EXE path, also keep
+`SESAMI-NOC-Operations-Setup.exe`. Do not copy any configuration or credentials
+from another workstation. Do not use `curl | bash`.
 
 The package policy must pin NOC Web `v1.0.3` and noc-tools `v1.0.1`. Both
 archives must pass their pinned SHA-256, published checksum, and GitHub
 attestation checks before extraction.
 
-## Core bootstrap
+## Core bootstrap (WSL-native)
+
+1. In WSL2, download `noc-web-v1.0.3.tar.gz` and `noc-web-v1.0.3.sha256`
+   explicitly (browser or `gh release download`).
+2. Verify SHA-256 and `gh attestation verify` with the pinned signer workflow
+   and `refs/tags/v1.0.3`, or run
+   `scripts/bootstrap/verify_bootstrap_bundle.sh` against those local files.
+3. Extract the archive and run:
+   `./scripts/install-sesami.sh --confirm-prerequisites --github-cli-approved --confirm-replacement --confirm-noc-tools`
+4. Confirm WSL2, `/etc/os-release` family, non-root passwd home, systemd user
+   services, Python 3.10+/venv/pip/CA, and gh attestation readiness. On Ubuntu,
+   confirm remediation prompts for approved packages only. On another
+   distribution, confirm capability guidance without apt.
+5. Confirm Feature 011 creates the managed service and runtime configuration.
+6. Confirm `~/.local/bin/sesami-noc-launch` exists and the Desktop shortcut
+   targets Windows-owned `wsl.exe` with `--distribution` and `--exec` pointing
+   at that launcher.
+7. Launch **SESAMI NOC Operations** from Windows. Confirm health succeeds,
+   the default browser opens `http://127.0.0.1:8000`, no Linux terminal remains,
+   and a second launch reuses `noc-web.service` without duplicates.
+
+## Core bootstrap (Windows EXE)
 
 1. Start `SESAMI-NOC-Operations-Setup.exe` from Windows.
 2. Confirm it reports WSL 2, the `/etc/os-release` distribution family,

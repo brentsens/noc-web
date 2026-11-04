@@ -62,6 +62,7 @@ def test_ubuntu_with_all_core_capabilities_is_ready(tmp_path):
     assert _run(tmp_path) == [
         "DISTRO_FAMILY=ubuntu",
         "GH_ATTESTATION=ready",
+        "GH_ATTESTATION_EXIT=0",
         "PREREQUISITES_READY",
     ]
 
@@ -69,7 +70,9 @@ def test_ubuntu_with_all_core_capabilities_is_ready(tmp_path):
 def test_python_missing_is_an_ubuntu_installable_capability(tmp_path):
     lines = _run(tmp_path, python=None)
 
-    assert lines[:2] == ["DISTRO_FAMILY=ubuntu", "GH_ATTESTATION=ready"]
+    assert lines[:3] == [
+        "DISTRO_FAMILY=ubuntu", "GH_ATTESTATION=ready", "GH_ATTESTATION_EXIT=0"
+    ]
     assert "MISSING_UBUNTU_PACKAGES=python3" in lines
     assert any(line.startswith("MISSING_CAPABILITIES=python3") for line in lines)
 
@@ -88,6 +91,7 @@ esac
     assert lines == [
         "DISTRO_FAMILY=ubuntu",
         "GH_ATTESTATION=ready",
+        "GH_ATTESTATION_EXIT=0",
         "MISSING_CAPABILITIES=python3.10+",
     ]
 
@@ -107,6 +111,7 @@ esac
     assert lines == [
         "DISTRO_FAMILY=ubuntu",
         "GH_ATTESTATION=ready",
+        "GH_ATTESTATION_EXIT=0",
         "MISSING_UBUNTU_PACKAGES=python3-venv",
         "MISSING_CAPABILITIES=venv-pip",
     ]
@@ -128,6 +133,7 @@ esac
     assert lines == [
         "DISTRO_FAMILY=ubuntu",
         "GH_ATTESTATION=ready",
+        "GH_ATTESTATION_EXIT=0",
         "MISSING_UBUNTU_PACKAGES=ca-certificates",
         "MISSING_CAPABILITIES=python-ssl",
     ]
@@ -139,6 +145,7 @@ def test_os_release_identifies_non_ubuntu_without_using_the_wsl_display_name(tmp
     assert lines == [
         "DISTRO_FAMILY=debian",
         "GH_ATTESTATION=ready",
+        "GH_ATTESTATION_EXIT=0",
         "PREREQUISITES_READY",
     ]
 
@@ -146,7 +153,9 @@ def test_os_release_identifies_non_ubuntu_without_using_the_wsl_display_name(tmp
 def test_non_ubuntu_missing_capability_is_detected_without_apt(tmp_path):
     lines = _run(tmp_path, python=None, os_release="ID=fedora\n")
 
-    assert lines[:2] == ["DISTRO_FAMILY=fedora", "GH_ATTESTATION=ready"]
+    assert lines[:3] == [
+        "DISTRO_FAMILY=fedora", "GH_ATTESTATION=ready", "GH_ATTESTATION_EXIT=0"
+    ]
     assert "MISSING_UBUNTU_PACKAGES=python3" in lines
     assert any(line.startswith("MISSING_CAPABILITIES=python3") for line in lines)
 
@@ -158,14 +167,17 @@ def test_missing_gh_is_distinguished_from_an_unsupported_gh(tmp_path):
     assert missing == [
         "DISTRO_FAMILY=ubuntu",
         "GH_ATTESTATION=missing",
+        "GH_ATTESTATION_EXIT=127",
         "MISSING_CAPABILITIES=gh-attestation",
     ]
     assert unsupported == [
         "DISTRO_FAMILY=ubuntu",
         "GH_ATTESTATION=unsupported",
+        "GH_ATTESTATION_EXIT=1",
         "MISSING_CAPABILITIES=gh-attestation",
     ]
     assert "gh attestation verify --help" in SCRIPT.read_text()
+    assert "gh_attestation_exit=$?" in SCRIPT.read_text()
 
 
 def test_jq_is_only_checked_when_optional_noc_tools_are_requested(tmp_path):
@@ -175,11 +187,13 @@ def test_jq_is_only_checked_when_optional_noc_tools_are_requested(tmp_path):
     assert core_lines == [
         "DISTRO_FAMILY=ubuntu",
         "GH_ATTESTATION=ready",
+        "GH_ATTESTATION_EXIT=0",
         "PREREQUISITES_READY",
     ]
     assert noc_tools_lines == [
         "DISTRO_FAMILY=ubuntu",
         "GH_ATTESTATION=ready",
+        "GH_ATTESTATION_EXIT=0",
         "MISSING_CAPABILITIES=jq",
     ]
 
@@ -220,17 +234,34 @@ def test_ubuntu_packages_are_confirmed_rechecked_and_never_used_for_other_distro
 def test_github_cli_provisioning_is_confirmed_ubuntu_only_and_rechecked():
     source = INSTALLER.read_text()
     provisioner = ROOT / "scripts" / "bootstrap" / "provision_github_cli.sh"
+    setup_source = (ROOT / "packaging" / "windows" / "SESAMI-NOC-Operations-Setup.iss").read_text()
 
-    assert "[switch]$ConfirmGitHubCli" in source
+    assert "[switch]$GitHubCliApproved" in source
+    assert "[string]$PrerequisiteResultPath" in source
     assert "GhAttestation -ne 'ready'" in source
     assert "DistributionFamily -ne 'ubuntu'" in source
-    assert "Confirm-GitHubCliProvisioning" in source
-    assert source.index("Confirm-GitHubCliProvisioning") < source.index(
+    assert "Write-PrerequisiteResult -Action 'GITHUB_CLI' -Command $githubCliCommand" in source
+    assert source.index("Write-PrerequisiteResult -Action 'GITHUB_CLI'") < source.index(
         "Invoke-WslSafe $githubCliCommand"
     )
     assert source.count("Get-RuntimePrerequisiteAssessment $linuxPackageRoot") >= 3
     assert "https://cli.github.com/packages" in provisioner.read_text()
     assert "/usr/bin/apt-get install --yes gh" in provisioner.read_text()
+    assert "GITHUB_CLI_FAILED" in source
+    assert "LoadStringFromFile(ResultFile, ResultContent)" in setup_source
+    assert "GitHub CLI attestation support is required before trusted release acquisition." in setup_source
+    assert "-GitHubCliApproved" in setup_source
+
+
+def test_installer_fails_setup_when_bootstrap_returns_a_nonzero_exit_code():
+    source = (ROOT / "packaging" / "windows" / "SESAMI-NOC-Operations-Setup.iss").read_text()
+
+    assert "[Run]" not in source
+    assert "procedure CurStepChanged" in source
+    assert "ewWaitUntilTerminated" in source
+    assert "if ResultCode = 0 then" in source
+    assert "FailBootstrap(" in source
+    assert "No application runtime or shortcut was created." in source
 
 
 def test_github_cli_provisioning_never_handles_operator_authentication_files():
@@ -254,3 +285,16 @@ def test_installer_uses_supported_inno_wizard_api_for_distribution_selection():
     assert re.search(r"\bInputQuery\b", source) is None
     assert "CreateInputQueryPage" in source
     assert "TInputQueryWizardPage" in source
+
+
+def test_identity_discovery_uses_authoritative_passwd_record_and_validates_home():
+    source = INSTALLER.read_text()
+
+    assert "id -un" in source
+    assert "id -u" in source
+    assert "getent passwd" in source
+    assert "test -d" in source
+    assert "$Script:WslHome" in source
+    assert "STAGE=" in source
+    assert "CATEGORY=" in source
+    assert source.index("Get-WslIdentity") < source.index("Get-RuntimePrerequisiteAssessment")

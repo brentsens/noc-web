@@ -21,6 +21,7 @@ from scripts.bootstrap.handoff import (
     HandoffError,
     LinuxIdentity,
     create_verified_venv_and_install,
+    discover_linux_identity,
 )
 from scripts.bootstrap.release_manifest import ReleaseEntry
 
@@ -315,6 +316,19 @@ def download_release_assets(release: ReleaseEntry, destination: Path, *, opener:
     return archive, checksums
 
 
+def _authoritative_home() -> Path:
+    try:
+        import pwd
+
+        entry = pwd.getpwuid(os.getuid())
+        candidate = Path(entry.pw_dir)
+        if candidate.is_absolute() and ".." not in candidate.parts and candidate.is_dir():
+            return candidate
+    except Exception:
+        pass
+    return Path.home()
+
+
 def _controlled_subprocess(
     command: list[str], *, timeout: int,
 ) -> subprocess.CompletedProcess[bytes]:
@@ -328,7 +342,7 @@ def _controlled_subprocess(
             timeout=timeout,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            env={"PATH": _CONTROLLED_PATH, "HOME": str(Path.home())},
+            env={"PATH": _CONTROLLED_PATH, "HOME": str(_authoritative_home())},
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -474,12 +488,7 @@ def handoff_verified_release(release_root: Path, *, distribution: str) -> None:
     """Delegate a verified staged release to Feature 011 exactly once."""
     root = Path(release_root)
     try:
-        identity = LinuxIdentity(
-            distribution=distribution,
-            user=os.environ.get("USER", ""),
-            uid=os.getuid(),
-            home=Path.home(),
-        )
+        identity = discover_linux_identity(distribution=distribution)
         create_verified_venv_and_install(root, identity)
     except (HandoffError, OSError):
         previous = root.with_name(f"{root.name}.previous")

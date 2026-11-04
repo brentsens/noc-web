@@ -21,7 +21,10 @@ try {
         @{ Source = 'scripts/windows/bootstrap-install.ps1'; Destination = 'scripts/windows/bootstrap-install.ps1' },
         @{ Source = 'scripts/windows/bootstrap-status.ps1'; Destination = 'scripts/windows/bootstrap-status.ps1' },
         @{ Source = 'scripts/windows/install-shortcut.ps1'; Destination = 'scripts/windows/install-shortcut.ps1' },
-        @{ Source = 'packaging/windows/bootstrap-manifest.json'; Destination = 'packaging/windows/bootstrap-manifest.json' }
+        @{ Source = 'scripts/bootstrap/install_wsl_shortcut.ps1'; Destination = 'scripts/bootstrap/install_wsl_shortcut.ps1' },
+        @{ Source = 'scripts/install-sesami.sh'; Destination = 'scripts/install-sesami.sh' },
+        @{ Source = 'packaging/windows/bootstrap-manifest.json'; Destination = 'packaging/windows/bootstrap-manifest.json' },
+        @{ Source = 'packaging/windows/SESAMI-NOC-Operations-Setup.iss'; Destination = 'packaging/windows/SESAMI-NOC-Operations-Setup.iss' }
     )
 
     foreach ($file in $files) {

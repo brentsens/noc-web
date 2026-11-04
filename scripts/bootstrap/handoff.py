@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -43,6 +44,108 @@ def install_location(identity: LinuxIdentity) -> Path:
     if not home.is_absolute() or ".." in home.parts:
         raise HandoffError("identity")
     return home / INSTALL_SUBPATH
+
+
+def discover_linux_identity(
+    distribution: str = "Ubuntu",
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+) -> LinuxIdentity:
+    """Discover and validate Linux identity using authoritative passwd record.
+
+    Determines username via `id -un`, UID via `id -u`, parses authoritative
+    home from `getent passwd`, validates account/UID relationship and home
+    existence. Tolerates inconsistent inherited HOME when passwd record is valid.
+    """
+    exec_run = runner if runner is not None else subprocess.run
+
+    try:
+        user_res = exec_run(
+            ["id", "-un"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={"PATH": _CONTROLLED_PATH},
+        )
+    except OSError:
+        raise HandoffError("identity") from None
+    if getattr(user_res, "returncode", 1) != 0:
+        raise HandoffError("identity")
+    username = user_res.stdout.strip()
+    if not username or username == "root" or not re.match(r"^[a-z_][a-z0-9_-]{0,63}$", username):
+        raise HandoffError("identity")
+
+    try:
+        uid_res = exec_run(
+            ["id", "-u"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={"PATH": _CONTROLLED_PATH},
+        )
+    except OSError:
+        raise HandoffError("identity") from None
+    if getattr(uid_res, "returncode", 1) != 0:
+        raise HandoffError("identity")
+    uid_str = uid_res.stdout.strip()
+    if not re.match(r"^[1-9][0-9]*$", uid_str):
+        raise HandoffError("identity")
+    uid = int(uid_str)
+
+    try:
+        passwd_res = exec_run(
+            ["getent", "passwd", username],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={"PATH": _CONTROLLED_PATH},
+        )
+    except OSError:
+        raise HandoffError("identity") from None
+    if getattr(passwd_res, "returncode", 1) != 0:
+        raise HandoffError("identity")
+    lines = [line.strip() for line in passwd_res.stdout.splitlines() if line.strip()]
+    if len(lines) != 1:
+        raise HandoffError("identity")
+    parts = lines[0].split(":")
+    if len(parts) != 7:
+        raise HandoffError("identity")
+    rec_user, _, rec_uid_str, _, _, rec_home, _ = parts
+    if rec_user != username or rec_uid_str != uid_str:
+        raise HandoffError("identity")
+
+    try:
+        uid_passwd_res = exec_run(
+            ["getent", "passwd", uid_str],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={"PATH": _CONTROLLED_PATH},
+        )
+    except OSError:
+        raise HandoffError("identity") from None
+    if getattr(uid_passwd_res, "returncode", 1) != 0:
+        raise HandoffError("identity")
+    uid_lines = [line.strip() for line in uid_passwd_res.stdout.splitlines() if line.strip()]
+    if len(uid_lines) != 1:
+        raise HandoffError("identity")
+    uid_parts = uid_lines[0].split(":")
+    if len(uid_parts) != 7 or uid_parts[0] != username or uid_parts[2] != uid_str or uid_parts[5] != rec_home:
+        raise HandoffError("identity")
+
+    home = Path(rec_home)
+    if (
+        not home.is_absolute()
+        or ".." in home.parts
+        or len(rec_home) > 240
+        or not re.match(r"^/[A-Za-z0-9._/-]{1,240}$", rec_home)
+        or rec_home in {"/", "/root"}
+    ):
+        raise HandoffError("identity")
+    if not home.is_dir():
+        raise HandoffError("identity")
+
+    return LinuxIdentity(distribution=distribution, user=username, uid=uid, home=home)
 
 
 def _valid_release(root: Path) -> bool:
@@ -106,6 +209,9 @@ def create_verified_venv_and_install(
         "PATH": _CONTROLLED_PATH,
         "WSL_DISTRO_NAME": identity.distribution,
     }
+    shortcut_mode = os.environ.get("NOC_WEB_SHORTCUT_MODE")
+    if shortcut_mode in {"hidden-vbs", "wsl-native"}:
+        environment["NOC_WEB_SHORTCUT_MODE"] = shortcut_mode
 
     def invoke(command: list[str]) -> None:
         try:
