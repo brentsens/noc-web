@@ -206,8 +206,8 @@ def test_wsl_native_entry_and_shortcut_scripts_are_present():
     assert "curl | bash" not in install
     assert "python3 -m scripts.bootstrap.wsl_native" in install
     assert "id -u" in install
-    assert "ab55b3d776d760db3ea758d80b9fc7218ef3bd33a0723589d73b7f0a2171370f" in verify
-    assert "noc-web-v1.0.3.tar.gz" in verify
+    assert "43cd4121b7c674343dfa0d7756a18d2eadcc1602f4f8d1b402e90f79ec5116e7" in verify
+    assert "noc-web-v1.0.4.tar.gz" in verify
     assert "--signer-workflow" in verify
     assert "System32\\wsl.exe" in shortcut
     assert "Sysnative\\wsl.exe" in shortcut
@@ -217,7 +217,7 @@ def test_wsl_native_entry_and_shortcut_scripts_are_present():
     assert "launch(" in launch
     assert "NOC_WEB_SHORTCUT_MODE" in native
     assert "noc-inv-contract=1" in native
-    assert "v1.0.3" in native
+    assert "v1.0.4" in native
     assert "v1.0.1" not in native or "noc-tools" in native.lower()
 
 

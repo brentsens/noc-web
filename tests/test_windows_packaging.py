@@ -37,8 +37,8 @@ def test_packaging_uses_only_approved_branding_and_allowlisted_inputs():
 
 def test_packaging_manifest_and_build_contract_are_immutable():
     manifest = load_manifest(PACKAGE / "bootstrap-manifest.json")
-    assert manifest.application.tag == "v1.0.3"
-    assert manifest.application.archive == "noc-web-v1.0.3.tar.gz"
+    assert manifest.application.tag == "v1.0.4"
+    assert manifest.application.archive == "noc-web-v1.0.4.tar.gz"
     tool = manifest.tool("nocTools")
     assert tool and tool.version == "v1.0.1"
     build = (PACKAGE / "build-installer.ps1").read_text()

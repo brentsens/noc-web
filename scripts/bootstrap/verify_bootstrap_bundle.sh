@@ -5,7 +5,7 @@ set -eu
 
 usage() {
     printf '%s\n' "Usage: ./scripts/bootstrap/verify_bootstrap_bundle.sh --archive FILE --checksum FILE [--workdir DIR]"
-    printf '%s\n' "Verifies the pinned SHA-256 and GitHub SLSA attestation for noc-web v1.0.3,"
+    printf '%s\n' "Verifies the pinned SHA-256 and GitHub SLSA attestation for noc-web v1.0.4,"
     printf '%s\n' "extracts into WORKDIR, and prints the verified package root."
 }
 
@@ -49,9 +49,9 @@ if [ ! -f "$archive" ] || [ ! -f "$checksum" ]; then
     exit 1
 fi
 
-expected=ab55b3d776d760db3ea758d80b9fc7218ef3bd33a0723589d73b7f0a2171370f
+expected=43cd4121b7c674343dfa0d7756a18d2eadcc1602f4f8d1b402e90f79ec5116e7
 archive_name=$(basename -- "$archive")
-if [ "$archive_name" != "noc-web-v1.0.3.tar.gz" ]; then
+if [ "$archive_name" != "noc-web-v1.0.4.tar.gz" ]; then
     printf '%s\n' 'SOURCE_VERIFICATION_FAILED'
     printf '%s\n' 'REASON=unexpected-archive-name'
     exit 1
@@ -85,7 +85,7 @@ fi
 if ! gh attestation verify -- "$archive" \
     --repo brentsens/noc-web \
     --signer-workflow brentsens/noc-web/.github/workflows/release.yml \
-    --source-ref refs/tags/v1.0.3 \
+    --source-ref refs/tags/v1.0.4 \
     >/dev/null 2>&1; then
     printf '%s\n' 'SOURCE_VERIFICATION_FAILED'
     printf '%s\n' 'REASON=attestation-failed'

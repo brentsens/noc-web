@@ -3,10 +3,10 @@
   "targetDistribution": "Ubuntu",
   "releaseAssets": {
     "repository": "brentsens/noc-web",
-    "tag": "v1.0.3",
-    "archive": "noc-web-v1.0.3.tar.gz",
-    "checksum": "noc-web-v1.0.3.sha256",
-    "sha256": "ab55b3d776d760db3ea758d80b9fc7218ef3bd33a0723589d73b7f0a2171370f",
+    "tag": "v1.0.4",
+    "archive": "noc-web-v1.0.4.tar.gz",
+    "checksum": "noc-web-v1.0.4.sha256",
+    "sha256": "43cd4121b7c674343dfa0d7756a18d2eadcc1602f4f8d1b402e90f79ec5116e7",
     "signerWorkflow": "brentsens/noc-web/.github/workflows/release.yml"
   },
   "brandingAsset": "assets/windows/sesami-noc-operations.png",

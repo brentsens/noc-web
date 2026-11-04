@@ -27,14 +27,14 @@ from scripts.bootstrap.windows_preflight import WindowsContext, assess
 
 
 REPOSITORY = "brentsens/noc-web"
-TAG = "v1.0.3"
+TAG = "v1.0.4"
 SIGNER = "brentsens/noc-web/.github/workflows/release.yml"
 
 
-def _release(archive="noc-web-v1.0.3.tar.gz", digest="0" * 64, **changes):
+def _release(archive="noc-web-v1.0.4.tar.gz", digest="0" * 64, **changes):
     values = {
         "repository": REPOSITORY, "tag": TAG, "archive": archive,
-        "checksum": "noc-web-v1.0.3.sha256", "sha256": digest, "signer_workflow": SIGNER,
+        "checksum": "noc-web-v1.0.4.sha256", "sha256": digest, "signer_workflow": SIGNER,
     }
     values.update(changes)
     return ReleaseEntry(**values)
@@ -45,8 +45,8 @@ def _manifest(**changes):
         "schemaVersion": 1,
         "targetDistribution": "Ubuntu",
         "releaseAssets": {
-            "repository": REPOSITORY, "tag": TAG, "archive": "noc-web-v1.0.3.tar.gz",
-            "checksum": "noc-web-v1.0.3.sha256",
+            "repository": REPOSITORY, "tag": TAG, "archive": "noc-web-v1.0.4.tar.gz",
+            "checksum": "noc-web-v1.0.4.sha256",
             "sha256": "a" * 64, "signerWorkflow": SIGNER,
         },
         "brandingAsset": "assets/windows/sesami-noc-operations.png",
@@ -65,7 +65,7 @@ def _archive(path: Path, *, unsafe=False, missing=False):
     with tarfile.open(path, "w:gz") as archive:
         for name in (() if missing else required):
             payload = name.encode()
-            member = tarfile.TarInfo(f"noc-web-v1.0.3/{name}")
+            member = tarfile.TarInfo(f"noc-web-v1.0.4/{name}")
             member.size = len(payload)
             archive.addfile(member, io.BytesIO(payload))
         if unsafe:
@@ -95,12 +95,12 @@ def test_manifest_pins_the_approved_noc_web_release_and_rejects_trust_changes():
     release = validate_manifest(_manifest()).application
     assert release == _release(digest="a" * 64)
     assert release.archive_url == (
-        "https://github.com/brentsens/noc-web/releases/download/v1.0.3/noc-web-v1.0.3.tar.gz"
+        "https://github.com/brentsens/noc-web/releases/download/v1.0.4/noc-web-v1.0.4.tar.gz"
     )
     for changed in (
         {"repository": "attacker/noc-web", "signerWorkflow": "attacker/noc-web/.github/workflows/release.yml"},
         {"tag": "main"},
-        {"archive": "noc-web-v1.0.3.zip"}, {"signerWorkflow": ".github/workflows/release.yml"},
+        {"archive": "noc-web-v1.0.4.zip"}, {"signerWorkflow": ".github/workflows/release.yml"},
     ):
         manifest = _manifest()
         manifest["releaseAssets"].update(changed)
@@ -115,7 +115,7 @@ def test_bundled_manifest_contains_the_approved_noc_web_v103_anchor():
         Path(__file__).parents[1] / "packaging" / "windows" / "bootstrap-manifest.json"
     )
     assert manifest.application == _release(
-        digest="ab55b3d776d760db3ea758d80b9fc7218ef3bd33a0723589d73b7f0a2171370f"
+        digest="43cd4121b7c674343dfa0d7756a18d2eadcc1602f4f8d1b402e90f79ec5116e7"
     )
     tool = manifest.tool("nocTools")
     assert tool is not None
@@ -125,8 +125,8 @@ def test_bundled_manifest_contains_the_approved_noc_web_v103_anchor():
 
 
 def test_acquires_verifies_and_atomically_promotes_an_approved_tarball(tmp_path, monkeypatch):
-    archive = tmp_path / "noc-web-v1.0.3.tar.gz"
-    checksums = tmp_path / "noc-web-v1.0.3.sha256"
+    archive = tmp_path / "noc-web-v1.0.4.tar.gz"
+    checksums = tmp_path / "noc-web-v1.0.4.sha256"
     _archive(archive)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     _checksums(checksums, archive)
@@ -168,8 +168,8 @@ def test_acquires_verifies_and_atomically_promotes_an_approved_tarball(tmp_path,
 
 
 def test_trust_and_download_failures_do_not_extract_or_replace_prior_release(tmp_path, monkeypatch):
-    archive = tmp_path / "noc-web-v1.0.3.tar.gz"
-    checksums = tmp_path / "noc-web-v1.0.3.sha256"
+    archive = tmp_path / "noc-web-v1.0.4.tar.gz"
+    checksums = tmp_path / "noc-web-v1.0.4.sha256"
     _archive(archive)
     _checksums(checksums, archive, "0" * 64)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
@@ -199,7 +199,7 @@ def test_trust_and_download_failures_do_not_extract_or_replace_prior_release(tmp
 
 
 def test_malformed_or_unsafe_archives_and_paths_fail_closed(tmp_path):
-    archive = tmp_path / "noc-web-v1.0.3.tar.gz"
+    archive = tmp_path / "noc-web-v1.0.4.tar.gz"
     _archive(archive, unsafe=True)
     with pytest.raises(BootstrapError):
         validate_archive(archive)
@@ -211,7 +211,7 @@ def test_malformed_or_unsafe_archives_and_paths_fail_closed(tmp_path):
 
 
 def test_attestation_verification_requires_repository_tag_and_signer(monkeypatch, tmp_path):
-    archive = tmp_path / "noc-web-v1.0.3.tar.gz"
+    archive = tmp_path / "noc-web-v1.0.4.tar.gz"
     archive.write_bytes(b"fixture")
     command = []
 
@@ -225,7 +225,7 @@ def test_attestation_verification_requires_repository_tag_and_signer(monkeypatch
     verify_provenance(archive, _release())
     assert command == [
         "gh", "attestation", "verify", str(archive), "--repo", REPOSITORY,
-        "--signer-workflow", SIGNER, "--source-ref", "refs/tags/v1.0.3",
+        "--signer-workflow", SIGNER, "--source-ref", "refs/tags/v1.0.4",
     ]
 
     monkeypatch.setattr(
@@ -237,7 +237,7 @@ def test_attestation_verification_requires_repository_tag_and_signer(monkeypatch
 
 
 def test_attestation_verifier_has_bounded_controlled_environment(monkeypatch, tmp_path):
-    archive = tmp_path / "noc-web-v1.0.3.tar.gz"
+    archive = tmp_path / "noc-web-v1.0.4.tar.gz"
     archive.write_bytes(b"fixture")
     invocation = {}
 
@@ -293,7 +293,7 @@ def _stage_release(tmp_path, release):
     checksums = tmp_path / release.checksum
     _archive(archive)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-    release = _release(digest=digest)
+    release = _release(**{**release.__dict__, "sha256": digest})
     _checksums(checksums, archive)
     root = tmp_path / "installed"
     state = tmp_path / "state" / "installation-state.json"
@@ -449,7 +449,14 @@ def test_same_release_repair_replaces_missing_app_content_but_preserves_feature0
 
 
 def test_approved_newer_release_replaces_only_application_content_once(tmp_path):
-    current, _, _, root, state = _stage_release(tmp_path, _release())
+    current, _, _, root, state = _stage_release(
+    tmp_path,
+    _release(
+        tag="v1.0.3",
+        archive="noc-web-v1.0.3.tar.gz",
+        checksum="noc-web-v1.0.3.sha256",
+    ),
+)
     (root / "backend" / "app.py").write_text("old application")
     (root / "data").mkdir()
     (root / "data" / "authentication.json").write_text("operator authentication")

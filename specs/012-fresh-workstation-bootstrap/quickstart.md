@@ -29,16 +29,16 @@ Keep the approved release assets available. For the EXE path, also keep
 `SESAMI-NOC-Operations-Setup.exe`. Do not copy any configuration or credentials
 from another workstation. Do not use `curl | bash`.
 
-The package policy must pin NOC Web `v1.0.3` and noc-tools `v1.0.1`. Both
+The package policy must pin NOC Web `v1.0.4` and noc-tools `v1.0.1`. Both
 archives must pass their pinned SHA-256, published checksum, and GitHub
 attestation checks before extraction.
 
 ## Core bootstrap (WSL-native)
 
-1. In WSL2, download `noc-web-v1.0.3.tar.gz` and `noc-web-v1.0.3.sha256`
+1. In WSL2, download `noc-web-v1.0.4.tar.gz` and `noc-web-v1.0.4.sha256`
    explicitly (browser or `gh release download`).
 2. Verify SHA-256 and `gh attestation verify` with the pinned signer workflow
-   and `refs/tags/v1.0.3`, or run
+   and `refs/tags/v1.0.4`, or run
    `scripts/bootstrap/verify_bootstrap_bundle.sh` against those local files.
 3. Extract the archive and run:
    `./scripts/install-sesami.sh --confirm-prerequisites --github-cli-approved --confirm-replacement --confirm-noc-tools`

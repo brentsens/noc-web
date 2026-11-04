@@ -20,7 +20,7 @@ the documented fresh-workstation acceptance procedure on an isolated machine.
 
 ## Immutable release inputs
 
-The package policy pins NOC Web `brentsens/noc-web` `v1.0.3` and noc-tools
+The package policy pins NOC Web `brentsens/noc-web` `v1.0.4` and noc-tools
 `brentsens/noc-tools` `v1.0.1`. Before any archive is extracted, bootstrap
 checks the pinned SHA-256, the published checksum asset, and GitHub artifact
 attestation with the fully qualified approved workflow identity. The package

@@ -83,7 +83,7 @@ a WSL terminal open after installation.
 **WSL**
 
 - `scripts/install-sesami.sh` bootstrap frontend
-- noc-web (`v1.0.3`)
+- noc-web (`v1.0.4`)
 - Python `.venv`
 - `noc-web.service` systemd user service
 - `~/.local/bin/sesami-noc-launch`
@@ -104,22 +104,22 @@ verify integrity, then run the installer from the verified tree:
 
 ```bash
 # From Windows, open your WSL2 distribution terminal as a non-root operator.
-gh release download v1.0.3 -R brentsens/noc-web \
-  -p noc-web-v1.0.3.tar.gz -p noc-web-v1.0.3.sha256
+gh release download v1.0.4 -R brentsens/noc-web \
+  -p noc-web-v1.0.4.tar.gz -p noc-web-v1.0.4.sha256
 
 # Optional helper shipped in a trusted checkout or prior verified tree:
 # ./scripts/bootstrap/verify_bootstrap_bundle.sh \
-#   --archive noc-web-v1.0.3.tar.gz \
-#   --checksum noc-web-v1.0.3.sha256
+#   --archive noc-web-v1.0.4.tar.gz \
+#   --checksum noc-web-v1.0.4.sha256
 
 # Or verify manually (pinned digest from packaging/windows/bootstrap-manifest.json):
-sha256sum -c noc-web-v1.0.3.sha256
-gh attestation verify noc-web-v1.0.3.tar.gz \
+sha256sum -c noc-web-v1.0.4.sha256
+gh attestation verify noc-web-v1.0.4.tar.gz \
   --repo brentsens/noc-web \
   --signer-workflow brentsens/noc-web/.github/workflows/release.yml \
-  --source-ref refs/tags/v1.0.3
+  --source-ref refs/tags/v1.0.4
 
-tar -xzf noc-web-v1.0.3.tar.gz
+tar -xzf noc-web-v1.0.4.tar.gz
 cd noc-web-*   # extracted verified package root
 
 ./scripts/install-sesami.sh \
@@ -142,7 +142,7 @@ Windows / WSL preflight
   |
 verified trusted releases
   |
-noc-web v1.0.3 + noc-tools v1.0.1
+noc-web v1.0.4 + noc-tools v1.0.1
   |
 Feature 011 managed runtime
   |
@@ -163,7 +163,7 @@ not block core noc-web installation.
 
 | Component | Repository | Release |
 |---|---|---|
-| noc-web | `brentsens/noc-web` | `v1.0.3` |
+| noc-web | `brentsens/noc-web` | `v1.0.4` |
 | noc-tools | `brentsens/noc-tools` | `v1.0.1` |
 
 Trusted acquisition verifies the pinned SHA-256 digest and GitHub SLSA

@@ -706,7 +706,7 @@ def run_wsl_native_bootstrap(
             reason="operator-declined",
         )
 
-    print("APPROVED_RELEASE=v1.0.3")
+    print("APPROVED_RELEASE=v1.0.4")
     release_root = acquire_and_handoff(
         package_root=package_root,
         manifest_path=manifest_path,
