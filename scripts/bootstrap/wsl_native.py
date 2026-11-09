@@ -140,6 +140,8 @@ def resolve_operator_identity(
 
 def require_systemd_user(
     *,
+    uid: int,
+    home: Path,
     runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
 ) -> None:
     exec_run = runner if runner is not None else subprocess.run
@@ -150,7 +152,12 @@ def require_systemd_user(
             text=True,
             check=False,
             timeout=15,
-            env={"PATH": _CONTROLLED_PATH, "HOME": os.environ.get("HOME", "")},
+            env={
+                "PATH": _CONTROLLED_PATH,
+                "HOME": str(home),
+                "XDG_RUNTIME_DIR": f"/run/user/{uid}",
+                "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{uid}/bus",
+            },
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise WslNativeError(
@@ -379,7 +386,10 @@ def create_windows_shortcut(
             text=True,
             check=False,
             timeout=60,
-            env={"PATH": _CONTROLLED_PATH, "HOME": os.environ.get("HOME", "")},
+            env={
+                "PATH": _CONTROLLED_PATH,
+                "HOME": os.environ.get("HOME", ""),
+            },
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise WslNativeError(
@@ -589,7 +599,13 @@ def collect_context(
         )
     family = read_distro_family(os_release_path)
     username, uid, home = resolve_operator_identity(distribution=distribution, runner=runner)
-    require_systemd_user(runner=runner)
+
+    require_systemd_user(
+        uid=uid,
+        home=home,
+        runner=runner,
+    )
+
     return WslNativeContext(
         distribution=distribution,
         distro_family=family,
