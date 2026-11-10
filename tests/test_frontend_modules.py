@@ -142,7 +142,7 @@ def test_attached_datadog_reference_remains_visible_when_snapshot_fetch_fails():
     assert "function renderAttachedDatadogIncident(investigation)" in module_script
 
     load_start = module_script.index("async function loadDatadogAttachmentOptions")
-    load_end = module_script.index("function getLocalDateString()", load_start)
+    load_end = module_script.index("function validationMessage(error)", load_start)
     loader = module_script[load_start:load_end]
     catch_start = loader.index("} catch (error) {")
     catch = loader[catch_start:]
@@ -160,7 +160,7 @@ def test_cured_investigation_history_shows_attached_link_without_attachment_cont
     assert 'id="datadog-attachment-controls"' in page
 
     load_start = module_script.index("async function loadDatadogAttachmentOptions")
-    load_end = module_script.index("function getLocalDateString()", load_start)
+    load_end = module_script.index("function validationMessage(error)", load_start)
     loader = module_script[load_start:load_end]
 
     assert re.search(
@@ -225,6 +225,143 @@ def test_assistant_context_requires_explicit_shift_without_changing_other_workfl
     assert contexts["assistant"]["shift"] is None
     assert contexts["existing"]["valid"] is True
     assert contexts["existing"]["normalized"] is True
+
+
+def test_investigations_workflow_selected_shift_updates_in_place():
+    module = FRONTEND / "js" / "workflow-context.js"
+    script = """
+      import { readFileSync } from "node:fs";
+      const source = readFileSync(process.argv[1], "utf8");
+      const contextModule = await import(
+        `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
+      );
+      const replaceCalls = [];
+      const assignCalls = [];
+      const makeElement = tagName => {
+        const element = {
+          tagName: tagName.toUpperCase(),
+          className: "",
+          innerHTML: "",
+          textContent: "",
+          attributes: {},
+          children: [],
+          classList: { add() {}, remove() {}, toggle() {} },
+          setAttribute(name, value) { this.attributes[name] = value; },
+          prepend(child) { this.children.unshift(child); },
+          querySelector(selector) {
+            return selector === ".workflow-context"
+              ? this.contextLabel
+              : null;
+          },
+          closest() { return null; }
+        };
+        if (tagName === "nav") {
+          element.contextLabel = makeElement("span");
+        }
+        return element;
+      };
+      const content = makeElement("main");
+      const link = {
+        value: "index.html?shift=2026-10-29",
+        getAttribute() { return this.value.split("?", 1)[0]; },
+        get href() { return this.value; },
+        set href(value) { this.value = value; },
+        classList: { add() {} },
+        closest(selector) {
+          return selector === ".sidebar" ? {} : null;
+        }
+      };
+      const dateInput = {
+        value: "",
+        handlers: {},
+        setAttribute(name, value) { this[name] = value; },
+        addEventListener(name, handler) { this.handlers[name] = handler; }
+      };
+      globalThis.document = {
+        querySelector(selector) {
+          return selector === ".content" ? content : null;
+        },
+        querySelectorAll(selector) {
+          return selector === "a[href]" ? [link] : [];
+        },
+        createElement(tagName) { return makeElement(tagName); }
+      };
+      globalThis.window = {
+        location: {
+          href: "https://noc-web.invalid/investigations.html?shift=2026-10-30",
+          pathname: "/investigations.html",
+          assign(url) { assignCalls.push(url); }
+        },
+        history: {
+          replaceState(state, title, url) {
+            replaceCalls.push(String(url));
+            window.location.href = String(url);
+          }
+        }
+      };
+      const changed = [];
+      const context = contextModule.initializeWorkflow({
+        step: "investigations",
+        dateInput,
+        onDateChange: shift => changed.push(shift)
+      });
+      const bar = content.children[0];
+      const initial = {
+        contextShift: context.shift,
+        dateValue: dateInput.value,
+        barShift: bar.contextLabel.textContent,
+        barLinksContainShift: bar.innerHTML.includes("shift=2026-10-30"),
+        linkHref: link.href
+      };
+      dateInput.value = "2026-10-31";
+      dateInput.handlers.change();
+      const changedState = {
+        replaceCalls,
+        assignCalls,
+        changed,
+        dateValue: dateInput.value,
+        barShift: bar.contextLabel.textContent,
+        linkHref: link.href
+      };
+      console.log(JSON.stringify({ initial, changed: changedState }));
+    """
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script, str(module)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["initial"] == {
+        "contextShift": "2026-10-30",
+        "dateValue": "2026-10-30",
+        "barShift": "Shift 2026-10-30",
+        "barLinksContainShift": True,
+        "linkHref": "index.html?shift=2026-10-30",
+    }
+    assert payload["changed"]["replaceCalls"] == [
+        "https://noc-web.invalid/investigations.html?shift=2026-10-31"
+    ]
+    assert payload["changed"]["assignCalls"] == []
+    assert payload["changed"]["changed"] == ["2026-10-31"]
+    assert payload["changed"]["dateValue"] == "2026-10-31"
+    assert payload["changed"]["barShift"] == "Shift 2026-10-31"
+    assert payload["changed"]["linkHref"] == "index.html?shift=2026-10-31"
+
+
+def test_investigations_date_picker_uses_shared_workflow_change_handler():
+    page = (FRONTEND / "investigations.html").read_text(encoding="utf-8")
+    module_script = MODULE_SCRIPT_PATTERN.findall(page)[0]
+
+    assert 'investigationDate.addEventListener("change"' not in module_script
+    assert "getLocalDateString" not in module_script
+    callback_start = module_script.index("onDateChange: shift => {")
+    callback_end = module_script.index("},", callback_start)
+    callback = module_script[callback_start:callback_end]
+    assert "createShiftInput.value = shift;" in callback
+    assert "resetCreatePreview();" in callback
+    assert "loadInvestigations();" in callback
 
 
 def test_resource_inventory_has_exact_groups_and_urls():

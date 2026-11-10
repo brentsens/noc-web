@@ -94,7 +94,7 @@ export function renderStatePanels(container, states) {
     });
 }
 
-export function initializeWorkflow({ step, dateInput, onInvalid, requireExplicitShift = false }) {
+export function initializeWorkflow({ step, dateInput, onInvalid, onDateChange, requireExplicitShift = false }) {
     const context = getWorkflowContext({ requireExplicitShift });
     const content = document.querySelector(".content");
     const bar = document.createElement("nav");
@@ -120,6 +120,10 @@ export function initializeWorkflow({ step, dateInput, onInvalid, requireExplicit
         return `<a class="workflow-step${active}" href="${workflowLink(file, context.shift)}" ${id === step ? 'aria-current="page"' : ""}>${label}</a>`;
     }).join("");
     bar.innerHTML = `<span class="workflow-context">Shift ${context.shift}</span>${links}${next ? `<a class="workflow-next" href="${workflowLink(next[2], context.shift)}">Next: ${next[1]} →</a>` : ""}<span class="workflow-read-only">Inspection is read-only</span>`;
+    const contextLabel = bar.querySelector(".workflow-context");
+    if (contextLabel) {
+        contextLabel.textContent = `Shift ${context.shift}`;
+    }
     content?.prepend(bar);
     preserveSelectedShiftNavigation(context.shift);
     const workflowFiles = new Set(STEPS.map(([, , file]) => file));
@@ -144,7 +148,19 @@ export function initializeWorkflow({ step, dateInput, onInvalid, requireExplicit
                 });
                 return;
             }
-            window.location.assign(workflowLink(window.location.pathname.split("/").pop(), dateInput.value));
+            const shift = dateInput.value;
+            if (!onDateChange) {
+                window.location.assign(workflowLink(window.location.pathname.split("/").pop(), shift));
+                return;
+            }
+            const url = new URL(window.location.href);
+            url.searchParams.set("shift", shift);
+            window.history.replaceState({}, "", url);
+            if (contextLabel) {
+                contextLabel.textContent = `Shift ${shift}`;
+            }
+            preserveSelectedShiftNavigation(shift);
+            onDateChange(shift);
         });
     }
 

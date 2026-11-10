@@ -609,27 +609,6 @@
             }
         }
 
-        function getLocalDateString() {
-
-            const now =
-                new Date();
-
-            const year =
-                now.getFullYear();
-
-            const month =
-                String(
-                    now.getMonth() + 1
-                ).padStart(2, "0");
-
-            const day =
-                String(
-                    now.getDate()
-                ).padStart(2, "0");
-
-            return `${year}-${month}-${day}`;
-        }
-
         function validationMessage(error) {
             const labels = {
                 name: "Investigation Name",
@@ -946,10 +925,6 @@
             resetCreatePreview();
         });
 
-        investigationDate.addEventListener("change", () => {
-            createShiftInput.value = investigationDate.value;
-            resetCreatePreview();
-        });
         createNameInput.addEventListener("input", resetCreatePreview);
         notebookUrlInput.addEventListener("input", resetCreatePreview);
 
@@ -1186,20 +1161,17 @@
             }
         });
 
-        investigationDate.addEventListener(
-            "change",
-            loadInvestigations
-        );
         investigationView.addEventListener("change", loadInvestigations);
-
-
-        investigationDate.value =
-            getLocalDateString();
 
 
         const workflowContext = initializeWorkflow({
             step: "investigations",
             dateInput: investigationDate,
+            onDateChange: shift => {
+                createShiftInput.value = shift;
+                resetCreatePreview();
+                loadInvestigations();
+            },
             onInvalid: () => renderStatePanel(
                 document.querySelector(".content"),
                 { source: "Investigations", kind: "error", message: "Investigation requests were not made." }
