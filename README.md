@@ -88,7 +88,7 @@ a WSL terminal open after installation.
 - `noc-web.service` systemd user service
 - `~/.local/bin/sesami-noc-launch`
 - Optional noc-tools (`v1.0.1`)
-- Operational CLI integrations (Atlas/Copilot/M365/Datadog remain optional)
+- Operational CLI integrations (Atlas/Copilot/M365 remain optional); Datadog uses a direct read-only API provider
 
 Feature 011 owns the managed runtime, health checks, service, `runtime.json`,
 and controlled environment. Feature 012 owns fresh installation frontends,
@@ -196,10 +196,12 @@ Installation does not require a `~/code/noc-tools` checkout.
 | `SETUP_REQUIRED` | The software, operator sign-in, site access, or configuration needs action. |
 | `UNAVAILABLE` | A command, approved artifact, compatibility check, or bounded probe failed. |
 
-Readiness independently reports Atlas Jira, GitHub Copilot CLI, Microsoft 365,
-Datadog MCP, and noc-tools. Authentication is operator-specific. Credentials,
-tokens, cookies, sessions, and another operator's authentication are never
-bundled or copied by the installer.
+Readiness independently reports Atlas Jira, GitHub Copilot CLI, the Datadog API
+provider, Microsoft 365, and noc-tools. Datadog incident and evidence retrieval
+uses a direct read-only API with a process-environment bearer token; it does not
+require GitHub Copilot CLI or Datadog MCP. Authentication is operator-specific.
+Credentials, tokens, cookies, sessions, and another operator's authentication
+are never bundled or copied by the installer.
 
 Assistant and AI Action inference additionally report the explicitly configured
 provider (`deepseek-api` or `github-copilot-cli`) and its static readiness. No

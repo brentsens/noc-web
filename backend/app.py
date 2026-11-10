@@ -76,6 +76,7 @@ from backend.services.ai_provider import (
     provider_readiness,
     resolve_provider_runtime,
 )
+from backend.services.datadog_provider import datadog_provider_readiness
 from backend.services.copilot_mcp import CopilotProvider
 
 
@@ -146,6 +147,7 @@ def api_health():
         "service": "noc-web",
         "version": "0.1.0",
         "aiProvider": provider_readiness(),
+        "datadogProvider": datadog_provider_readiness(),
     }
 
 app.include_router(

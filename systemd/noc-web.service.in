@@ -12,6 +12,7 @@ Environment=PATH=%h/.local/bin:/home/linuxbrew/.linuxbrew/Homebrew/bin:/usr/loca
 Environment=NOC_WEB_PORT=@PORT@
 Environment=@RUNTIME_CONFIG_ENV@
 EnvironmentFile=-@AI_PROVIDER_ENV_FILE@
+EnvironmentFile=-@DATADOG_PROVIDER_ENV_FILE@
 ExecStart=@PYTHON@ -m scripts.run_service --config @CONFIG_PATH@
 Restart=on-failure
 RestartSec=@RESTART_DELAY@

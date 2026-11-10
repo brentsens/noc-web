@@ -208,3 +208,25 @@ def test_shift_health_ai_provider_section_is_warning_only(tmp_path, monkeypatch)
         check for check in not_configured["checks"] if check["section"] == "AI Provider"
     ]
     assert unconfigured_checks[0]["state"] == "warning"
+
+
+def test_root_health_reports_static_datadog_provider_without_secrets(monkeypatch):
+    sentinel = "test-sentinel-datadog-token"
+    monkeypatch.setenv("NOC_WEB_DATADOG_ACCESS_TOKEN", sentinel)
+    monkeypatch.setenv("NOC_WEB_DATADOG_BASE_URL", "https://api.datadoghq.com")
+
+    response = TestClient(app).get("/api/health")
+
+    assert response.status_code == 200
+    datadog = response.json()["datadogProvider"]
+    assert datadog["provider"] == "datadog-api"
+    assert datadog["configuredProvider"] == "datadog-api"
+    assert datadog["readiness"] == "ready"
+    assert datadog["credentialPresent"] is True
+    assert datadog["baseUrl"] == "https://api.datadoghq.com"
+    assert sentinel not in response.text
+
+    monkeypatch.delenv("NOC_WEB_DATADOG_ACCESS_TOKEN", raising=False)
+    not_configured = TestClient(app).get("/api/health").json()["datadogProvider"]
+    assert not_configured["readiness"] == "notConfigured"
+    assert not_configured["configuredProvider"] is None

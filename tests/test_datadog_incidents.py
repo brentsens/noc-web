@@ -1,5 +1,6 @@
 import json
 import multiprocessing
+import shutil
 import subprocess
 from datetime import datetime, timedelta, timezone
 import threading
@@ -8,6 +9,14 @@ import time
 import pytest
 
 from backend.services import datadog_incidents
+from backend.services.datadog_provider import (
+    DatadogConfiguration,
+    DatadogClient,
+    DatadogProviderTimeout,
+    DatadogProviderUnavailable,
+    DatadogResponse,
+    MAX_RESPONSE_BYTES,
+)
 
 
 NOW = datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc)
@@ -27,70 +36,56 @@ def _incident(identifier="incident-1", **overrides):
     }
 
 
-def _cli_event(event_type, data):
-    return json.dumps({"type": event_type, "data": data})
+def _search_incident(identifier="incident-1", state="ACTIVE", **attributes):
+    values = {
+        "title": f"Incident {identifier}",
+        "state": state,
+        "severity": "SEV-2",
+        "created": "2026-10-30T11:14:00Z",
+        "modified": "2026-10-30T11:20:00Z",
+        "customer_impact_scope": "Customer Platform latency",
+    }
+    values.update(attributes)
+    return {
+        "data": {
+            "id": identifier,
+            "type": "incidents",
+            "attributes": values,
+        }
+    }
 
 
-def _cli_jsonl_response(
-    content,
-    *,
-    include_tool_request=True,
-    include_tool_start=True,
-    include_tool_completion=True,
-    request_server="datadog",
-    request_tool="search_datadog_incidents",
-    start_server="datadog",
-    start_tool="search_datadog_incidents",
-    tool_success=True,
-    completion_call_id="incident-search-call",
-):
-    call_id = "incident-search-call"
-    requests = (
-        [
-            {
-                "toolCallId": call_id,
-                "mcpServerName": request_server,
-                "mcpToolName": request_tool,
+def _search_payload(incidents, *, total=None, next_offset=None):
+    payload = {
+        "data": {
+            "type": "incidents_search_results",
+            "attributes": {
+                "incidents": incidents,
+                "total": len(incidents) if total is None else total,
+            },
+        }
+    }
+    if next_offset is not None:
+        payload["meta"] = {
+            "pagination": {
+                "offset": 0,
+                "size": 100,
+                "next_offset": next_offset,
             }
-        ]
-        if include_tool_request
-        else []
+        }
+    return payload
+
+
+def _direct_client(transport, base_url="https://api.datadoghq.com"):
+    return DatadogClient(
+        DatadogConfiguration(
+            base_url=base_url,
+            timeout_seconds=90,
+            credential_present=True,
+        ),
+        "test-sentinel-datadog-token",
+        transport=transport,
     )
-    events = [
-        _cli_event(
-            "assistant.message",
-            {"content": "Searching current incidents.", "toolRequests": requests},
-        )
-    ]
-    if include_tool_start:
-        events.append(
-            _cli_event(
-                "tool.execution_start",
-                {
-                    "toolCallId": call_id,
-                    "mcpServerName": start_server,
-                    "mcpToolName": start_tool,
-                    "toolName": f"{start_server}-{start_tool}",
-                },
-            )
-        )
-    if include_tool_completion:
-        events.append(
-            _cli_event(
-                "tool.execution_complete",
-                {
-                    "toolCallId": completion_call_id,
-                    "success": tool_success,
-                },
-            )
-        )
-    events.extend(
-        (
-            _cli_event("assistant.message", {"content": content}),
-            json.dumps({"type": "result", "exitCode": 0}),
-        )
-    )
-    return "\n".join(events)
 
 
 def _process_refresh(
@@ -481,136 +476,172 @@ def test_refresh_requests_coalesce_across_processes_sharing_cache(tmp_path):
         assert provider_calls.value == 1
 
 
-@pytest.mark.parametrize(
-    ("failure", "expected_error"),
-    [
-        ("missing", "copilot-unavailable"),
-        ("timeout", "timeout"),
-    ],
-)
-def test_cli_unavailable_and_timeout_keep_first_snapshot_unavailable(
-    tmp_path,
+def test_retrieve_active_incidents_maps_direct_search_without_copilot_or_mcp(
+    fake_datadog_transport,
     monkeypatch,
-    failure,
-    expected_error,
 ):
-    cache_file = tmp_path / "incidents.json"
-    monkeypatch.setattr(
-        datadog_incidents.shutil,
-        "which",
-        lambda name: None if failure == "missing" else "/usr/bin/copilot",
+    fake_datadog_transport.add_json(
+        _search_payload(
+            [
+                _search_incident("incident-active", state="ACTIVE"),
+                _search_incident("incident-stable", state="STABLE"),
+                _search_incident("incident-resolved", state="RESOLVED"),
+            ],
+            total=3,
+        )
     )
-    if failure == "timeout":
-        monkeypatch.setattr(
-            datadog_incidents.subprocess,
-            "run",
-            lambda *args, **kwargs: (_ for _ in ()).throw(
-                subprocess.TimeoutExpired(args[0], kwargs["timeout"])
-            ),
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("Copilot must not be invoked")
+        ),
+    )
+    monkeypatch.setattr(
+        shutil,
+        "which",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("Copilot lookup must not occur")
+        ),
+    )
+
+    result = datadog_incidents.retrieve_active_incidents(
+        client=_direct_client(fake_datadog_transport)
+    )
+
+    assert [item["id"] for item in result["incidents"]] == [
+        "incident-active",
+        "incident-stable",
+    ]
+    assert [item["state"] for item in result["incidents"]] == ["ACTIVE", "STABLE"]
+    assert result["incidents"][0]["url"] == (
+        "https://app.datadoghq.com/incidents/incident-active"
+    )
+    assert fake_datadog_transport.calls[0]["method"] == "GET"
+
+
+def test_retrieve_active_incidents_follows_bounded_pagination(
+    fake_datadog_transport,
+):
+    first_page = [_search_incident(f"incident-{index}") for index in range(50)]
+    second_page = [
+        _search_incident(f"incident-{index}") for index in range(50, 100)
+    ]
+    fake_datadog_transport.add_json(
+        _search_payload(first_page, total=100, next_offset=50)
+    )
+    fake_datadog_transport.add_json(_search_payload(second_page, total=100))
+
+    result = datadog_incidents.retrieve_active_incidents(
+        client=_direct_client(fake_datadog_transport)
+    )
+
+    assert len(result["incidents"]) == 100
+    assert len(fake_datadog_transport.calls) == 2
+
+
+def test_retrieve_active_incidents_rejects_more_than_100(
+    fake_datadog_transport,
+):
+    fake_datadog_transport.add_json(
+        _search_payload([_search_incident()], total=101)
+    )
+
+    with pytest.raises(datadog_incidents.IncidentResponseInvalid):
+        datadog_incidents.retrieve_active_incidents(
+            client=_direct_client(fake_datadog_transport)
         )
 
-    snapshot = datadog_incidents.refresh_incident_cache(cache_file, now=NOW)
+
+def test_retrieve_active_incidents_rejects_duplicate_ids(
+    fake_datadog_transport,
+):
+    fake_datadog_transport.add_json(
+        _search_payload(
+            [_search_incident("duplicate"), _search_incident("duplicate")],
+            total=2,
+        )
+    )
+
+    with pytest.raises(datadog_incidents.IncidentResponseInvalid):
+        datadog_incidents.retrieve_active_incidents(
+            client=_direct_client(fake_datadog_transport)
+        )
+
+
+def test_retrieve_active_incidents_rejects_malformed_search_payload(
+    fake_datadog_transport,
+):
+    fake_datadog_transport.add_json({
+        "data": {"type": "incidents_search_results", "attributes": {"incidents": "bad"}}
+    })
+
+    with pytest.raises(datadog_incidents.IncidentResponseInvalid):
+        datadog_incidents.retrieve_active_incidents(
+            client=_direct_client(fake_datadog_transport)
+        )
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_code"),
+    [
+        (DatadogProviderTimeout("timed out"), "timeout"),
+        (DatadogProviderUnavailable("unavailable"), "provider-unavailable"),
+    ],
+)
+def test_provider_failure_maps_to_existing_codes_and_preserves_cache(
+    tmp_path,
+    fake_datadog_transport,
+    error,
+    expected_code,
+):
+    cache_file = tmp_path / "incidents.json"
+    previous = datadog_incidents.refresh_incident_cache(
+        cache_file,
+        provider=lambda: {"incidents": [_incident()]},
+        now=NOW,
+    )
+    fake_datadog_transport.add_error(error)
+
+    failed = datadog_incidents.refresh_incident_cache(
+        cache_file,
+        provider=lambda: datadog_incidents.retrieve_active_incidents(
+            client=_direct_client(fake_datadog_transport)
+        ),
+        now=NOW + timedelta(seconds=10),
+    )
+
+    assert failed["freshness"] == "stale"
+    assert failed["error"] == expected_code
+    assert failed["incidents"] == previous["incidents"]
+    assert failed["lastSuccessfulAt"] == previous["lastSuccessfulAt"]
+
+
+def test_direct_provider_first_refresh_failure_is_unavailable(
+    tmp_path,
+    fake_datadog_transport,
+):
+    fake_datadog_transport.add_error(
+        DatadogProviderUnavailable("unavailable")
+    )
+
+    snapshot = datadog_incidents.refresh_incident_cache(
+        tmp_path / "incidents.json",
+        provider=lambda: datadog_incidents.retrieve_active_incidents(
+            client=_direct_client(fake_datadog_transport)
+        ),
+        now=NOW,
+    )
 
     assert snapshot["freshness"] == "unavailable"
     assert snapshot["incidents"] == []
-    assert snapshot["lastSuccessfulAt"] is None
-    assert snapshot["error"] == expected_error
+    assert snapshot["count"] is None
+    assert snapshot["error"] == "provider-unavailable"
 
 
-@pytest.mark.parametrize(
-    ("stdout", "returncode", "expected_error", "expected_rule"),
-    [
-        ("PRIVATE_PROVIDER_OUTPUT", 0, "invalid-response", "invalid_json"),
-        (
-            'Here is the JSON: {"incidents":[]} PRIVATE_PROVIDER_OUTPUT',
-            0,
-            "invalid-response",
-            "invalid_json",
-        ),
-        (
-            '```json\n{"incidents":[]}\n```',
-            0,
-            "invalid-response",
-            "invalid_json",
-        ),
-        (
-            '{"incidents":[]} Additional commentary PRIVATE_PROVIDER_OUTPUT',
-            0,
-            "invalid-response",
-            "invalid_json",
-        ),
-        (
-            '{"incidents":[]} {"incidents":[]}',
-            0,
-            "invalid-response",
-            "invalid_json",
-        ),
-        ("[]", 0, "invalid-response", "invalid_envelope_type"),
-        ("private response", 1, "provider-unavailable", None),
-    ],
-)
-def test_cli_malformed_and_downstream_failures_are_redacted(
+def test_oversized_direct_response_preserves_previous_snapshot(
     tmp_path,
-    monkeypatch,
-    caplog,
-    stdout,
-    returncode,
-    expected_error,
-    expected_rule,
-):
-    monkeypatch.setattr(
-        datadog_incidents.shutil,
-        "which",
-        lambda name: "/usr/bin/copilot",
-    )
-    monkeypatch.setattr(
-        datadog_incidents.subprocess,
-        "run",
-        lambda arguments, **options: subprocess.CompletedProcess(
-            arguments,
-            returncode,
-            _cli_jsonl_response(stdout) if returncode == 0 else stdout,
-            "private stderr with credential",
-        ),
-    )
-
-    cache_file = tmp_path / "incidents.json"
-    previous = datadog_incidents.refresh_incident_cache(
-        cache_file,
-        provider=lambda: {"incidents": [_incident()]},
-        now=NOW,
-    )
-    snapshot = datadog_incidents.refresh_incident_cache(
-        cache_file,
-        now=NOW + timedelta(seconds=10),
-    )
-
-    assert snapshot["freshness"] == "stale"
-    assert snapshot["error"] == expected_error
-    assert snapshot["incidents"] == previous["incidents"]
-    assert snapshot["lastSuccessfulAt"] == previous["lastSuccessfulAt"]
-    assert "private" not in caplog.text
-    assert "PRIVATE_PROVIDER_OUTPUT" not in caplog.text
-    assert "credential" not in caplog.text
-    diagnostics = [
-        record.getMessage()
-        for record in caplog.records
-        if record.name == datadog_incidents.__name__
-    ]
-    if expected_rule is None:
-        assert diagnostics == ["Datadog incident refresh failed: code=provider-unavailable"]
-    else:
-        assert diagnostics == [
-            "Datadog incident refresh failed: code=invalid-response "
-            f"provider=github-copilot-cli rule={expected_rule} "
-            "category=envelope providerStatus=invalid"
-        ]
-
-
-def test_invalid_cli_event_stream_preserves_previous_snapshot_and_is_redacted(
-    tmp_path,
-    monkeypatch,
-    caplog,
+    fake_datadog_transport,
 ):
     cache_file = tmp_path / "incidents.json"
     previous = datadog_incidents.refresh_incident_cache(
@@ -618,187 +649,23 @@ def test_invalid_cli_event_stream_preserves_previous_snapshot_and_is_redacted(
         provider=lambda: {"incidents": [_incident()]},
         now=NOW,
     )
-    monkeypatch.setattr(
-        datadog_incidents.shutil,
-        "which",
-        lambda name: "/usr/bin/copilot",
-    )
-    monkeypatch.setattr(
-        datadog_incidents.subprocess,
-        "run",
-        lambda arguments, **options: subprocess.CompletedProcess(
-            arguments,
-            0,
-            "PRIVATE_CLI_OUTPUT",
-            "private stderr with credential",
-        ),
-    )
-
-    failed = datadog_incidents.refresh_incident_cache(
-        cache_file,
-        now=NOW + timedelta(seconds=10),
-    )
-
-    assert failed["freshness"] == "stale"
-    assert failed["error"] == "invalid-response"
-    assert failed["incidents"] == previous["incidents"]
-    assert failed["lastSuccessfulAt"] == previous["lastSuccessfulAt"]
-    assert "PRIVATE_CLI_OUTPUT" not in caplog.text
-    assert "private" not in caplog.text
-    assert "credential" not in caplog.text
-    assert (
-        "provider=github-copilot-cli rule=invalid_cli_event_stream "
-        "category=envelope providerStatus=invalid"
-    ) in caplog.text
-
-
-@pytest.mark.parametrize(
-    "event_options",
-    [
-        {"include_tool_request": False},
-        {"include_tool_start": False},
-        {"include_tool_completion": False},
-        {"tool_success": False},
-        {"request_server": "another-server"},
-        {"request_tool": "get_datadog_incident"},
-        {"start_server": "another-server"},
-        {"completion_call_id": "unmatched-call"},
-    ],
-    ids=[
-        "no-request",
-        "no-start",
-        "no-completion",
-        "failed-completion",
-        "wrong-server",
-        "wrong-tool",
-        "wrong-start-server",
-        "unmatched-completion",
-    ],
-)
-def test_cli_rejects_valid_json_without_successful_incident_search(
-    tmp_path,
-    monkeypatch,
-    caplog,
-    event_options,
-):
-    cache_file = tmp_path / "incidents.json"
-    previous = datadog_incidents.refresh_incident_cache(
-        cache_file,
-        provider=lambda: {"incidents": [_incident()]},
-        now=NOW,
-    )
-    monkeypatch.setattr(
-        datadog_incidents.shutil,
-        "which",
-        lambda name: "/usr/bin/copilot",
-    )
-    monkeypatch.setattr(
-        datadog_incidents.subprocess,
-        "run",
-        lambda arguments, **options: subprocess.CompletedProcess(
-            arguments,
-            0,
-            _cli_jsonl_response(
-                json.dumps({"incidents": [_incident("fabricated")]}),
-                **event_options,
-            ),
-            "",
-        ),
-    )
-
-    failed = datadog_incidents.refresh_incident_cache(
-        cache_file,
-        now=NOW + timedelta(seconds=10),
-    )
-
-    assert failed["freshness"] == "stale"
-    assert failed["error"] == "invalid-response"
-    assert failed["incidents"] == previous["incidents"]
-    assert failed["lastSuccessfulAt"] == previous["lastSuccessfulAt"]
-    assert (
-        "provider=github-copilot-cli rule=incident_search_not_verified "
-        "category=envelope providerStatus=invalid"
-    ) in caplog.text
-
-
-def test_copilot_invocation_is_read_only_scoped_and_uses_shell_false(monkeypatch):
-    monkeypatch.setattr(
-        datadog_incidents.shutil,
-        "which",
-        lambda command: "/usr/bin/copilot" if command == "copilot" else None,
-    )
-    monkeypatch.setenv("COPILOT_ALLOW_ALL", "true")
-    monkeypatch.setenv("GH_TOKEN", "test-token")
-    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
-    monkeypatch.setenv("DATADOG_API_KEY", "test-key")
-    calls = []
-
-    def run(arguments, **options):
-        calls.append((arguments, options))
-        return subprocess.CompletedProcess(
-            arguments,
-            0,
-            "\n".join(
-                (
-                    _cli_event("assistant.message", {"content": "Tool commentary."}),
-                    _cli_jsonl_response(
-                        json.dumps({"incidents": [_incident()]})
-                    ),
-                )
-            ),
-            "",
+    fake_datadog_transport.add_response(
+        DatadogResponse(
+            200,
+            b"{" + b" " * (MAX_RESPONSE_BYTES + 1) + b"}",
+            "application/json",
         )
-
-    monkeypatch.setattr(datadog_incidents.subprocess, "run", run)
-
-    result = datadog_incidents.retrieve_active_incidents()
-
-    assert result == {"incidents": [_incident()]}
-    assert len(calls) == 1
-    arguments, options = calls[0]
-    assert arguments[:4] == [
-        "/usr/bin/copilot",
-        "--trust-folder",
-        "--available-tools",
-        datadog_incidents.DATADOG_MCP_SERVER,
-    ]
-    assert (
-        f"--allow-tool={datadog_incidents.DATADOG_INCIDENT_TOOL}"
-        in arguments
     )
-    assert options["shell"] is False
-    assert not {
-        "COPILOT_ALLOW_ALL",
-        "GH_TOKEN",
-        "GITHUB_TOKEN",
-        "DATADOG_API_KEY",
-    } & options["env"].keys()
-    assert options["timeout"] == datadog_incidents.COPILOT_TIMEOUT_SECONDS
-    assert "--allow-all" not in arguments
-    assert "--allow-all-tools" not in arguments
-    assert "--yolo" not in arguments
-    assert arguments.count(
-        f"--allow-tool={datadog_incidents.DATADOG_INCIDENT_TOOL}"
-    ) == 1
-    assert "state_category:live" in arguments[-1]
-    assert "read-only" in arguments[-1].casefold()
-    assert "consumed directly by a strict JSON parser" in arguments[-1]
-    assert "call the exact tool datadog(search_datadog_incidents)" in arguments[-1]
-    assert "Return exactly one valid JSON object and nothing else" in arguments[-1]
-    assert "Do not use Markdown code fences" in arguments[-1]
-    assert "introductory or trailing prose, tool commentary, citations outside" in arguments[-1]
-    assert "Never add Datadog, MCP, or provider fields" in arguments[-1]
-    assert "The only permitted item keys are" in arguments[-1]
-    assert '"id": required non-empty string' in arguments[-1]
-    assert (
-        'Current states may be represented as "active"/"stable" or "ACTIVE"/"STABLE"'
-        in arguments[-1]
+
+    failed = datadog_incidents.refresh_incident_cache(
+        cache_file,
+        provider=lambda: datadog_incidents.retrieve_active_incidents(
+            client=_direct_client(fake_datadog_transport)
+        ),
+        now=NOW + timedelta(seconds=10),
     )
-    assert "without changing its casing or wording" in arguments[-1]
-    assert 'Exclude "resolved"/"RESOLVED" incidents' in arguments[-1]
-    assert "at most 100 incidents" in arguments[-1]
-    assert "every incident ID must be unique" in arguments[-1]
-    assert '"createdAt"' in arguments[-1]
-    assert '"startedAt"' not in arguments[-1]
-    assert arguments[arguments.index("--output-format") + 1] == "json"
-    assert arguments[arguments.index("--stream") + 1] == "off"
+
+    assert failed["freshness"] == "stale"
+    assert failed["error"] == "invalid-response"
+    assert failed["incidents"] == previous["incidents"]
+    assert failed["lastSuccessfulAt"] == previous["lastSuccessfulAt"]

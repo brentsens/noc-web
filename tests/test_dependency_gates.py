@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 
 from fastapi.testclient import TestClient
@@ -13,6 +14,11 @@ from backend.services import (
     tickets,
 )
 from backend.services.copilot_mcp import CopilotProviderUnavailable
+from backend.services.datadog_provider import (
+    DatadogClient,
+    DatadogConfiguration,
+    DatadogProviderUnavailable,
+)
 
 
 client = TestClient(app)
@@ -142,3 +148,58 @@ def test_missing_noc_tools_returns_safe_unavailable_without_changing_local_recor
 
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "noc-tools-unavailable"
+
+
+def test_datadog_direct_provider_failure_preserves_cache_without_copilot_or_mcp(
+    tmp_path,
+    fake_datadog_transport,
+    monkeypatch,
+):
+    cache_file = tmp_path / "incidents.json"
+    previous = datadog_incidents.refresh_incident_cache(
+        cache_file,
+        provider=lambda: {
+            "incidents": [{
+                "id": "incident-1",
+                "title": "Existing incident",
+                "state": "active",
+            }]
+        },
+    )
+    fake_datadog_transport.add_error(
+        DatadogProviderUnavailable("unavailable")
+    )
+    client = DatadogClient(
+        DatadogConfiguration(
+            base_url="https://api.datadoghq.com",
+            timeout_seconds=90,
+            credential_present=True,
+        ),
+        "test-sentinel-datadog-token",
+        transport=fake_datadog_transport,
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("Copilot must not be invoked")
+        ),
+    )
+    monkeypatch.setattr(
+        shutil,
+        "which",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("MCP/Copilot lookup must not occur")
+        ),
+    )
+
+    refreshed = datadog_incidents.refresh_incident_cache(
+        cache_file,
+        provider=lambda: datadog_incidents.retrieve_active_incidents(
+            client=client
+        ),
+    )
+
+    assert refreshed["freshness"] == "stale"
+    assert refreshed["error"] == "provider-unavailable"
+    assert refreshed["incidents"] == previous["incidents"]

@@ -196,3 +196,26 @@ def test_status_adds_active_local_work_and_excludes_closed_records(
 
     assert result["localWork"]["count"] == 1
     assert result["localWork"]["items"][0]["jiraKey"] == "NOC-100"
+
+
+def test_status_reports_static_datadog_provider_without_secrets(
+    noc_root,
+    monkeypatch,
+):
+    sentinel = "test-sentinel-datadog-token"
+    monkeypatch.setenv("NOC_WEB_DATADOG_ACCESS_TOKEN", sentinel)
+    mock_status_dependencies(
+        monkeypatch,
+        {
+            "available": True,
+            "refreshedAt": None,
+            "freshness": "current",
+        },
+    )
+
+    result = status.get_status(SHIFT_DATE)
+
+    assert result["datadogProvider"]["provider"] == "datadog-api"
+    assert result["datadogProvider"]["readiness"] == "ready"
+    assert result["datadogProvider"]["credentialPresent"] is True
+    assert sentinel not in str(result)

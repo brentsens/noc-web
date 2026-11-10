@@ -187,3 +187,64 @@ def investigation_factory(noc_root):
         return directory
 
     return create
+
+
+class FakeDatadogTransport:
+    """Deterministic transport for offline Datadog provider tests."""
+
+    def __init__(self):
+        self.calls = []
+        self._responses = []
+
+    def add_json(self, payload, *, status=200, content_type="application/json"):
+        import json
+
+        from backend.services.datadog_provider import DatadogResponse
+
+        self._responses.append(
+            DatadogResponse(
+                status=status,
+                body=json.dumps(payload).encode("utf-8"),
+                content_type=content_type,
+            )
+        )
+
+    def add_response(self, response):
+        self._responses.append(response)
+
+    def add_error(self, error):
+        self._responses.append(error)
+
+    def __call__(self, method, url, headers, body, timeout):
+        self.calls.append(
+            {
+                "method": method,
+                "url": url,
+                "headers": dict(headers),
+                "body": body,
+                "timeout": timeout,
+            }
+        )
+        if not self._responses:
+            raise AssertionError("no fake Datadog response queued")
+        response = self._responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return response
+
+
+@pytest.fixture
+def fake_datadog_transport():
+    return FakeDatadogTransport()
+
+
+@pytest.fixture
+def datadog_environment(monkeypatch):
+    token = "test-sentinel-datadog-token"
+    monkeypatch.setenv("NOC_WEB_DATADOG_ACCESS_TOKEN", token)
+    monkeypatch.setenv(
+        "NOC_WEB_DATADOG_BASE_URL",
+        "https://api.datadoghq.com",
+    )
+    monkeypatch.setenv("NOC_WEB_DATADOG_TIMEOUT_SECONDS", "90")
+    return token

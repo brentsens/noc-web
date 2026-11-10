@@ -3,7 +3,7 @@ param([Parameter(Mandatory = $true)][string]$Distribution)
 
 $ErrorActionPreference = 'Stop'
 $ToolIds = @(
-    'external.atlas', 'external.copilot', 'external.datadogMcp',
+    'external.atlas', 'external.copilot', 'external.datadog',
     'external.microsoft365', 'external.nocTools'
 )
 $ToolStates = @('installed', 'setup_required', 'ready', 'unavailable')

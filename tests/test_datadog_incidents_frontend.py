@@ -34,15 +34,23 @@ def test_dashboard_and_investigations_use_one_shared_incident_renderer():
     )
 
 
-def test_backend_retrieval_does_not_add_direct_datadog_api_or_sdk():
+def test_backend_retrieval_uses_direct_provider_without_copilot_or_mcp():
     service = (ROOT / "backend" / "services" / "datadog_incidents.py").read_text(
         encoding="utf-8"
     )
-    assert "datadog(search_datadog_incidents)" in service
+    provider = (ROOT / "backend" / "services" / "datadog_provider.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "build_datadog_client" in service
+    assert "retrieve_active_incidents" in service
+    for forbidden in ("copilot_cli", "search_datadog_incidents", "mcp", "subprocess", "shutil"):
+        assert forbidden not in service.casefold()
     assert "requests." not in service
     assert "httpx." not in service
     assert "@datadog/datadog-api-client" not in service
-    assert "datadoghq.com/api/" not in service
+    assert "state:(active OR stable)" in provider
+    assert "Authorization" in provider
 
 
 def test_incident_handoff_prefills_title_only_and_keeps_confirmation_gates():

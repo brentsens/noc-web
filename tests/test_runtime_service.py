@@ -272,6 +272,9 @@ def test_service_environment_copies_only_the_provider_allowlist(tmp_path):
             "NOC_WEB_DEEPSEEK_MODEL": "deepseek-flash",
             "NOC_WEB_DEEPSEEK_BASE_URL": "https://api.deepseek.com",
             "NOC_WEB_AI_TIMEOUT_SECONDS": "55",
+            "NOC_WEB_DATADOG_ACCESS_TOKEN": "test-sentinel-datadog-token",
+            "NOC_WEB_DATADOG_BASE_URL": "https://api.datadoghq.com",
+            "NOC_WEB_DATADOG_TIMEOUT_SECONDS": "90",
             "COPILOT_TOKEN": "must-not-copy",
             "UNRELATED_SECRET": "must-not-copy",
         },
@@ -281,6 +284,9 @@ def test_service_environment_copies_only_the_provider_allowlist(tmp_path):
     assert environment["NOC_WEB_DEEPSEEK_API_KEY"] == "test-sentinel-deepseek-key"
     assert environment["NOC_WEB_DEEPSEEK_MODEL"] == "deepseek-flash"
     assert environment["NOC_WEB_AI_TIMEOUT_SECONDS"] == "55"
+    assert environment["NOC_WEB_DATADOG_ACCESS_TOKEN"] == "test-sentinel-datadog-token"
+    assert environment["NOC_WEB_DATADOG_BASE_URL"] == "https://api.datadoghq.com"
+    assert environment["NOC_WEB_DATADOG_TIMEOUT_SECONDS"] == "90"
     assert "COPILOT_TOKEN" not in environment
     assert "UNRELATED_SECRET" not in environment
 
@@ -293,5 +299,8 @@ def test_generated_unit_references_the_optional_provider_environment_file(tmp_pa
 
     assert (
         f"EnvironmentFile=-{config_path.parent / 'ai-provider.env'}"
+    ) in unit
+    assert (
+        f"EnvironmentFile=-{config_path.parent / 'datadog-provider.env'}"
     ) in unit
     assert "test-sentinel" not in unit

@@ -54,15 +54,16 @@ substitute another provider.
 |---|---|---|
 | Atlas | Jira discovery/refresh and Jira create actions are unavailable; cached/local ticket work remains available. | Use the organization's approved Atlas CLI installation and authentication procedure. |
 | GitHub Copilot CLI | When `github-copilot-cli` is the configured Assistant provider, Assistant and AI Actions are unavailable; non-AI workflows continue. A `deepseek-api` deployment does not require this capability. | Use GitHub's official Copilot CLI installation and sign-in instructions. |
-| Datadog MCP | Live incident refresh and Datadog-backed investigation generation are unavailable; the previous valid incident cache remains governed by Feature 009. | Configure the Datadog MCP server through the approved Copilot MCP setup. |
+| Datadog API | Live incident refresh and Datadog evidence retrieval are unavailable; the preserved incident cache contract remains in effect. | Supply a scoped read-only bearer token through the process environment as described below. |
 | Microsoft 365 CLI | Email preview/send are unavailable; local handover generation and preview continue. | Use the official Microsoft 365 CLI installation and authentication instructions. |
 | noc-tools | Only workflows using a missing or incompatible command are unavailable; native local NOC Web workflows continue. | Use the organization's approved noc-tools release and compatibility procedure. |
 
 The Workstation Readiness page reports each capability separately as `READY`,
 `SETUP REQUIRED`, or `UNAVAILABLE`. It does not show credentials, tokens,
-configuration contents, or raw subprocess output. Copilot authentication and
-Datadog MCP configuration remain explicitly unverified when a safe check
-cannot establish them. Use **Recheck** after completing dependency setup.
+configuration contents, or raw subprocess output. Datadog API readiness checks
+configuration and token presence only; it never calls Datadog and never asserts
+that the token was accepted or that Datadog is reachable. Use **Recheck** after
+completing dependency setup.
 
 ## AI inference provider
 
@@ -107,6 +108,42 @@ configuration and required-material presence only. It never makes a provider
 request and does not assert that credentials were accepted or that the provider
 is reachable. Provider readiness is warning-only in shift health so it cannot
 block End Shift or handover workflows.
+
+## Datadog evidence provider
+
+Live incident retrieval and on-demand incident, notebook, and monitor evidence
+use a direct read-only Datadog API provider. This path does not require,
+invoke, or depend on GitHub Copilot CLI or Datadog MCP. The provider issues only
+allowlisted retrieval operations; it cannot create, update, acknowledge, mute,
+resolve, delete, or otherwise modify Datadog resources.
+
+| Variable | Required | Default | Secret |
+|---|---|---|---|
+| `NOC_WEB_DATADOG_ACCESS_TOKEN` | For Datadog retrieval | none | Yes |
+| `NOC_WEB_DATADOG_BASE_URL` | No | `https://api.datadoghq.com` | No |
+| `NOC_WEB_DATADOG_TIMEOUT_SECONDS` | No | `90` | No |
+
+The token must be scoped externally to read-only Datadog access. It is read only
+from the process environment, sent only as a bearer header to the configured
+Datadog API base, and never returned, logged, cached, reported, or persisted.
+`NOC_WEB_DATADOG_BASE_URL` is HTTPS-only and must point at a Datadog API host.
+Changing any setting requires a service restart.
+
+For the managed systemd user service, place Datadog settings in
+`${XDG_CONFIG_HOME:-$HOME/.config}/noc-web/datadog-provider.env`. The generated
+unit loads that optional file with `EnvironmentFile=-`. The file is
+operator-managed, lives outside NOC Web operational data, and must be mode
+`0600`. Never commit it and never put the token in `runtime.json`, the unit
+file, or application logs.
+
+```bash
+install -m 600 /dev/null ~/.config/noc-web/datadog-provider.env
+cat > ~/.config/noc-web/datadog-provider.env <<'EOF'
+NOC_WEB_DATADOG_ACCESS_TOKEN=<secret>
+NOC_WEB_DATADOG_BASE_URL=https://api.datadoghq.com
+NOC_WEB_DATADOG_TIMEOUT_SECONDS=90
+EOF
+```
 
 ## Service management
 

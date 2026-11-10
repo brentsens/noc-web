@@ -66,7 +66,7 @@ def test_external_capabilities_are_reported_independently_and_redacted(
         "external.aiProvider",
         "external.atlas",
         "external.copilot",
-        "external.datadogMcp",
+        "external.datadog",
         "external.microsoft365",
         "external.nocTools",
     }
@@ -75,7 +75,8 @@ def test_external_capabilities_are_reported_independently_and_redacted(
     assert by_id["external.nocTools"]["status"] == "ready"
     assert by_id["external.nocTools"]["installationStatus"] == "ready"
     assert by_id["external.copilot"]["status"] == "ready"
-    assert by_id["external.datadogMcp"]["status"] == "setup_required"
+    assert by_id["external.datadog"]["status"] == "setup_required"
+    assert by_id["external.datadog"]["providerReadiness"] == "notConfigured"
     assert by_id["external.microsoft365"]["status"] == "ready"
     assert secret not in str(results)
     assert all(call[1]["shell"] is False for call in calls)
@@ -86,7 +87,6 @@ def test_external_capabilities_are_reported_independently_and_redacted(
             subprocess.PIPE
             if (
                 call[0][0].endswith(("/noc-inv", "/atlas"))
-                or call[0][1:] == ["mcp", "list"]
             )
             else subprocess.DEVNULL
         )
@@ -94,11 +94,13 @@ def test_external_capabilities_are_reported_independently_and_redacted(
     )
     assert all(call[1]["stderr"] is subprocess.DEVNULL for call in calls)
     assert all(call[1]["timeout"] == 2 for call in calls)
+    assert all(call[0][1:] != ["mcp", "list"] for call in calls)
 
 
 def test_optional_capabilities_report_ready_independently(tmp_path, monkeypatch):
     monkeypatch.delenv("NOC_WEB_AI_PROVIDER", raising=False)
     monkeypatch.delenv("NOC_WEB_DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setenv("NOC_WEB_DATADOG_ACCESS_TOKEN", "test-sentinel-datadog-token")
     noc_bin = tmp_path / "bin"
     noc_bin.mkdir()
     for command in (
@@ -115,7 +117,6 @@ def test_optional_capabilities_report_ready_independently(tmp_path, monkeypatch)
             stdout = (
                 _atlas_status() if arguments[0].endswith("/atlas")
                 else "noc-inv-contract=1" if arguments[0].endswith("/noc-inv")
-                else "datadog production" if arguments[1:] == ["mcp", "list"]
                 else ""
             )
 
@@ -129,7 +130,7 @@ def test_optional_capabilities_report_ready_independently(tmp_path, monkeypatch)
         "external.aiProvider": "notConfigured",
         "external.atlas": "ready",
         "external.copilot": "ready",
-        "external.datadogMcp": "ready",
+        "external.datadog": "ready",
         "external.microsoft365": "ready",
         "external.nocTools": "ready",
     }
@@ -152,7 +153,7 @@ def test_optional_capabilities_classify_auth_setup_and_command_failure(
         class Result:
             returncode = 1 if (
                 (
-                    arguments[1:] in (["auth", "status"], ["mcp", "list"], ["status"])
+                    arguments[1:] in (["auth", "status"], ["status"])
                     and not arguments[0].endswith("/atlas")
                 )
                 or arguments[0].endswith("/tix")
@@ -168,7 +169,7 @@ def test_optional_capabilities_classify_auth_setup_and_command_failure(
 
     assert by_id["external.atlas"] == "ready"
     assert by_id["external.copilot"] == "setup_required"
-    assert by_id["external.datadogMcp"] == "setup_required"
+    assert by_id["external.datadog"] == "setup_required"
     assert by_id["external.microsoft365"] == "setup_required"
     assert by_id["external.nocTools"] == "unavailable"
 

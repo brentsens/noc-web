@@ -53,6 +53,8 @@ def test_bootstrap_status_uses_redacted_feature011_readiness_results():
 
     assert "assess_external_capabilities" in status
     assert "TOOL_STATUS=$toolId=$state" in status
+    assert "external.datadog" in status
+    assert "external.datadogMcp" not in status
     assert "$ToolStates = @('installed', 'setup_required', 'ready', 'unavailable')" in status
     assert "ConvertFrom-Json" in status
     assert "2>$null" in status

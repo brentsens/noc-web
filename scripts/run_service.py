@@ -25,6 +25,9 @@ PROVIDER_ENVIRONMENT_ALLOWLIST = (
     "NOC_WEB_DEEPSEEK_MODEL",
     "NOC_WEB_DEEPSEEK_BASE_URL",
     "NOC_WEB_AI_TIMEOUT_SECONDS",
+    "NOC_WEB_DATADOG_ACCESS_TOKEN",
+    "NOC_WEB_DATADOG_BASE_URL",
+    "NOC_WEB_DATADOG_TIMEOUT_SECONDS",
 )
 
 
@@ -58,6 +61,7 @@ def render_systemd_unit(
         ),
         "@CONFIG_PATH@": _systemd_command_argument(str(config_path)),
         "@AI_PROVIDER_ENV_FILE@": str(config_path.parent / "ai-provider.env"),
+        "@DATADOG_PROVIDER_ENV_FILE@": str(config_path.parent / "datadog-provider.env"),
         "@XDG_CONFIG_HOME_ENV@": _systemd_environment_assignment(
             "XDG_CONFIG_HOME", str(config_path.parent.parent)
         ),

@@ -115,3 +115,20 @@ def test_provider_configuration_absence_does_not_block_non_assistant_workflows(
     })
     assert assistant.status_code == 503
     assert assistant.json()["detail"]["code"] == "assistant-provider-not-configured"
+
+
+def test_health_reports_static_datadog_provider_without_secrets(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from backend.app import app
+
+    sentinel = "test-sentinel-datadog-token"
+    monkeypatch.setenv("NOC_WEB_DATADOG_ACCESS_TOKEN", sentinel)
+    response = TestClient(app).get("/api/health")
+
+    assert response.status_code == 200
+    provider = response.json()["datadogProvider"]
+    assert provider["provider"] == "datadog-api"
+    assert provider["readiness"] == "ready"
+    assert provider["credentialPresent"] is True
+    assert sentinel not in response.text

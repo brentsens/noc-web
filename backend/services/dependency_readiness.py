@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from backend.services.ai_provider import provider_readiness
+from backend.services.datadog_provider import datadog_provider_readiness
 
 
 _NOC_TOOL_PROBES = (
@@ -101,28 +102,6 @@ def _probe_state(
     if result.returncode != 0:
         return "setup_required"
     return "ready"
-
-
-def _configured_mcp_state(
-    executable: str,
-    timeout_seconds: int,
-    name: str,
-) -> tuple[str, bool]:
-    try:
-        result = subprocess.run(
-            [executable, "mcp", "list"],
-            shell=False,
-            timeout=timeout_seconds,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            check=False,
-            text=True,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return "unavailable", False
-    if result.returncode != 0:
-        return "setup_required", False
-    return "ready", name.casefold() in result.stdout.casefold()
 
 
 def _atlas_auth_status(executable: str, timeout_seconds: int) -> str:
@@ -269,44 +248,27 @@ def assess_external_capabilities(
         copilot_installation_status,
     ))
 
-    if copilot is None:
-        datadog_status = "setup_required"
-        datadog_impact = "Datadog MCP workflows require GitHub Copilot CLI."
-        datadog_action = "Install Copilot CLI and configure Datadog MCP using approved setup, then Recheck."
-    else:
-        datadog_probe, datadog_configured = _configured_mcp_state(
-            copilot, timeout_seconds, "datadog"
-        )
-        if datadog_probe == "unavailable":
-            datadog_status = "unavailable"
-            datadog_impact = "Datadog MCP configuration could not be checked."
-            datadog_action = "Check GitHub Copilot CLI availability, then Recheck."
-            datadog_installation_status = "unavailable"
-        elif datadog_probe == "setup_required":
-            datadog_status = "setup_required"
-            datadog_impact = "Datadog MCP configuration or Copilot authentication needs setup."
-            datadog_action = "Authenticate Copilot and configure Datadog MCP using approved setup, then Recheck."
-            datadog_installation_status = "setup_required"
-        elif datadog_configured:
-            datadog_status = "ready"
-            datadog_impact = "The Datadog MCP server is configured in GitHub Copilot CLI."
-            datadog_action = "No action required."
-            datadog_installation_status = "ready"
-        else:
-            datadog_status = "setup_required"
-            datadog_impact = "Datadog MCP is not configured in GitHub Copilot CLI."
-            datadog_action = "Configure Datadog MCP using approved setup, then Recheck."
-            datadog_installation_status = "setup_required"
-    if copilot is None:
-        datadog_installation_status = "setup_required"
-    results.append(_result(
-        "external.datadogMcp",
-        "Datadog MCP",
+    datadog_provider = datadog_provider_readiness()
+    datadog_status = {
+        "ready": "ready",
+        "notReady": "setup_required",
+        "notConfigured": "setup_required",
+    }[datadog_provider["readiness"]]
+    datadog = _result(
+        "external.datadog",
+        "Datadog API evidence retrieval",
         datadog_status,
-        datadog_impact,
-        datadog_action,
-        datadog_installation_status,
-    ))
+        datadog_provider["impact"],
+        datadog_provider["correctiveAction"],
+        datadog_status,
+    )
+    datadog.update({
+        "providerReadiness": datadog_provider["readiness"],
+        "configuredProvider": datadog_provider["configuredProvider"],
+        "baseUrl": datadog_provider["baseUrl"],
+        "credentialPresent": datadog_provider["credentialPresent"],
+    })
+    results.append(datadog)
 
     m365 = _executable("m365", noc_bin)
     if m365 is None:
