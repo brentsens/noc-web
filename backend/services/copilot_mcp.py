@@ -1,4 +1,8 @@
-"""The sole, bounded provider boundary for assistant mediation."""
+"""The sole, bounded provider-neutral boundary for assistant mediation.
+
+The legacy ``Copilot*`` class names are retained for compatibility; the same
+taxonomy is used by every provider, including the DeepSeek API adapter.
+"""
 
 from __future__ import annotations
 
@@ -31,7 +35,13 @@ class CopilotProviderInvalid(CopilotProviderUnavailable):
 
     provider_status = "invalid"
 
+
+ProviderUnavailable = CopilotProviderUnavailable
+ProviderTimeout = CopilotProviderTimeout
+ProviderInvalid = CopilotProviderInvalid
+
 CopilotProvider = Callable[[dict[str, Any]], dict[str, Any]]
+AssistantProvider = CopilotProvider
 
 
 class CopilotMcpAdapter:
@@ -101,9 +111,20 @@ def ask_copilot(
     envelope: dict[str, Any],
     provider: CopilotProvider | None = None,
 ) -> dict[str, Any]:
-    """Use the injected provider or the default local Copilot CLI adapter."""
+    """Use the injected provider or the explicitly configured environment provider."""
     if provider is None:
-        from backend.services.copilot_cli import answer_with_copilot_cli
+        from backend.services.ai_provider import resolve_provider_runtime
 
-        provider = answer_with_copilot_cli
-    return CopilotMcpAdapter(provider).ask(envelope)
+        runtime = resolve_provider_runtime()
+        if runtime.provider is None:
+            raise CopilotProviderUnavailable(
+                "The assistant provider is not configured or is not ready.",
+                provider_invoked=False,
+            )
+        provider = runtime.provider
+    from backend.services.ai_provider import provider_timeout_seconds
+
+    return CopilotMcpAdapter(
+        provider,
+        timeout_seconds=provider_timeout_seconds(),
+    ).ask(envelope)

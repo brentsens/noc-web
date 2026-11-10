@@ -86,7 +86,7 @@
             </span>
             <div class="assistant-disclosure">
               NOC Web does not persist or log your prompt, supplied context, response, or derived assistant context.
-              GitHub Copilot CLI or another configured inference provider may apply its own handling or retention; NOC Web cannot claim it is absent.
+              <span id="assistant-provider-disclosure">The configured inference provider could not be verified; requests remain fail-closed.</span>
             </div>
             <label class="assistant-provider-acknowledgement">
               <input id="provider-disclosure" type="checkbox">
@@ -112,7 +112,13 @@
     </main>
   </div>
   <script type="module">
-    import { askAssistant, requestErrorMessage } from "./js/api.js";
+    import {
+      askAssistant,
+      assistantProviderDisclosure,
+      assistantProviderLabel,
+      getProviderHealth,
+      requestErrorMessage
+    } from "./js/api.js";
     import { initializeWorkflow, renderStatePanel } from "./js/workflow-context.js";
 
     const form = document.querySelector("#assistant-form");
@@ -123,6 +129,12 @@
     const state = document.querySelector("#assistant-state");
     const shiftInput = document.querySelector("#assistant-shift");
     const shiftGuidance = document.querySelector("#assistant-shift-guidance");
+    const disclosure = document.querySelector("#assistant-provider-disclosure");
+    getProviderHealth()
+      .then(health => {
+        disclosure.textContent = assistantProviderDisclosure(health.aiProvider);
+      })
+      .catch(() => {});
     const context = initializeWorkflow({
       step: "assistant",
       dateInput: shiftInput,
@@ -176,7 +188,7 @@
         "not-invoked": "NOT INVOKED"
       };
       const details = [
-        ["AI ENGINE", "GitHub Copilot CLI", "assistant-provider-engine"],
+        ["AI ENGINE", assistantProviderLabel(response.provider), "assistant-provider-engine"],
         ["PROVIDER INVOKED", response.providerInvoked ? "YES" : "NO", "assistant-provider-invoked"],
         ["PROVIDER STATUS", statuses[response.providerStatus], `assistant-provider-status status-${response.providerStatus}`]
       ];
@@ -208,7 +220,7 @@
         const emptyResult = document.createElement("p");
         emptyResult.className = "assistant-empty-ai-result";
         emptyResult.textContent =
-          "Copilot CLI completed successfully but returned no AI-generated observations or recommendations.";
+          "The configured provider completed successfully but returned no AI-generated observations or recommendations.";
         result.append(emptyResult);
       }
       renderItems("Source-grounded facts", response.facts);

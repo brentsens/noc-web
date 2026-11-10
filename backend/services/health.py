@@ -4,13 +4,13 @@ import shutil
 import subprocess
 
 from backend.config import NOC_ROOT
+from backend.services.ai_provider import provider_readiness
 
 
 TOOLS = (
     "bash",
     "jq",
     "atlas",
-    "copilot",
     "tix",
     "noc-start",
     "noc-status",
@@ -305,28 +305,22 @@ def get_health(shift_date: str) -> dict:
             "Atlas unavailable",
         )
 
-    # Copilot
-    if shutil.which("copilot"):
-        add_check(
-            "Copilot",
-            "pass",
-            "Copilot executable available",
-        )
-
-        add_check(
-            "Copilot",
-            "warning",
-            (
-                "Copilot/Datadog MCP network "
-                "call intentionally not executed"
-            ),
-        )
-    else:
-        add_check(
-            "Copilot",
-            "fail",
-            "Copilot unavailable",
-        )
+    # AI Provider
+    provider = provider_readiness()
+    provider_state = {
+        "ready": "pass",
+        "notConfigured": "warning",
+        "notReady": "warning",
+    }[provider["readiness"]]
+    provider_identity = provider["label"] or "not configured"
+    add_check(
+        "AI Provider",
+        provider_state,
+        (
+            f"{provider_identity}: {provider['readiness']}. "
+            f"{provider['impact']} {provider['correctiveAction']}"
+        ),
+    )
 
     # Operational Safety
     for command in SCRIPTS:

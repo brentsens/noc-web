@@ -272,3 +272,55 @@ def test_invalid_cli_json_logs_only_redacted_diagnostics(
     assert f"json_error={expected_json_error}" in message
     assert f"returned_json_type={returned_type}" in message
     assert "private" not in message
+
+
+def test_provider_runtime_selects_copilot_only_when_explicitly_configured(monkeypatch):
+    from backend.services import ai_provider
+
+    monkeypatch.setattr(
+        ai_provider.shutil,
+        "which",
+        lambda command: "/usr/bin/copilot",
+    )
+    selected = ai_provider.resolve_provider_runtime({
+        "NOC_WEB_AI_PROVIDER": "github-copilot-cli",
+    })
+    assert selected.identifier == "github-copilot-cli"
+    assert selected.provider is copilot_cli.answer_with_copilot_cli
+
+    monkeypatch.setattr(ai_provider.shutil, "which", lambda command: None)
+    absent = ai_provider.resolve_provider_runtime({
+        "NOC_WEB_AI_PROVIDER": "github-copilot-cli",
+    })
+    assert absent.identifier == "github-copilot-cli"
+    assert absent.provider is None
+
+    deepseek = ai_provider.resolve_provider_runtime({
+        "NOC_WEB_AI_PROVIDER": "deepseek-api",
+        "NOC_WEB_DEEPSEEK_API_KEY": "test-sentinel-deepseek-key",
+    })
+    assert deepseek.identifier == "deepseek-api"
+    assert deepseek.provider is not None
+    assert deepseek.provider is not copilot_cli.answer_with_copilot_cli
+
+
+def test_ask_copilot_uses_the_configured_mediation_timeout(monkeypatch):
+    from backend.services import copilot_mcp
+
+    monkeypatch.setenv("NOC_WEB_AI_TIMEOUT_SECONDS", "23")
+    captured = {}
+
+    class _CapturingAdapter:
+        def __init__(self, provider, timeout_seconds=60):
+            captured["timeout_seconds"] = timeout_seconds
+
+        def ask(self, envelope):
+            return {"aiObservations": [], "recommendations": []}
+
+    monkeypatch.setattr(copilot_mcp, "CopilotMcpAdapter", _CapturingAdapter)
+
+    assert copilot_mcp.ask_copilot({}, provider=lambda envelope: {}) == {
+        "aiObservations": [],
+        "recommendations": [],
+    }
+    assert captured["timeout_seconds"] == 23

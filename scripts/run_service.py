@@ -19,6 +19,13 @@ START_LIMIT_INTERVAL_SECONDS = 60
 START_LIMIT_BURST = 5
 RESTART_DELAY_SECONDS = 5
 TRUSTED_LINUXBREW_BIN = Path("/home/linuxbrew/.linuxbrew/Homebrew/bin")
+PROVIDER_ENVIRONMENT_ALLOWLIST = (
+    "NOC_WEB_AI_PROVIDER",
+    "NOC_WEB_DEEPSEEK_API_KEY",
+    "NOC_WEB_DEEPSEEK_MODEL",
+    "NOC_WEB_DEEPSEEK_BASE_URL",
+    "NOC_WEB_AI_TIMEOUT_SECONDS",
+)
 
 
 class PortConflictError(RuntimeError):
@@ -50,6 +57,7 @@ def render_systemd_unit(
             str(configuration.virtual_environment / "bin" / "python")
         ),
         "@CONFIG_PATH@": _systemd_command_argument(str(config_path)),
+        "@AI_PROVIDER_ENV_FILE@": str(config_path.parent / "ai-provider.env"),
         "@XDG_CONFIG_HOME_ENV@": _systemd_environment_assignment(
             "XDG_CONFIG_HOME", str(config_path.parent.parent)
         ),
@@ -73,7 +81,8 @@ def build_service_environment(
     config_path: Path | None = None,
     inherited: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    del inherited
+    if inherited is None:
+        inherited = os.environ
     home = Path.home() if home is None else Path(home)
     config_path = runtime_configuration_path() if config_path is None else Path(config_path)
     environment = {
@@ -93,6 +102,10 @@ def build_service_environment(
         "PYTHONUNBUFFERED": "1",
     }
     environment.update(dict(configuration.feature005_settings))
+    for name in PROVIDER_ENVIRONMENT_ALLOWLIST:
+        value = inherited.get(name)
+        if value:
+            environment[name] = value
     return environment
 
 

@@ -53,7 +53,7 @@ substitute another provider.
 | Capability | When unavailable | Setup ownership |
 |---|---|---|
 | Atlas | Jira discovery/refresh and Jira create actions are unavailable; cached/local ticket work remains available. | Use the organization's approved Atlas CLI installation and authentication procedure. |
-| GitHub Copilot CLI | Assistant and AI Actions are unavailable; non-AI workflows continue. | Use GitHub's official Copilot CLI installation and sign-in instructions. |
+| GitHub Copilot CLI | When `github-copilot-cli` is the configured Assistant provider, Assistant and AI Actions are unavailable; non-AI workflows continue. A `deepseek-api` deployment does not require this capability. | Use GitHub's official Copilot CLI installation and sign-in instructions. |
 | Datadog MCP | Live incident refresh and Datadog-backed investigation generation are unavailable; the previous valid incident cache remains governed by Feature 009. | Configure the Datadog MCP server through the approved Copilot MCP setup. |
 | Microsoft 365 CLI | Email preview/send are unavailable; local handover generation and preview continue. | Use the official Microsoft 365 CLI installation and authentication instructions. |
 | noc-tools | Only workflows using a missing or incompatible command are unavailable; native local NOC Web workflows continue. | Use the organization's approved noc-tools release and compatibility procedure. |
@@ -63,6 +63,50 @@ The Workstation Readiness page reports each capability separately as `READY`,
 configuration contents, or raw subprocess output. Copilot authentication and
 Datadog MCP configuration remain explicitly unverified when a safe check
 cannot establish them. Use **Recheck** after completing dependency setup.
+
+## AI inference provider
+
+Assistant and AI Action inference use exactly one explicitly configured provider.
+No provider is selected by default; an unconfigured deployment still starts and
+keeps every non-Assistant workflow available. Provider settings are read from the
+process environment at application start, and changing them requires a service
+restart.
+
+| Variable | Required | Default | Secret |
+|---|---|---|---|
+| `NOC_WEB_AI_PROVIDER` | For Assistant/AI Actions | unset (`notConfigured`) | No |
+| `NOC_WEB_DEEPSEEK_API_KEY` | When `deepseek-api` is selected | none | Yes |
+| `NOC_WEB_DEEPSEEK_MODEL` | No | `deepseek-flash` | No |
+| `NOC_WEB_DEEPSEEK_BASE_URL` | No | `https://api.deepseek.com` | No |
+| `NOC_WEB_AI_TIMEOUT_SECONDS` | No | `55` | No |
+
+`NOC_WEB_AI_PROVIDER` must be exactly `deepseek-api` or `github-copilot-cli`.
+Selecting `deepseek-api` does not require the GitHub Copilot CLI to be installed
+or authenticated. Selecting `github-copilot-cli` preserves the existing
+authenticated-session behavior. There is no automatic fallback between
+providers.
+
+For the managed systemd user service, place provider settings in
+`${XDG_CONFIG_HOME:-$HOME/.config}/noc-web/ai-provider.env`. The generated unit
+loads that file with `EnvironmentFile=-`, so it is optional. The file is
+operator-managed, lives outside NOC Web operational data, and must be mode
+`0600` when it contains a credential. Never commit it and never put the key in
+`runtime.json`, the unit file, or application logs.
+
+```bash
+install -m 600 /dev/null ~/.config/noc-web/ai-provider.env
+cat > ~/.config/noc-web/ai-provider.env <<'EOF'
+NOC_WEB_AI_PROVIDER=deepseek-api
+NOC_WEB_DEEPSEEK_API_KEY=<secret>
+NOC_WEB_DEEPSEEK_MODEL=deepseek-flash
+EOF
+```
+
+Readiness reports `READY`, `SETUP REQUIRED`, or `NOT CONFIGURED` from static
+configuration and required-material presence only. It never makes a provider
+request and does not assert that credentials were accepted or that the provider
+is reachable. Provider readiness is warning-only in shift health so it cannot
+block End Shift or handover workflows.
 
 ## Service management
 

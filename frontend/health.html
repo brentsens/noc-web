@@ -307,10 +307,10 @@
                     <article class="panel">
 
                         <div class="panel-header">
-                            <h2>Copilot</h2>
+                            <h2>AI Provider</h2>
                         </div>
 
-                        <div id="health-copilot">
+                        <div id="health-ai-provider">
                             Loading...
                         </div>
 
@@ -400,9 +400,9 @@
                 "#health-atlas"
             );
 
-        const copilot =
+        const aiProvider =
             document.querySelector(
-                "#health-copilot"
+                "#health-ai-provider"
             );
 
         const safety =
@@ -633,10 +633,10 @@
                         "Atlas / Jira"
                     );
 
-                const copilotChecks =
+                const aiProviderChecks =
                     sectionChecks(
                         health.checks,
-                        "Copilot"
+                        "AI Provider"
                     );
 
                 const safetyChecks =
@@ -672,8 +672,8 @@
                 );
 
                 renderChecks(
-                    copilot,
-                    copilotChecks
+                    aiProvider,
+                    aiProviderChecks
                 );
 
                 renderChecks(

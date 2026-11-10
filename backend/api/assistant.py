@@ -9,10 +9,41 @@ from backend.services.assistant import (
     validate_shift_date,
 )
 from backend.services import ai_reports
+from backend.services.ai_provider import provider_readiness
 from backend.services.assistant_actions import AI_ACTIONS
 
 
 router = APIRouter(prefix="/api/shifts", tags=["assistant"])
+
+
+def _provider_state(runtime: Request) -> tuple[object, str]:
+    provider = getattr(runtime.app.state, "assistant_provider", None)
+    identifier = getattr(runtime.app.state, "assistant_provider_identifier", None)
+    if identifier is None:
+        readiness = provider_readiness()
+        code = (
+            "assistant-provider-not-configured"
+            if readiness.get("readiness") == "notConfigured"
+            else "assistant-provider-not-ready"
+        )
+        message = (
+            "The assistant provider is not configured."
+            if code == "assistant-provider-not-configured"
+            else "The assistant provider is not ready."
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={"code": code, "message": message},
+        )
+    if provider is None or not callable(provider):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "assistant-provider-not-ready",
+                "message": "The assistant provider is not ready.",
+            },
+        )
+    return provider, identifier
 
 
 class AssistantQuestionRequest(BaseModel):
@@ -52,9 +83,17 @@ def run_assistant_action(
         action.question,
         request.providerDisclosureAcknowledged,
     )
-    provider = getattr(runtime.app.state, "assistant_provider", None)
-    response = answer(question) if provider is None else answer(question, provider=provider)
-    if not validate_assistant_response(response, validated_shift):
+    provider, provider_identifier = _provider_state(runtime)
+    response = answer(
+        question,
+        provider=provider,
+        provider_identifier=provider_identifier,
+    )
+    if not validate_assistant_response(
+        response,
+        validated_shift,
+        expected_provider=provider_identifier,
+    ):
         raise HTTPException(
             status_code=502,
             detail="Assistant response was invalid; no report was saved.",
@@ -110,9 +149,17 @@ def ask_assistant(
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
-    provider = getattr(runtime.app.state, "assistant_provider", None)
-    response = answer(question) if provider is None else answer(question, provider=provider)
-    if not validate_assistant_response(response, validated_shift):
+    provider, provider_identifier = _provider_state(runtime)
+    response = answer(
+        question,
+        provider=provider,
+        provider_identifier=provider_identifier,
+    )
+    if not validate_assistant_response(
+        response,
+        validated_shift,
+        expected_provider=provider_identifier,
+    ):
         raise HTTPException(
             status_code=502,
             detail="Assistant response was invalid.",

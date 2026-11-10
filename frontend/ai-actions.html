@@ -240,7 +240,7 @@
 
                         <div class="assistant-disclosure">
                             NOC Web does not persist or log your prompt, supplied context, raw provider output, or unrestricted response. For these four predefined AI Actions, NOC Web saves only the validated, normalized advisory result as a human-reviewable report in the selected shift's reports directory.
-                            GitHub Copilot CLI or another configured inference provider may apply its own handling or retention; NOC Web cannot claim it is absent.
+                            <span id="ai-action-provider-notice">The configured inference provider could not be verified; requests remain fail-closed.</span>
                         </div>
 
                         <label class="assistant-provider-acknowledgement">
@@ -406,7 +406,7 @@
                         </strong>
 
                         <p>
-                            AI reports are advisory. Copilot does not modify
+                            AI reports are advisory. The configured provider does not modify
                             tickets, shift notes, investigations, handovers,
                             Datadog, or Microsoft 365 from this workflow.
                         </p>
@@ -468,9 +468,12 @@
     <script type="module">
 
         import {
+            assistantProviderDisclosure,
+            assistantProviderLabel,
             getAiReport,
             getAiReports,
             getDashboard,
+            getProviderHealth,
             getShiftNotes,
             getTickets,
             runAssistantAction as requestAssistantAction,
@@ -542,6 +545,18 @@
             document.querySelector(
                 "#ai-action-provider-disclosure"
             );
+
+        const actionProviderNotice =
+            document.querySelector(
+                "#ai-action-provider-notice"
+            );
+
+        getProviderHealth()
+            .then(health => {
+                actionProviderNotice.textContent =
+                    assistantProviderDisclosure(health.aiProvider);
+            })
+            .catch(() => {});
 
         const actionResult =
             document.querySelector(
@@ -691,7 +706,8 @@
             const section = document.createElement("section");
             section.className = "assistant-provider-provenance";
             const engine = document.createElement("p");
-            engine.textContent = "AI Engine: GitHub Copilot CLI";
+            engine.textContent =
+                `AI Engine: ${assistantProviderLabel(response.provider)}`;
             const invoked = document.createElement("p");
             invoked.textContent =
                 `Provider Invoked: ${response.providerInvoked ? "YES" : "NO"}`;
@@ -728,7 +744,7 @@
                 const emptyResult = document.createElement("p");
                 emptyResult.className = "assistant-empty-ai-result";
                 emptyResult.textContent =
-                    "Copilot CLI completed successfully but returned no AI-generated observations or recommendations.";
+                    "The configured provider completed successfully but returned no AI-generated observations or recommendations.";
                 actionResultContent.append(emptyResult);
             }
             renderAssistantItems("Source-grounded facts", response.facts);

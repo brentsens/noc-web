@@ -752,16 +752,19 @@ def test_assistant_pages_render_provider_provenance_and_empty_success_notice():
     assistant = (FRONTEND / "assistant.html").read_text(encoding="utf-8")
     assert "response.providerInvoked" in assistant
     assert "response.providerStatus" in assistant
-    assert '"AI ENGINE", "GitHub Copilot CLI"' in assistant
+    assert '"AI ENGINE", assistantProviderLabel(response.provider)' in assistant
     assert '"PROVIDER STATUS"' in assistant
     assert '"not-invoked": "NOT INVOKED"' in assistant
     assert "assistant-provider-status" in assistant
+    assert "assistantProviderDisclosure" in assistant
+    assert "getProviderHealth" in assistant
     assert "no AI-generated observations or recommendations" in assistant
 
     ai_actions = (FRONTEND / "ai-actions.html").read_text(encoding="utf-8")
     assert "response.providerInvoked" in ai_actions
     assert "response.providerStatus" in ai_actions
-    assert "AI Engine: GitHub Copilot CLI" in ai_actions
+    assert "AI Engine: ${assistantProviderLabel(response.provider)}" in ai_actions
+    assert "assistantProviderDisclosure" in ai_actions
     assert "Provider Invoked:" in ai_actions
     assert "Provider Status:" in ai_actions
     assert '"not-invoked": "NOT INVOKED"' in ai_actions
@@ -1036,3 +1039,21 @@ def test_investigation_creation_uses_preview_and_confirmed_api_contract():
     end_shift = (FRONTEND / "end-shift.html").read_text(encoding="utf-8")
     assert "preflight.investigations.needsReview" in end_shift
     assert "excluded from handover" in end_shift
+
+
+def test_health_panel_and_client_expose_provider_readiness_without_secrets():
+    health = (FRONTEND / "health.html").read_text(encoding="utf-8")
+    client = (FRONTEND / "js" / "api.js").read_text(encoding="utf-8")
+
+    assert "<h2>AI Provider</h2>" in health
+    assert 'id="health-ai-provider"' in health
+    assert 'sectionChecks(\n                        health.checks,\n                        "AI Provider"\n                    )' in health
+    assert "health-copilot" not in health
+    assert "getProviderHealth" in client
+    assert 'apiRequest("/api/health")' in client
+    assert "assistantProviderLabel" in client
+    assert '"deepseek-api", "DeepSeek API"' in client
+    assert '"github-copilot-cli", "GitHub Copilot CLI"' in client
+    assert "external.aiProvider" in client
+    assert "aiProviderCapability" in client
+    assert "test-sentinel" not in client

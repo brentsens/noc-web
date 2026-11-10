@@ -259,3 +259,39 @@ def test_listener_preflight_does_not_bind_non_localhost_addresses():
 
         with pytest.raises(PortConflictError):
             assert_listener_available(port)
+
+
+def test_service_environment_copies_only_the_provider_allowlist(tmp_path):
+    config = _config(tmp_path)
+    environment = build_service_environment(
+        config,
+        home=tmp_path / "operator",
+        inherited={
+            "NOC_WEB_AI_PROVIDER": "deepseek-api",
+            "NOC_WEB_DEEPSEEK_API_KEY": "test-sentinel-deepseek-key",
+            "NOC_WEB_DEEPSEEK_MODEL": "deepseek-flash",
+            "NOC_WEB_DEEPSEEK_BASE_URL": "https://api.deepseek.com",
+            "NOC_WEB_AI_TIMEOUT_SECONDS": "55",
+            "COPILOT_TOKEN": "must-not-copy",
+            "UNRELATED_SECRET": "must-not-copy",
+        },
+    )
+
+    assert environment["NOC_WEB_AI_PROVIDER"] == "deepseek-api"
+    assert environment["NOC_WEB_DEEPSEEK_API_KEY"] == "test-sentinel-deepseek-key"
+    assert environment["NOC_WEB_DEEPSEEK_MODEL"] == "deepseek-flash"
+    assert environment["NOC_WEB_AI_TIMEOUT_SECONDS"] == "55"
+    assert "COPILOT_TOKEN" not in environment
+    assert "UNRELATED_SECRET" not in environment
+
+
+def test_generated_unit_references_the_optional_provider_environment_file(tmp_path):
+    config = _config(tmp_path)
+    config_path = tmp_path / "config" / "noc-web" / "runtime.json"
+
+    unit = render_systemd_unit(config, config_path=config_path)
+
+    assert (
+        f"EnvironmentFile=-{config_path.parent / 'ai-provider.env'}"
+    ) in unit
+    assert "test-sentinel" not in unit

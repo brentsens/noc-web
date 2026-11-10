@@ -11,6 +11,7 @@ Environment=@XDG_CONFIG_HOME_ENV@
 Environment=PATH=%h/.local/bin:/home/linuxbrew/.linuxbrew/Homebrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=NOC_WEB_PORT=@PORT@
 Environment=@RUNTIME_CONFIG_ENV@
+EnvironmentFile=-@AI_PROVIDER_ENV_FILE@
 ExecStart=@PYTHON@ -m scripts.run_service --config @CONFIG_PATH@
 Restart=on-failure
 RestartSec=@RESTART_DELAY@

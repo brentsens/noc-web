@@ -12,6 +12,17 @@ from backend.services.assistant_actions import AI_ACTIONS
 SHIFT = "2026-10-29"
 
 
+@pytest.fixture(autouse=True)
+def _configured_provider(monkeypatch):
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "github-copilot-cli")
+    monkeypatch.setattr(app.state, "assistant_provider", lambda envelope: {})
+    monkeypatch.setattr(
+        app.state,
+        "assistant_provider_identifier",
+        "github-copilot-cli",
+    )
+
+
 def _assistant_response(shift_date=SHIFT):
     return {
         "shiftDate": shift_date,
@@ -85,11 +96,10 @@ def test_successful_ai_action_saves_one_advisory_report_and_opens_it(
     report_slug,
 ):
     monkeypatch.setattr(ai_reports, "NOC_ROOT", noc_root)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
     (noc_root / SHIFT / "reports").mkdir(parents=True)
     calls = []
 
-    def answer(question):
+    def answer(question, **_kwargs):
         calls.append(question)
         return _assistant_response()
 
@@ -164,7 +174,6 @@ def test_failed_or_invalid_provider_results_do_not_create_reports(
     invoked,
 ):
     monkeypatch.setattr(ai_reports, "NOC_ROOT", noc_root)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
     result = _assistant_response()
     result.update(
         status="unavailable",
@@ -175,7 +184,7 @@ def test_failed_or_invalid_provider_results_do_not_create_reports(
         aiObservations=[],
         recommendations=[],
     )
-    monkeypatch.setattr("backend.api.assistant.answer", lambda question: result)
+    monkeypatch.setattr("backend.api.assistant.answer", lambda question, **_kwargs: result)
 
     response = TestClient(app).post(
         f"/api/shifts/{SHIFT}/assistant/actions/summary",
@@ -194,10 +203,9 @@ def test_ai_action_requires_explicit_disclosure_and_rejects_operator_prompts(
     monkeypatch,
 ):
     monkeypatch.setattr(ai_reports, "NOC_ROOT", noc_root)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
     monkeypatch.setattr(
         "backend.api.assistant.answer",
-        lambda question: pytest.fail("invalid action request must not invoke Assistant"),
+        lambda question, **_kwargs: pytest.fail("invalid action request must not invoke Assistant"),
     )
     client = TestClient(app)
 
@@ -228,11 +236,10 @@ def test_generic_assistant_question_remains_transient(
     monkeypatch,
 ):
     monkeypatch.setattr(ai_reports, "NOC_ROOT", noc_root)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
     (noc_root / SHIFT / "reports").mkdir(parents=True)
     monkeypatch.setattr(
         "backend.api.assistant.answer",
-        lambda question: _assistant_response(),
+        lambda question, **_kwargs: _assistant_response(),
     )
 
     response = TestClient(app).post(
@@ -251,10 +258,9 @@ def test_generic_assistant_question_remains_transient(
 
 def test_malformed_success_response_is_rejected_without_report(noc_root, monkeypatch):
     monkeypatch.setattr(ai_reports, "NOC_ROOT", noc_root)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
     malformed = _assistant_response()
     malformed["rawProviderOutput"] = "private output"
-    monkeypatch.setattr("backend.api.assistant.answer", lambda question: malformed)
+    monkeypatch.setattr("backend.api.assistant.answer", lambda question, **_kwargs: malformed)
 
     response = TestClient(app).post(
         f"/api/shifts/{SHIFT}/assistant/actions/summary",
@@ -283,7 +289,6 @@ def test_inconsistent_provider_state_is_rejected_by_both_assistant_routes(
     invoked,
 ):
     monkeypatch.setattr(ai_reports, "NOC_ROOT", noc_root)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
     response_data = _assistant_response()
     response_data.update(
         status=status,
@@ -292,7 +297,7 @@ def test_inconsistent_provider_state_is_rejected_by_both_assistant_routes(
     )
     monkeypatch.setattr(
         "backend.api.assistant.answer",
-        lambda question: response_data,
+        lambda question, **_kwargs: response_data,
     )
     client = TestClient(app)
 
@@ -348,10 +353,9 @@ def test_report_save_failure_keeps_successful_analysis_and_warns_separately(
     monkeypatch,
 ):
     monkeypatch.setattr(ai_reports, "NOC_ROOT", noc_root)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
     monkeypatch.setattr(
         "backend.api.assistant.answer",
-        lambda question: _assistant_response(),
+        lambda question, **_kwargs: _assistant_response(),
     )
 
     def fail_save(*args, **kwargs):
@@ -380,10 +384,9 @@ def test_report_validation_failure_does_not_change_successful_provider_state(
     monkeypatch,
 ):
     monkeypatch.setattr(ai_reports, "NOC_ROOT", noc_root)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
     monkeypatch.setattr(
         "backend.api.assistant.answer",
-        lambda question: _assistant_response(),
+        lambda question, **_kwargs: _assistant_response(),
     )
 
     def reject_report(*args, **kwargs):
@@ -409,11 +412,10 @@ def test_report_validation_failure_does_not_change_successful_provider_state(
 def test_historical_action_writes_only_to_selected_shift(noc_root, monkeypatch):
     historical_shift = "2026-10-15"
     monkeypatch.setattr(ai_reports, "NOC_ROOT", noc_root)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
     (noc_root / historical_shift / "reports").mkdir(parents=True)
     monkeypatch.setattr(
         "backend.api.assistant.answer",
-        lambda question: _assistant_response(historical_shift),
+        lambda question, **_kwargs: _assistant_response(historical_shift),
     )
 
     response = TestClient(app).post(
@@ -431,10 +433,9 @@ def test_missing_existing_reports_directory_surfaces_save_warning(
     monkeypatch,
 ):
     monkeypatch.setattr(ai_reports, "NOC_ROOT", noc_root)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
     monkeypatch.setattr(
         "backend.api.assistant.answer",
-        lambda question: _assistant_response(),
+        lambda question, **_kwargs: _assistant_response(),
     )
 
     response = TestClient(app).post(
@@ -564,3 +565,62 @@ def test_investigations_route_requires_available_noc_inv_provenance(monkeypatch)
     assert response["recommendations"][0]["route"]["href"] == (
         f"investigations.html?shift={SHIFT}"
     )
+
+
+@pytest.mark.parametrize(
+    ("provider", "label"),
+    [
+        ("deepseek-api", "DeepSeek API"),
+        ("github-copilot-cli", "GitHub Copilot CLI"),
+    ],
+)
+def test_report_provider_line_uses_the_validated_canonical_identifier(
+    noc_root,
+    provider,
+    label,
+):
+    (noc_root / SHIFT / "reports").mkdir(parents=True)
+    response = _assistant_response()
+    response["provider"] = provider
+
+    report = ai_reports.persist_ai_action_report(SHIFT, "summary", response)
+    content = (noc_root / SHIFT / "reports" / report["file"]).read_text(
+        encoding="utf-8"
+    )
+
+    assert f"- Provider: {label}" in content
+    assert ("GitHub Copilot CLI" in content) is (
+        provider == "github-copilot-cli"
+    )
+
+
+def test_report_rejects_a_non_canonical_provider_without_persistence(noc_root):
+    (noc_root / SHIFT / "reports").mkdir(parents=True)
+    response = _assistant_response()
+    response["provider"] = "unapproved-provider"
+
+    with pytest.raises(ai_reports.AIReportInvalidResult):
+        ai_reports.persist_ai_action_report(SHIFT, "summary", response)
+    assert not list(noc_root.rglob("ai-*.md"))
+
+
+def test_persisted_report_contains_no_credential_prompt_or_raw_output(
+    noc_root,
+    monkeypatch,
+):
+    sentinel = "test-sentinel-deepseek-key"
+    monkeypatch.setenv("NOC_WEB_DEEPSEEK_API_KEY", sentinel)
+    (noc_root / SHIFT / "reports").mkdir(parents=True)
+
+    report = ai_reports.persist_ai_action_report(
+        SHIFT,
+        "summary",
+        _assistant_response(),
+    )
+    content = (noc_root / SHIFT / "reports" / report["file"]).read_text(
+        encoding="utf-8"
+    )
+
+    assert sentinel not in content
+    assert "context.json" not in content
+    assert "rawProviderOutput" not in content

@@ -201,6 +201,14 @@ Datadog MCP, and noc-tools. Authentication is operator-specific. Credentials,
 tokens, cookies, sessions, and another operator's authentication are never
 bundled or copied by the installer.
 
+Assistant and AI Action inference additionally report the explicitly configured
+provider (`deepseek-api` or `github-copilot-cli`) and its static readiness. No
+provider is selected by default, provider changes require a restart, and there is
+no automatic fallback. Configure provider settings through the process
+environment or the managed-service `ai-provider.env` file described in
+[docs/workstation-runtime.md](docs/workstation-runtime.md). Credentials are never
+returned by the API, written to logs, or persisted in reports.
+
 ## Safety Model
 
 - Localhost-only binding

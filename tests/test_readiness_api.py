@@ -93,6 +93,19 @@ def test_readiness_api_returns_separate_runtime_and_external_capabilities(
         "checkedAt": "2099-12-31T00:00:00Z",
     }]
     external = [{
+        "id": "external.aiProvider",
+        "category": "external",
+        "capability": "AI inference provider (not configured)",
+        "status": "notConfigured",
+        "installationStatus": "notConfigured",
+        "required": False,
+        "impact": "The Assistant is unavailable.",
+        "correctiveAction": "Set NOC_WEB_AI_PROVIDER.",
+        "checkedAt": "2099-12-31T00:00:00Z",
+        "configuredProvider": None,
+        "model": None,
+        "providerReadiness": "notConfigured",
+    }, {
         "id": "external.atlas",
         "category": "external",
         "capability": "Atlas Jira access",
@@ -129,3 +142,69 @@ def test_readiness_api_returns_separate_runtime_and_external_capabilities(
     assert response.json()["runtime"] == runtime
     assert response.json()["externalCapabilities"] == external
     assert response.json()["overallStatus"] == "ready"
+
+
+def test_root_health_reports_static_provider_state_without_secrets(monkeypatch):
+    sentinel = "test-sentinel-deepseek-key"
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "deepseek-api")
+    monkeypatch.setenv("NOC_WEB_DEEPSEEK_API_KEY", sentinel)
+    monkeypatch.setenv("NOC_WEB_DEEPSEEK_MODEL", "deepseek-flash")
+
+    response = TestClient(app).get("/api/health")
+
+    assert response.status_code == 200
+    ai_provider = response.json()["aiProvider"]
+    assert ai_provider["configuredProvider"] == "deepseek-api"
+    assert ai_provider["readiness"] == "ready"
+    assert ai_provider["label"] == "DeepSeek API"
+    assert ai_provider["model"] == "deepseek-flash"
+    assert sentinel not in response.text
+
+    monkeypatch.delenv("NOC_WEB_AI_PROVIDER", raising=False)
+    not_configured = TestClient(app).get("/api/health").json()["aiProvider"]
+    assert not_configured["readiness"] == "notConfigured"
+    assert not_configured["configuredProvider"] is None
+
+
+def test_shift_health_ai_provider_section_is_warning_only(tmp_path, monkeypatch):
+    from backend.services import health as health_service
+
+    class _Result:
+        returncode = 0
+
+    monkeypatch.setattr(health_service, "NOC_ROOT", tmp_path)
+    monkeypatch.setattr(
+        health_service.shutil,
+        "which",
+        lambda command: f"/usr/bin/{command}",
+    )
+    monkeypatch.setattr(
+        health_service.subprocess,
+        "run",
+        lambda *args, **kwargs: _Result(),
+    )
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "deepseek-api")
+    monkeypatch.setenv("NOC_WEB_DEEPSEEK_API_KEY", "test-sentinel-deepseek-key")
+
+    ready = health_service.get_health("2099-12-31")
+    ready_checks = [
+        check for check in ready["checks"] if check["section"] == "AI Provider"
+    ]
+    assert len(ready_checks) == 1
+    assert ready_checks[0]["state"] == "pass"
+    assert "test-sentinel-deepseek-key" not in str(ready)
+
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "unsupported-provider")
+    not_ready = health_service.get_health("2099-12-31")
+    not_ready_checks = [
+        check for check in not_ready["checks"] if check["section"] == "AI Provider"
+    ]
+    assert not_ready_checks[0]["state"] == "warning"
+    assert "unsupported-provider" not in str(not_ready)
+
+    monkeypatch.delenv("NOC_WEB_AI_PROVIDER", raising=False)
+    not_configured = health_service.get_health("2099-12-31")
+    unconfigured_checks = [
+        check for check in not_configured["checks"] if check["section"] == "AI Provider"
+    ]
+    assert unconfigured_checks[0]["state"] == "warning"

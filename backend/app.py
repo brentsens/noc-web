@@ -72,7 +72,10 @@ from backend.api.datadog_incidents import (
 from backend.api.assistant import (
     router as assistant_router,
 )
-from backend.services.copilot_cli import answer_with_copilot_cli
+from backend.services.ai_provider import (
+    provider_readiness,
+    resolve_provider_runtime,
+)
 from backend.services.copilot_mcp import CopilotProvider
 
 
@@ -82,7 +85,9 @@ app = FastAPI(
     title="SES NOC Operations API",
     version="0.1.0",
 )
-app.state.assistant_provider = answer_with_copilot_cli
+_initial_provider_runtime = resolve_provider_runtime()
+app.state.assistant_provider = _initial_provider_runtime.provider
+app.state.assistant_provider_identifier = _initial_provider_runtime.identifier
 
 
 @app.middleware("http")
@@ -125,11 +130,13 @@ async def safe_request_logging(request, call_next):
     return response
 
 
-def configure_assistant_provider(provider: CopilotProvider | None) -> None:
-    """Inject a provider, or restore the default local Copilot CLI adapter."""
-    app.state.assistant_provider = (
-        answer_with_copilot_cli if provider is None else provider
-    )
+def configure_assistant_provider(
+    provider: CopilotProvider | None,
+    identifier: str | None = None,
+) -> None:
+    """Inject an explicit provider and its canonical identifier."""
+    app.state.assistant_provider = provider
+    app.state.assistant_provider_identifier = identifier
 
 
 @app.get("/api/health")
@@ -138,6 +145,7 @@ def api_health():
         "status": "healthy",
         "service": "noc-web",
         "version": "0.1.0",
+        "aiProvider": provider_readiness(),
     }
 
 app.include_router(

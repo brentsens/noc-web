@@ -84,3 +84,34 @@ def test_assistant_has_no_direct_datadog_or_operational_tools():
     assert "datadog" not in context
     assert "subprocess" not in assistant_service
     assert "subprocess" not in adapter
+
+def test_provider_configuration_absence_does_not_block_non_assistant_workflows(
+    noc_root,
+    monkeypatch,
+):
+    from fastapi.testclient import TestClient
+
+    from backend.app import app, configure_assistant_provider
+
+    shift = "2026-10-29"
+    monkeypatch.delenv("NOC_WEB_AI_PROVIDER", raising=False)
+    configure_assistant_provider(None, None)
+    client = TestClient(app)
+
+    for path in (
+        "/api/health",
+        "/api/tickets",
+        f"/api/status/{shift}",
+        f"/api/shifts/{shift}/notes",
+        f"/api/shifts/{shift}/handover",
+        f"/api/shifts/{shift}/investigations",
+    ):
+        assert client.get(path).status_code == 200
+
+    assistant = client.post(f"/api/shifts/{shift}/assistant/questions", json={
+        "shiftDate": shift,
+        "question": "What requires attention?",
+        "providerDisclosureAcknowledged": True,
+    })
+    assert assistant.status_code == 503
+    assert assistant.json()["detail"]["code"] == "assistant-provider-not-configured"

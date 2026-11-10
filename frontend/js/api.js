@@ -314,7 +314,40 @@ export function getReadiness(shiftDate) {
 }
 
 const ASSISTANT_STATUSES = new Set(["complete", "limited", "unavailable"]);
-const ASSISTANT_PROVIDERS = new Set(["github-copilot-cli"]);
+const ASSISTANT_PROVIDERS = new Set(["deepseek-api", "github-copilot-cli"]);
+const ASSISTANT_PROVIDER_LABELS = new Map([
+  ["deepseek-api", "DeepSeek API"],
+  ["github-copilot-cli", "GitHub Copilot CLI"]
+]);
+
+export function getProviderHealth() {
+  return apiRequest("/api/health");
+}
+
+export function assistantProviderLabel(provider) {
+  return ASSISTANT_PROVIDER_LABELS.get(provider) || "Unverified provider";
+}
+
+export function assistantProviderDisclosure(aiProvider) {
+  if (!aiProvider || typeof aiProvider !== "object") {
+    return "The configured inference provider could not be verified; requests remain fail-closed.";
+  }
+  const label = aiProvider.label || assistantProviderLabel(aiProvider.configuredProvider);
+  if (aiProvider.readiness === "ready") {
+    return `${label} may apply its own handling or retention; NOC Web cannot claim it is absent.`;
+  }
+  if (aiProvider.readiness === "notConfigured") {
+    return "No inference provider is configured; Assistant and AI Actions are unavailable.";
+  }
+  return `${label} is not ready; Assistant and AI Actions are unavailable until its configuration is corrected.`;
+}
+
+export function aiProviderCapability(externalCapabilities) {
+  if (!Array.isArray(externalCapabilities)) {
+    return null;
+  }
+  return externalCapabilities.find(item => item && item.id === "external.aiProvider") || null;
+}
 const ASSISTANT_PROVIDER_STATUSES = new Set([
   "success",
   "unavailable",

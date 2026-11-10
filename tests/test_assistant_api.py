@@ -4,12 +4,23 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app import app, configure_assistant_provider
-from backend.services import copilot_cli
 from backend.services import assistant
+from backend.services.ai_provider import resolve_provider_runtime
 from backend.services.copilot_mcp import CopilotProviderUnavailable
 
 
 SHIFT = "2026-10-29"
+
+
+@pytest.fixture(autouse=True)
+def _configured_provider(monkeypatch):
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "github-copilot-cli")
+    monkeypatch.setattr(app.state, "assistant_provider", lambda envelope: {})
+    monkeypatch.setattr(
+        app.state,
+        "assistant_provider_identifier",
+        "github-copilot-cli",
+    )
 
 
 def _response():
@@ -25,8 +36,7 @@ def _response():
 
 def test_question_route_validates_shift_body_and_disclosure(monkeypatch):
     client = TestClient(app)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
-    monkeypatch.setattr("backend.api.assistant.answer", lambda question: _response())
+    monkeypatch.setattr("backend.api.assistant.answer", lambda question, **_kwargs: _response())
     response = client.post(f"/api/shifts/{SHIFT}/assistant/questions", json={
         "shiftDate": SHIFT, "question": "What requires attention?", "providerDisclosureAcknowledged": True,
     })
@@ -68,8 +78,7 @@ def test_refusal_does_not_invoke_provider_or_action_endpoint(monkeypatch):
 
 def test_predefined_action_accepts_not_invoked_insufficient_context(monkeypatch):
     client = TestClient(app)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
-    monkeypatch.setattr("backend.api.assistant.answer", lambda question: {
+    monkeypatch.setattr("backend.api.assistant.answer", lambda question, **_kwargs: {
         "shiftDate": SHIFT,
         "status": "limited",
         "provider": "github-copilot-cli",
@@ -97,8 +106,7 @@ def test_predefined_action_accepts_not_invoked_insufficient_context(monkeypatch)
 
 def test_recommendation_route_preserves_shift_and_existing_confirmation(monkeypatch):
     client = TestClient(app)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
-    monkeypatch.setattr("backend.api.assistant.answer", lambda question: {
+    monkeypatch.setattr("backend.api.assistant.answer", lambda question, **_kwargs: {
         "shiftDate": SHIFT,
         "status": "complete",
         "facts": [],
@@ -144,7 +152,6 @@ def test_provider_failure_does_not_block_existing_read_workflows(
     monkeypatch,
 ):
     client = TestClient(app)
-    monkeypatch.setattr(app.state, "assistant_provider", None)
     monkeypatch.setattr(assistant, "collect_context", lambda shift_date: [{
         "id": "jira-cache",
         "kind": "jira-cache",
@@ -157,7 +164,7 @@ def test_provider_failure_does_not_block_existing_read_workflows(
     def unavailable(envelope):
         raise CopilotProviderUnavailable("private provider details")
 
-    monkeypatch.setattr(assistant, "ask_copilot", unavailable)
+    monkeypatch.setattr(app.state, "assistant_provider", unavailable)
     response = client.post(f"/api/shifts/{SHIFT}/assistant/questions", json={
         "shiftDate": SHIFT,
         "question": "What should I focus on?",
@@ -221,24 +228,9 @@ def test_runtime_injected_provider_receives_bounded_question_and_returns_valid_s
 
 
 @pytest.mark.parametrize("provider", [None, object()])
-def test_absent_or_invalid_runtime_provider_is_assistant_unavailable(
-    monkeypatch,
-    provider,
-):
+def test_selected_provider_without_callable_is_not_ready(monkeypatch, provider):
     client = TestClient(app)
-    monkeypatch.setattr(assistant, "collect_context", lambda shift_date: [{
-        "id": "jira-cache",
-        "kind": "jira-cache",
-        "provenance": "noc-web",
-        "availability": "available",
-        "reference": None,
-        "freshness": "current",
-        "summary": {"tickets": []},
-    }])
-    monkeypatch.setattr(app.state, "assistant_provider", None)
-    if provider is None:
-        monkeypatch.setattr(copilot_cli.shutil, "which", lambda name: None)
-    configure_assistant_provider(provider)
+    configure_assistant_provider(provider, "github-copilot-cli")
 
     response = client.post(f"/api/shifts/{SHIFT}/assistant/questions", json={
         "shiftDate": SHIFT,
@@ -246,17 +238,31 @@ def test_absent_or_invalid_runtime_provider_is_assistant_unavailable(
         "providerDisclosureAcknowledged": True,
     })
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "unavailable"
-    assert response.json()["providerStatus"] == "unavailable"
-    assert response.json()["providerInvoked"] is False
-    assert "provider" in " ".join(response.json()["limitations"]).casefold()
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "assistant-provider-not-ready"
 
 
-def test_default_runtime_provider_is_github_copilot_cli():
+def test_no_configured_provider_fails_closed_as_not_configured(monkeypatch):
+    client = TestClient(app)
+    monkeypatch.delenv("NOC_WEB_AI_PROVIDER", raising=False)
+    configure_assistant_provider(None, None)
+
+    response = client.post(f"/api/shifts/{SHIFT}/assistant/questions", json={
+        "shiftDate": SHIFT,
+        "question": "What should I focus on right now?",
+        "providerDisclosureAcknowledged": True,
+    })
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "assistant-provider-not-configured"
+    assert "assistant" not in response.json()
+
+
+def test_configure_without_identifier_is_not_configured():
     configure_assistant_provider(None)
 
-    assert app.state.assistant_provider is copilot_cli.answer_with_copilot_cli
+    assert app.state.assistant_provider is None
+    assert app.state.assistant_provider_identifier is None
 
 
 def test_injected_provider_exception_is_redacted(monkeypatch):
@@ -274,8 +280,7 @@ def test_injected_provider_exception_is_redacted(monkeypatch):
     def provider(envelope):
         raise RuntimeError("sensitive provider diagnostic")
 
-    monkeypatch.setattr(app.state, "assistant_provider", None)
-    configure_assistant_provider(provider)
+    configure_assistant_provider(provider, "github-copilot-cli")
     response = client.post(f"/api/shifts/{SHIFT}/assistant/questions", json={
         "shiftDate": SHIFT,
         "question": "What should I focus on right now?",
@@ -300,8 +305,10 @@ def test_injected_provider_malformed_response_is_unavailable(monkeypatch):
         "freshness": "current",
         "summary": {"tickets": []},
     }])
-    monkeypatch.setattr(app.state, "assistant_provider", None)
-    configure_assistant_provider(lambda envelope: {"aiObservations": "not-an-array"})
+    configure_assistant_provider(
+        lambda envelope: {"aiObservations": "not-an-array"},
+        "github-copilot-cli",
+    )
 
     response = client.post(f"/api/shifts/{SHIFT}/assistant/questions", json={
         "shiftDate": SHIFT,
@@ -324,7 +331,9 @@ def test_assistant_static_contract_and_navigation_are_transient():
     api = (frontend / "js" / "api.js").read_text(encoding="utf-8")
     workflow = (frontend / "js" / "workflow-context.js").read_text(encoding="utf-8")
     assert "does not persist or log" in page
-    assert "GitHub Copilot CLI or another configured inference provider may apply its own handling or retention" in page
+    assert "assistant-provider-disclosure" in page
+    assert "assistantProviderDisclosure" in page
+    assert "getProviderHealth" in page
     assert "disabled" in page and "provider-disclosure" in page
     assert "localStorage" not in page and "sessionStorage" not in page and "console." not in page
     assert "pagehide" in page and "clearTransientDom" in page
@@ -333,3 +342,224 @@ def test_assistant_static_contract_and_navigation_are_transient():
     assert "requireExplicitShift" in workflow
     assert "askAssistant" in api
     assert "assistant.html" in workflow
+
+
+@pytest.mark.parametrize("identifier", ["deepseek-api", "github-copilot-cli"])
+def test_each_provider_serves_questions_and_all_actions(
+    noc_root,
+    monkeypatch,
+    fake_assistant_provider,
+    identifier,
+):
+    client = TestClient(app)
+    (noc_root / SHIFT / "reports").mkdir(parents=True)
+    evidence = {
+        "id": "jira-cache",
+        "kind": "jira-cache",
+        "provenance": "noc-web",
+        "availability": "available",
+        "reference": None,
+        "freshness": "current",
+        "summary": {"tickets": []},
+    }
+    monkeypatch.setattr(assistant, "collect_context", lambda shift_date: [evidence])
+    monkeypatch.setattr(
+        assistant,
+        "_has_question_sufficient_context",
+        lambda question, context: True,
+    )
+    calls = fake_assistant_provider({
+        "aiObservations": [{
+            "text": "The selected shift has one bounded observation.",
+            "evidenceIds": ["jira-cache"],
+        }],
+        "recommendations": [],
+    }, identifier)
+
+    question = client.post(f"/api/shifts/{SHIFT}/assistant/questions", json={
+        "shiftDate": SHIFT,
+        "question": "What should I focus on right now?",
+        "providerDisclosureAcknowledged": True,
+    })
+    assert question.status_code == 200
+    assert question.json()["provider"] == identifier
+    assert set(question.json()) == {
+        "shiftDate", "status", "provider", "providerInvoked", "providerStatus",
+        "facts", "reviewedFindings", "aiObservations", "recommendations",
+        "evidence", "limitations",
+    }
+
+    for action in ("analysis", "summary", "followups", "handover"):
+        response = client.post(
+            f"/api/shifts/{SHIFT}/assistant/actions/{action}",
+            json={"providerDisclosureAcknowledged": True},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["assistant"]["provider"] == identifier
+        assert body["assistant"]["providerStatus"] == "success"
+        assert body["report"] is not None
+
+    assert len(calls) == 5
+
+
+def test_provider_change_is_reflected_by_the_next_request(
+    noc_root,
+    monkeypatch,
+    fake_assistant_provider,
+):
+    client = TestClient(app)
+    evidence = {
+        "id": "jira-cache",
+        "kind": "jira-cache",
+        "provenance": "noc-web",
+        "availability": "available",
+        "reference": None,
+        "freshness": "current",
+        "summary": {"tickets": []},
+    }
+    monkeypatch.setattr(assistant, "collect_context", lambda shift_date: [evidence])
+    provider_result = {
+        "aiObservations": [{
+            "text": "Bounded observation.",
+            "evidenceIds": ["jira-cache"],
+        }],
+        "recommendations": [],
+    }
+
+    fake_assistant_provider(provider_result, "deepseek-api")
+    first = client.post(f"/api/shifts/{SHIFT}/assistant/questions", json={
+        "shiftDate": SHIFT,
+        "question": "What should I focus on right now?",
+        "providerDisclosureAcknowledged": True,
+    })
+    assert first.json()["provider"] == "deepseek-api"
+
+    fake_assistant_provider(provider_result, "github-copilot-cli")
+    second = client.post(f"/api/shifts/{SHIFT}/assistant/questions", json={
+        "shiftDate": SHIFT,
+        "question": "What should I focus on right now?",
+        "providerDisclosureAcknowledged": True,
+    })
+    assert second.json()["provider"] == "github-copilot-cli"
+
+
+def test_selected_not_ready_provider_never_falls_back_to_copilot(
+    noc_root,
+    monkeypatch,
+):
+    from backend.services import copilot_cli
+
+    client = TestClient(app)
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "deepseek-api")
+    monkeypatch.delenv("NOC_WEB_DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setattr(
+        copilot_cli,
+        "answer_with_copilot_cli",
+        lambda envelope: pytest.fail("Copilot must not be called"),
+    )
+    runtime = resolve_provider_runtime()
+    monkeypatch.setattr(app.state, "assistant_provider", runtime.provider)
+    monkeypatch.setattr(
+        app.state,
+        "assistant_provider_identifier",
+        runtime.identifier,
+    )
+
+    response = client.post(
+        f"/api/shifts/{SHIFT}/assistant/actions/analysis",
+        json={"providerDisclosureAcknowledged": True},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "assistant-provider-not-ready"
+    assert not list(noc_root.rglob("ai-*.md"))
+
+
+def test_copilot_selected_but_absent_fails_closed_without_report(
+    noc_root,
+    monkeypatch,
+):
+    from backend.services import ai_provider
+
+    client = TestClient(app)
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "github-copilot-cli")
+    monkeypatch.setattr(ai_provider.shutil, "which", lambda command: None)
+    runtime = resolve_provider_runtime()
+    monkeypatch.setattr(app.state, "assistant_provider", runtime.provider)
+    monkeypatch.setattr(
+        app.state,
+        "assistant_provider_identifier",
+        runtime.identifier,
+    )
+
+    response = client.post(
+        f"/api/shifts/{SHIFT}/assistant/actions/summary",
+        json={"providerDisclosureAcknowledged": True},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "assistant-provider-not-ready"
+    assert not list(noc_root.rglob("ai-*.md"))
+
+
+def test_api_responses_never_include_the_configured_credential(
+    noc_root,
+    monkeypatch,
+):
+    sentinel = "test-sentinel-deepseek-key"
+    client = TestClient(app)
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "deepseek-api")
+    monkeypatch.setenv("NOC_WEB_DEEPSEEK_API_KEY", sentinel)
+    evidence = {
+        "id": "jira-cache",
+        "kind": "jira-cache",
+        "provenance": "noc-web",
+        "availability": "available",
+        "reference": None,
+        "freshness": "current",
+        "summary": {"tickets": []},
+    }
+    monkeypatch.setattr(assistant, "collect_context", lambda shift_date: [evidence])
+    monkeypatch.setattr(
+        assistant,
+        "_has_question_sufficient_context",
+        lambda question, context: True,
+    )
+
+    def success(envelope):
+        return {
+            "aiObservations": [{
+                "text": "Bounded observation.",
+                "evidenceIds": ["jira-cache"],
+            }],
+            "recommendations": [],
+        }
+
+    configure_assistant_provider(success, "deepseek-api")
+    success_response = client.post(
+        f"/api/shifts/{SHIFT}/assistant/questions",
+        json={
+            "shiftDate": SHIFT,
+            "question": "What should I focus on right now?",
+            "providerDisclosureAcknowledged": True,
+        },
+    )
+    assert success_response.status_code == 200
+    assert sentinel not in success_response.text
+
+    def failure(envelope):
+        raise CopilotProviderUnavailable(f"credential {sentinel} rejected")
+
+    configure_assistant_provider(failure, "deepseek-api")
+    failure_response = client.post(
+        f"/api/shifts/{SHIFT}/assistant/questions",
+        json={
+            "shiftDate": SHIFT,
+            "question": "What should I focus on right now?",
+            "providerDisclosureAcknowledged": True,
+        },
+    )
+    assert failure_response.status_code == 200
+    assert failure_response.json()["providerStatus"] == "unavailable"
+    assert sentinel not in failure_response.text

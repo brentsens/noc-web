@@ -5,6 +5,8 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from backend.services.ai_provider import provider_readiness
+
 
 _NOC_TOOL_PROBES = (
     ("tix", ("--help",), None),
@@ -212,6 +214,28 @@ def assess_external_capabilities(
             ))
 
     copilot = _executable("copilot", noc_bin)
+    provider = provider_readiness()
+    provider_status = {
+        "ready": "ready",
+        "notReady": "setup_required",
+        "notConfigured": "notConfigured",
+    }[provider["readiness"]]
+    provider_label = provider["label"] or "not configured"
+    ai_provider = _result(
+        "external.aiProvider",
+        f"AI inference provider ({provider_label})",
+        provider_status,
+        provider["impact"],
+        provider["correctiveAction"],
+        provider_status,
+    )
+    ai_provider.update({
+        "configuredProvider": provider["configuredProvider"],
+        "model": provider["model"],
+        "providerReadiness": provider["readiness"],
+    })
+    results.append(ai_provider)
+
     if copilot is None:
         copilot_status = "setup_required"
         copilot_installation_status = "setup_required"

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.config import NOC_ROOT
+from backend.services.ai_provider import PROVIDER_LABELS
 from backend.services.assistant import validate_assistant_response
 from backend.services.assistant_actions import AI_ACTIONS
 
@@ -218,7 +219,7 @@ def _render_action_report(
         f"- Selected shift: {shift_date}",
         f"- AI Action: {action.title}",
         f"- Generated: {generated_at.isoformat()}",
-        "- Provider: GitHub Copilot CLI",
+        f"- Provider: {PROVIDER_LABELS[response['provider']]}",
         "- Status: Advisory / non-authoritative",
         "",
         "## Source-grounded facts",

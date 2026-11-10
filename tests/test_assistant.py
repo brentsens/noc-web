@@ -21,6 +21,11 @@ from backend.services import jira_ticket_queue
 SHIFT = "2026-10-29"
 
 
+@pytest.fixture(autouse=True)
+def _configured_copilot_provider(monkeypatch):
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "github-copilot-cli")
+
+
 def _write_context(noc_root):
     (noc_root / "tickets" / "open").mkdir(parents=True)
     (noc_root / "tickets" / "open" / "NOC-1.json").write_text(json.dumps({
@@ -429,6 +434,121 @@ def test_each_item_citing_stale_evidence_qualifies_it_independently(
     assert response["recommendations"][0]["evidenceIds"] == ["jira-cache"]
 
 
+class _DeepSeekResponse:
+    def __init__(self, content):
+        self._body = json.dumps({
+            "choices": [{
+                "finish_reason": "stop",
+                "message": {"content": json.dumps(content)},
+            }],
+        }).encode("utf-8")
+
+    def read(self, size=-1):
+        return self._body if size < 0 else self._body[:size]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+class _DeepSeekOpener:
+    def __init__(self, content):
+        self._content = content
+
+    def open(self, request, timeout):
+        return _DeepSeekResponse(self._content)
+
+
+def _configure_deepseek(monkeypatch, content):
+    from backend.services import deepseek_provider
+
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "deepseek-api")
+    monkeypatch.setenv("NOC_WEB_DEEPSEEK_API_KEY", "test-sentinel-deepseek-key")
+    monkeypatch.setattr(
+        deepseek_provider,
+        "_opener",
+        _DeepSeekOpener(content),
+    )
+
+
+def test_deepseek_unqualified_stale_claim_fails_closed(
+    noc_root,
+    monkeypatch,
+    caplog,
+):
+    _write_context(noc_root)
+    _write_jira_cache(
+        noc_root,
+        (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
+    )
+    _configure_deepseek(monkeypatch, {
+        "aiObservations": [{
+            "text": "The Jira ticket is currently open.",
+            "evidenceIds": ["jira-cache"],
+        }],
+        "recommendations": [{
+            "text": "Review NOC-1.",
+            "evidenceIds": ["jira-cache"],
+            "route": {
+                "label": "Open Tickets",
+                "href": "tickets.html",
+                "requiresConfirmation": True,
+            },
+        }],
+    })
+    caplog.set_level("WARNING", logger=assistant.__name__)
+
+    response = assistant.answer(AssistantQuestion(
+        SHIFT,
+        "Which tracked tickets need attention?",
+        True,
+    ))
+
+    assert response["status"] == "unavailable"
+    assert response["provider"] == "deepseek-api"
+    assert response["providerInvoked"] is True
+    assert response["providerStatus"] == "invalid"
+    assert response["aiObservations"] == []
+    assert response["recommendations"] == []
+    assert "stale_evidence_without_qualifier" in caplog.text
+
+
+def test_deepseek_malformed_stale_claim_still_fails_closed(
+    noc_root,
+    monkeypatch,
+    caplog,
+):
+    _write_context(noc_root)
+    _write_jira_cache(
+        noc_root,
+        (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
+    )
+    _configure_deepseek(monkeypatch, {
+        "aiObservations": [{
+            "text": None,
+            "evidenceIds": ["jira-cache"],
+        }],
+        "recommendations": [],
+    })
+    caplog.set_level("WARNING", logger=assistant.__name__)
+
+    response = assistant.answer(AssistantQuestion(
+        SHIFT,
+        "Which tracked tickets need attention?",
+        True,
+    ))
+
+    assert response["status"] == "unavailable"
+    assert response["provider"] == "deepseek-api"
+    assert response["providerInvoked"] is True
+    assert response["providerStatus"] == "invalid"
+    assert response["aiObservations"] == []
+    assert response["recommendations"] == []
+    assert "Assistant provider result rejected" in caplog.text
+
+
 @pytest.mark.parametrize(
     ("case", "expected_rule", "category"),
     [
@@ -749,3 +869,101 @@ def test_copilot_timeout_returns_without_waiting_for_provider_shutdown():
     with pytest.raises(CopilotProviderTimeout):
         adapter.ask({})
     assert time.monotonic() - started < 0.2
+
+
+def test_configured_timeout_bounds_the_provider_mediation_adapter(noc_root, monkeypatch):
+    _write_context(noc_root)
+    monkeypatch.setenv("NOC_WEB_AI_TIMEOUT_SECONDS", "17")
+    captured = {}
+
+    class _CapturingAdapter:
+        def __init__(self, provider, timeout_seconds=60):
+            captured["timeout_seconds"] = timeout_seconds
+
+        def ask(self, envelope):
+            return _answer()
+
+    monkeypatch.setattr(assistant, "CopilotMcpAdapter", _CapturingAdapter)
+
+    response = assistant.answer(
+        AssistantQuestion(SHIFT, "What requires attention?", True),
+        provider=lambda envelope: _answer(),
+        provider_identifier="github-copilot-cli",
+    )
+
+    assert captured["timeout_seconds"] == 17
+    assert response["providerStatus"] == "success"
+
+
+def test_answer_attributes_the_active_provider_for_both_providers(noc_root, monkeypatch):
+    _write_context(noc_root)
+    monkeypatch.setattr(assistant, "ask_copilot", lambda envelope: _answer())
+
+    responses = {
+        identifier: assistant.answer(
+            AssistantQuestion(SHIFT, "What requires attention?", True),
+            provider_identifier=identifier,
+        )
+        for identifier in ("deepseek-api", "github-copilot-cli")
+    }
+
+    for identifier, response in responses.items():
+        assert response["provider"] == identifier
+        assert response["status"] == "complete"
+        assert response["providerStatus"] == "success"
+        assert set(response) == {
+            "shiftDate",
+            "status",
+            "provider",
+            "providerInvoked",
+            "providerStatus",
+            "facts",
+            "reviewedFindings",
+            "aiObservations",
+            "recommendations",
+            "evidence",
+            "limitations",
+        }
+
+
+def test_environment_selection_attributes_deepseek_without_leaking_key(
+    noc_root,
+    monkeypatch,
+):
+    _write_context(noc_root)
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "deepseek-api")
+    monkeypatch.setenv("NOC_WEB_DEEPSEEK_API_KEY", "test-sentinel-deepseek-key")
+    monkeypatch.setattr(assistant, "ask_copilot", lambda envelope: _answer())
+
+    response = assistant.answer(
+        AssistantQuestion(SHIFT, "What requires attention?", True)
+    )
+
+    assert response["provider"] == "deepseek-api"
+    assert "test-sentinel-deepseek-key" not in json.dumps(response)
+
+
+def test_response_validation_rejects_a_provider_mismatch():
+    response = assistant._response(
+        SHIFT,
+        "deepseek-api",
+        "limited",
+        [],
+        ["Available selected-shift context is insufficient."],
+    )
+
+    assert assistant.validate_assistant_response(response, SHIFT)
+    assert not assistant.validate_assistant_response(
+        response,
+        SHIFT,
+        expected_provider="github-copilot-cli",
+    )
+
+
+def test_answer_without_a_configured_provider_fails_closed(monkeypatch):
+    monkeypatch.delenv("NOC_WEB_AI_PROVIDER", raising=False)
+
+    with pytest.raises(CopilotProviderUnavailable):
+        assistant.answer(
+            AssistantQuestion(SHIFT, "What requires attention?", True)
+        )

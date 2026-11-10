@@ -63,6 +63,7 @@ def test_external_capabilities_are_reported_independently_and_redacted(
     by_id = {result["id"]: result for result in results}
 
     assert set(by_id) == {
+        "external.aiProvider",
         "external.atlas",
         "external.copilot",
         "external.datadogMcp",
@@ -96,6 +97,8 @@ def test_external_capabilities_are_reported_independently_and_redacted(
 
 
 def test_optional_capabilities_report_ready_independently(tmp_path, monkeypatch):
+    monkeypatch.delenv("NOC_WEB_AI_PROVIDER", raising=False)
+    monkeypatch.delenv("NOC_WEB_DEEPSEEK_API_KEY", raising=False)
     noc_bin = tmp_path / "bin"
     noc_bin.mkdir()
     for command in (
@@ -123,6 +126,7 @@ def test_optional_capabilities_report_ready_independently(tmp_path, monkeypatch)
     results = dependency_readiness.assess_external_capabilities(noc_bin, timeout_seconds=1)
 
     assert {item["id"]: item["status"] for item in results} == {
+        "external.aiProvider": "notConfigured",
         "external.atlas": "ready",
         "external.copilot": "ready",
         "external.datadogMcp": "ready",
@@ -381,3 +385,36 @@ def test_missing_atlas_reports_setup_required(monkeypatch, tmp_path):
 
     atlas_result = next(item for item in results if item["id"] == "external.atlas")
     assert atlas_result["status"] == "setup_required"
+
+
+def test_ai_provider_capability_is_static_optional_and_non_secret(
+    tmp_path,
+    monkeypatch,
+):
+    sentinel = "test-sentinel-deepseek-key"
+    noc_bin = tmp_path / "bin"
+    noc_bin.mkdir()
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "deepseek-api")
+    monkeypatch.setenv("NOC_WEB_DEEPSEEK_API_KEY", sentinel)
+    monkeypatch.setenv("NOC_WEB_DEEPSEEK_MODEL", "deepseek-flash")
+    monkeypatch.setattr(
+        dependency_readiness,
+        "_executable",
+        lambda *args, **kwargs: None,
+    )
+
+    results = dependency_readiness.assess_external_capabilities(
+        noc_bin,
+        timeout_seconds=1,
+    )
+    provider = next(
+        item for item in results if item["id"] == "external.aiProvider"
+    )
+
+    assert provider["required"] is False
+    assert provider["status"] == "ready"
+    assert provider["providerReadiness"] == "ready"
+    assert provider["configuredProvider"] == "deepseek-api"
+    assert provider["model"] == "deepseek-flash"
+    assert "credential" not in provider
+    assert sentinel not in str(results)

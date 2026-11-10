@@ -4,19 +4,23 @@ import pytest
 @pytest.fixture
 def fake_assistant_provider(monkeypatch):
     """Inject a deterministic provider and capture its bounded request envelopes."""
-    from backend.app import app, configure_assistant_provider
+    from backend.app import app
 
     calls = []
 
-    def install(response):
+    def install(response, identifier="github-copilot-cli"):
         def provider(envelope):
             calls.append(envelope)
             if isinstance(response, Exception):
                 raise response
             return response
 
-        monkeypatch.setattr(app.state, "assistant_provider", None)
-        configure_assistant_provider(provider)
+        monkeypatch.setattr(app.state, "assistant_provider", provider)
+        monkeypatch.setattr(
+            app.state,
+            "assistant_provider_identifier",
+            identifier,
+        )
         return calls
 
     return install

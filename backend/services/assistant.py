@@ -8,6 +8,11 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
+from backend.services.ai_provider import (
+    SUPPORTED_PROVIDERS,
+    active_provider_identifier,
+    provider_timeout_seconds,
+)
 from backend.services.assistant_context import VALID_AVAILABILITY, collect_context
 from backend.services.copilot_mcp import (
     CopilotMcpAdapter,
@@ -20,7 +25,6 @@ from backend.services.copilot_mcp import (
 
 
 QUESTION_MAX_LENGTH = 1000
-ASSISTANT_PROVIDER = "github-copilot-cli"
 SHIFT_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 PROHIBITED_ACTION_PATTERNS = (
     re.compile(
@@ -138,6 +142,7 @@ def _public_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _response(
     shift_date: str,
+    provider_identifier: str,
     status: str,
     evidence: list[dict[str, Any]],
     limitations: list[str],
@@ -152,7 +157,7 @@ def _response(
     return {
         "shiftDate": shift_date,
         "status": status,
-        "provider": ASSISTANT_PROVIDER,
+        "provider": provider_identifier,
         "providerInvoked": provider_invoked,
         "providerStatus": provider_status,
         "facts": facts or [],
@@ -164,7 +169,11 @@ def _response(
     }
 
 
-def validate_assistant_response(response: Any, shift_date: str) -> bool:
+def validate_assistant_response(
+    response: Any,
+    shift_date: str,
+    expected_provider: str | None = None,
+) -> bool:
     if not isinstance(response, dict) or set(response) != {
         "shiftDate",
         "status",
@@ -179,7 +188,14 @@ def validate_assistant_response(response: Any, shift_date: str) -> bool:
         "limitations",
     }:
         return False
-    if response.get("shiftDate") != shift_date or response.get("provider") != ASSISTANT_PROVIDER:
+    if (
+        response.get("shiftDate") != shift_date
+        or response.get("provider") not in SUPPORTED_PROVIDERS
+        or (
+            expected_provider is not None
+            and response.get("provider") != expected_provider
+        )
+    ):
         return False
 
     invoked = response.get("providerInvoked")
@@ -765,7 +781,10 @@ def _limitation_messages(evidence: list[dict[str, Any]]) -> list[str]:
     ]
 
 
-def _refusal(question: AssistantQuestion) -> dict[str, Any]:
+def _refusal(
+    question: AssistantQuestion,
+    provider_identifier: str,
+) -> dict[str, Any]:
     route = {
         "label": "Open Tickets",
         "href": f"tickets.html?shift={question.shift_date}",
@@ -773,6 +792,7 @@ def _refusal(question: AssistantQuestion) -> dict[str, Any]:
     }
     return _response(
         question.shift_date,
+        provider_identifier,
         "limited",
         [],
         ["This request is outside the assistant's advisory boundary. Nothing was changed."],
@@ -787,8 +807,15 @@ def _refusal(question: AssistantQuestion) -> dict[str, Any]:
 def answer(
     question: AssistantQuestion,
     provider: CopilotProvider | None = None,
+    provider_identifier: str | None = None,
 ) -> dict[str, Any]:
     """Answer one request and discard all temporary values before returning."""
+    active_provider = provider_identifier or active_provider_identifier()
+    if active_provider not in SUPPORTED_PROVIDERS:
+        raise CopilotProviderUnavailable(
+            "The assistant provider is not configured.",
+            provider_invoked=False,
+        )
     context: list[dict[str, Any]] | None = None
     envelope: dict[str, Any] | None = None
     provider_result: dict[str, Any] | None = None
@@ -800,7 +827,7 @@ def answer(
             or OVERRIDE_PATTERN.search(question.question)
             or not SUPPORTED_CONTEXT_PATTERN.search(question.question)
         ):
-            return _refusal(question)
+            return _refusal(question, active_provider)
 
         context = collect_context(question.shift_date)
         facts = _source_facts(context)
@@ -819,6 +846,7 @@ def answer(
                 facts.extend(_activity_gap_fact(question.shift_date, context))
             return _response(
                 question.shift_date,
+                active_provider,
                 "limited",
                 context,
                 limitations + [
@@ -848,11 +876,15 @@ def answer(
             provider_result = (
                 ask_copilot(envelope)
                 if provider is None
-                else CopilotMcpAdapter(provider).ask(envelope)
+                else CopilotMcpAdapter(
+                    provider,
+                    timeout_seconds=provider_timeout_seconds(),
+                ).ask(envelope)
             )
         except CopilotProviderTimeout as error:
             return _response(
                 question.shift_date,
+                active_provider,
                 "unavailable",
                 context,
                 limitations + ["The assistant provider timed out. No AI advice was generated."],
@@ -864,6 +896,7 @@ def answer(
         except CopilotProviderInvalid as error:
             return _response(
                 question.shift_date,
+                active_provider,
                 "unavailable",
                 context,
                 limitations + ["The assistant provider returned an invalid response. No AI advice was generated."],
@@ -875,6 +908,7 @@ def answer(
         except CopilotProviderUnavailable as error:
             return _response(
                 question.shift_date,
+                active_provider,
                 "unavailable",
                 context,
                 limitations + ["The assistant provider is unavailable. No AI advice was generated."],
@@ -893,6 +927,7 @@ def answer(
         if validated is None:
             return _response(
                 question.shift_date,
+                active_provider,
                 "unavailable",
                 context,
                 limitations + ["The assistant provider returned an invalid response. No AI advice was generated."],
@@ -903,6 +938,7 @@ def answer(
             )
         return _response(
             question.shift_date,
+            active_provider,
             "complete",
             context,
             limitations,
