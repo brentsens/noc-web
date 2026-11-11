@@ -114,6 +114,7 @@ Local Ollama inference passes through the same downstream safety controls as Dee
 
 ### 1. Start Shift
 
+
 The Start Shift workflow prepares the selected NOC shift and verifies the workstation environment.
 
 ```text
@@ -131,10 +132,8 @@ Workspace
     └── Operational Status
 ```
 
-<!-- SCREENSHOT: Start Shift
-Suggested path: docs/images/start-shift.png
-![Start Shift workflow](docs/images/start-shift.png)
--->
+<img width="1919" height="908" alt="image" src="https://github.com/user-attachments/assets/4a1ee6ce-a96d-4cb3-8a8c-04c9bfa2480c" />
+
 
 ### 2. Tickets
 
@@ -152,10 +151,8 @@ Atlas
 Jira
 ```
 
-<!-- SCREENSHOT: Tickets
-Suggested path: docs/images/tickets.png
-![Ticket workflow](docs/images/tickets.png)
--->
+<img width="1918" height="915" alt="image" src="https://github.com/user-attachments/assets/d2544656-c530-42cc-b848-b65ee21e2040" />
+
 
 ### 3. Assistant and AI Actions
 
@@ -181,10 +178,10 @@ Advisory Response
 
 The AI cannot directly modify tickets, investigations, Datadog objects, Microsoft 365 objects, or other operational state.
 
-<!-- SCREENSHOT: Assistant provider selector and response
-Suggested path: docs/images/assistant-providers.png
-![Assistant provider selection](docs/images/assistant-providers.png)
--->
+<img width="1917" height="916" alt="image" src="https://github.com/user-attachments/assets/4e2c561e-9725-4a14-a3f0-0458212b5490" />
+
+<img width="1917" height="908" alt="image" src="https://github.com/user-attachments/assets/20429719-2f42-4707-be37-f9eb13883e79" />
+
 
 ### 4. Investigations
 
@@ -219,15 +216,10 @@ AI-generated investigation content does not automatically become reviewed operat
 
 Investigation persistence includes provenance and generation state separately from reviewed findings.
 
-<!-- SCREENSHOT: Investigation evidence preview
-Suggested path: docs/images/investigation-preview.png
-![Investigation evidence preview](docs/images/investigation-preview.png)
--->
+<img width="1919" height="910" alt="image" src="https://github.com/user-attachments/assets/fe2fde24-9a26-4d00-8025-fb811fca087a" />
 
-<!-- SCREENSHOT: Ready for Review
-Suggested path: docs/images/investigation-review.png
-![Investigation ready for review](docs/images/investigation-review.png)
--->
+<img width="1917" height="914" alt="image" src="https://github.com/user-attachments/assets/9997c433-aafa-43f8-a1ed-17134875bf1a" />
+
 
 ### 5. End Shift and Handover
 
@@ -269,10 +261,8 @@ All validated open tickets are included deterministically. The AI provider does 
 
 The final handover remains operator-controlled and is delivered through Microsoft 365 only after confirmation.
 
-<!-- SCREENSHOT: End Shift / handover
-Suggested path: docs/images/end-shift.png
-![End Shift handover](docs/images/end-shift.png)
--->
+<img width="1919" height="912" alt="image" src="https://github.com/user-attachments/assets/0a05a7bb-363a-48f0-8310-383ea79e110c" />
+
 
 ## Requirements
 
