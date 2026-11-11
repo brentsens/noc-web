@@ -106,8 +106,10 @@ EOF
 Readiness reports `READY`, `SETUP REQUIRED`, or `NOT CONFIGURED` from static
 configuration and required-material presence only. It never makes a provider
 request and does not assert that credentials were accepted or that the provider
-is reachable. Provider readiness is warning-only in shift health so it cannot
-block End Shift or handover workflows.
+is reachable. Provider readiness is warning-only in shift health so it does not
+block End Shift preflight or deterministic handover preview. Confirmed handover
+generation still fails closed if the configured provider is unavailable; it never
+falls back to another provider or to a deterministic-only final record.
 
 ## Datadog evidence provider and investigation generation
 
@@ -131,6 +133,31 @@ use a direct read-only Datadog API provider. This path does not require,
 invoke, or depend on GitHub Copilot CLI or Datadog MCP. The provider issues only
 allowlisted retrieval operations; it cannot create, update, acknowledge, mute,
 resolve, delete, or otherwise modify Datadog resources.
+
+## Handover generation
+
+End Shift handover generation assembles mandatory factual content deterministically
+from validated shift evidence: shift notes, all locally tracked and remote open
+tickets, reviewed investigation findings and lifecycle state, already-available
+read-only Datadog context, dashboard/status information, and handover readiness.
+Every validated open ticket is included; ticket completeness never depends on AI
+judgment. If no validated ticket source can establish the open set, or the set
+exceeds the bound, generation fails closed rather than omitting tickets.
+
+Preview is deterministic, read-only, and non-generative. Every confirmed generation
+invokes the configured AI provider for internal advisory validation; the AI cannot author or
+modify mandatory sections and never receives credentials. AI advisory text and internal
+`[evidence:...]` citation markers are not emitted in the final handover. The final Markdown uses
+the established `Hi Team` intro, deterministic mandatory sections, and signature, with
+deterministic ticket counts authoritative. Validated advisory citations are retained only in
+`handover-provenance.json`. Provider failure fails closed and preserves any existing handover.
+There is no deterministic-only generation path and no automatic provider fallback. Regeneration
+archives the previous Markdown and provenance sidecar and restores them on failure.
+
+The existing Markdown format and delivery workflow remain authoritative. A versioned
+`handover-provenance.json` sidecar is additive and is not delivered. Microsoft 365
+delivery remains separate from AI generation. `noc-handover` and Copilot CLI are
+optional compatibility capabilities, not requirements for core handover generation.
 
 | Variable | Required | Default | Secret |
 |---|---|---|---|

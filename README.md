@@ -200,9 +200,13 @@ Installation does not require a `~/code/noc-tools` checkout.
 Readiness independently reports Atlas Jira, the configured AI provider, the
 Datadog API provider, Microsoft 365, and legacy noc-tools. Datadog incident and
 evidence retrieval uses a direct read-only API with a process-environment bearer
-token. Datadog investigation generation uses Feature 015 read-only evidence and
-the configured AI provider; it does not require noc-inv, GitHub Copilot CLI, or
-Datadog MCP. Authentication is operator-specific. Credentials, tokens, cookies,
+token. Datadog investigation generation uses Feature 015 read-only evidence and the
+configured AI provider; it does not require noc-inv, GitHub Copilot CLI, or
+Datadog MCP. Handover generation assembles all validated open tickets and factual
+sections deterministically, then uses the configured AI provider for internal advisory
+validation; the final handover remains deterministic and contains no AI-specific sections or
+internal citation markers. It does not require noc-handover or Copilot CLI. Authentication
+is operator-specific. Credentials, tokens, cookies,
 sessions, and another operator's authentication are never bundled or copied by
 the installer.
 

@@ -204,3 +204,23 @@ def test_investigation_system_prompt_is_passed_to_selected_provider(monkeypatch)
     assert runtime.provider({"evidence": []}) == {"ok": True}
     assert captured["system_prompt"] == "Investigation prompt profile"
     assert captured["model"] == "deepseek-flash"
+
+
+def test_handover_system_prompt_is_passed_to_selected_provider(monkeypatch):
+    from backend.services import deepseek_provider
+
+    captured = {}
+
+    def answer(envelope, **kwargs):
+        captured.update(kwargs)
+        return {"advisorySummary": [], "operationalRisks": [], "recommendedFocus": [], "watchItems": []}
+
+    monkeypatch.setattr(deepseek_provider, "answer_with_deepseek_api", answer)
+    runtime = ai_provider.resolve_provider_runtime(
+        _deepseek(),
+        system_prompt="Handover prompt profile",
+    )
+
+    assert runtime.provider({"evidence": []})["advisorySummary"] == []
+    assert captured["system_prompt"] == "Handover prompt profile"
+    assert captured["model"] == "deepseek-flash"

@@ -125,11 +125,12 @@ def noc_root(
 
     for module in modules:
 
-        monkeypatch.setattr(
-            module,
-            "NOC_ROOT",
-            test_root,
-        )
+        if hasattr(module, "NOC_ROOT"):
+            monkeypatch.setattr(
+                module,
+                "NOC_ROOT",
+                test_root,
+            )
 
     monkeypatch.setattr(
         ticket_sync,

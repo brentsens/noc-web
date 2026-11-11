@@ -615,16 +615,33 @@ export function getEndShiftPreflight(
 
 }
 
-export function generateHandover(
-  shiftDate,
-  confirmed = false
+export function previewHandoverGeneration(
+  shiftDate
 ) {
 
+  return apiRequest(
+    `/api/shifts/${shiftDate}/handover/generation-preview`,
+    {
+      method: "POST"
+    }
+  );
+
+}
+
+export function generateHandover(
+  shiftDate,
+  confirmed = false,
+  previewDigest = null
+) {
+  const body = { confirmed };
+  if (typeof previewDigest === "string") {
+    body.previewDigest = previewDigest;
+  }
   return apiRequest(
     `/api/shifts/${shiftDate}/handover`,
     {
       method: "POST",
-      body: JSON.stringify({ confirmed })
+      body: JSON.stringify(body)
     }
   );
 
@@ -687,14 +704,18 @@ export function getTicketSyncState() {
 
 export function regenerateHandover(
   shiftDate,
-  confirmed = false
+  confirmed = false,
+  previewDigest = null
 ) {
-
+  const body = { confirmed };
+  if (typeof previewDigest === "string") {
+    body.previewDigest = previewDigest;
+  }
   return apiRequest(
     `/api/shifts/${shiftDate}/handover/regenerate`,
     {
       method: "POST",
-      body: JSON.stringify({ confirmed })
+      body: JSON.stringify(body)
     }
   );
 

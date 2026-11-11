@@ -417,3 +417,48 @@ def test_end_shift_adds_active_local_work_without_changing_preflight(
         "nextAction": "Follow up",
         "nocNotes": "Local",
     }]
+
+def test_handover_generation_preview_api_is_read_only(noc_root, monkeypatch):
+    from backend.api import handover as handover_api
+
+    preview = {
+        "shiftDate": SHIFT_DATE,
+        "preview": True,
+        "evidenceDigest": "sha256:preview",
+        "intro": "Shift handover",
+        "sections": [{"name": "Open Jira Tickets", "content": "- NOC-1"}],
+        "closing": "Regards",
+        "evidence": {"availability": "complete", "ticketCount": 1},
+        "readiness": {"enabled": True, "blockers": [], "warnings": []},
+        "generationMode": "deterministic-preview",
+        "requiresConfirmation": True,
+    }
+    monkeypatch.setattr(handover_api, "preview_handover", lambda shift: preview)
+
+    response = TestClient(app).post(
+        f"/api/shifts/{SHIFT_DATE}/handover/generation-preview"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["preview"] is True
+    assert response.json()["evidenceDigest"] == "sha256:preview"
+    assert not (
+        noc_root / SHIFT_DATE / "handover" / f"handover-{SHIFT_DATE}.md"
+    ).exists()
+
+
+def test_handover_generation_preview_api_maps_controlled_errors(noc_root, monkeypatch):
+    from backend.api import handover as handover_api
+    from backend.services.handover import HandoverGenerationError
+
+    def fail(_shift):
+        raise HandoverGenerationError(422, "tickets-over-bound", "Too many tickets.")
+
+    monkeypatch.setattr(handover_api, "preview_handover", fail)
+
+    response = TestClient(app).post(
+        f"/api/shifts/{SHIFT_DATE}/handover/generation-preview"
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "tickets-over-bound"

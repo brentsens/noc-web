@@ -1,601 +1,112 @@
+from __future__ import annotations
+
+import json
+import os
 import re
 import shutil
-import subprocess
+import tempfile
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any, Callable
 
-from datetime import datetime
-from backend.config import NOC_ROOT
+from backend.services.ai_provider import (
+    ProviderInvalid,
+    ProviderTimeout,
+    ProviderUnavailable,
+    resolve_provider_runtime,
+)
+from backend.services.handover_ai import (
+    HANDOVER_SYSTEM_PROMPT,
+    HandoverAIError,
+    build_handover_envelope,
+    extract_citations,
+    validate_advisory_output,
+)
+from backend.services.handover_evidence import (
+    HandoverEvidenceError,
+    build_handover_evidence,
+    evidence_summary,
+)
+from backend.services.handover_provenance import (
+    PROVENANCE_FILENAME,
+    build_handover_provenance,
+    read_handover_provenance,
+)
+from backend.services.investigations import get_noc_root, get_reviewed_findings
 from backend.services.tickets import get_operational_work_summary
-from backend.services.investigations import (
-    LIFECYCLE_STATUS_LABELS,
-    get_investigation,
-    get_investigations,
-    get_noc_root,
-    get_reviewed_findings,
+
+
+SECTION_PATTERN = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+CLOSING_LINE = "Please tag me if any clarification is needed."
+HANDOVER_SIGNATURE = (
+    "Regards,\n\n"
+    "Brentsen Smith\n"
+    "NOC Engineer\n\n"
+    "2025 W. Belt Line Rd. #114\n"
+    "Carrollton, TX 75006\n\n"
+    "[sesami.io](https://www.sesami.io/) | [LinkedIn](https://www.linkedin.com/company/sesami-cash-management-technologies-corporation)"
 )
 
 
-
-SECTION_PATTERN = re.compile(
-    r"^##\s+(.+?)\s*$",
-    re.MULTILINE,
-)
-
-LOCAL_WORK_SECTION_PATTERN = re.compile(
-    r"(?ms)^## Active Local NOC Work\s*$.*?(?=^##\s|\Z)"
-)
-INVESTIGATION_SECTION_PATTERN = re.compile(
-    r"(?m)^##\s+(?:Investigation Updates|Investigations)\s*$",
-    re.IGNORECASE,
-)
-JIRA_TICKET_PATTERN = re.compile(
-    r"^\s*[-*]\s+(?:\*\*)?[A-Z][A-Z0-9]*-\d+\b"
-)
-JIRA_REVIEW_METADATA_PATTERN = re.compile(
-    r"operator[- ]reviewed finding|reviewed investigation context|"
-    r"investigation review (?:records?|state|metadata)|"
-    r"review(?:ed)? state|reviewed by|reviewed at|finding\s*:|"
-    r"reviewState\s*:|reviewedAt\s*:|reviewedBy\s*:|"
-    r"^\s*(?:[-*]\s*)?state\s*:\s*(?:cured|done|resolved|complete|completed|"
-    r"closed|fixed|recovered)\b|"
-    r"^\s*(?:[-*]\s*)?(?:investigation(?: name)?|display title|evidence provenance|"
-    r"capture method|shift date|source of truth)\s*:|"
-    r"notebook\s*:|app\.datadoghq\.com/notebook",
-    re.IGNORECASE,
-)
-MONITORING_FOLLOWUP_PATTERN = re.compile(
-    r"\b(?:monitor|monitoring|alert|threshold|retry|retries|load balancer|"
-    r"datadog|flapping)\b",
-    re.IGNORECASE,
-)
-UNRESOLVED_INVESTIGATIONS_PATTERN = re.compile(
-    r"\b\w+\s+reviewed investigations?\s+remains? unresolved"
-    r"(?:\s*:\s*[\s\S]*?)?"
-    r"(?:\.(?=\s+[A-Z0-9])|$)",
-    re.IGNORECASE,
-)
-UNRESOLVED_COUNT_PATTERN = re.compile(
-    r"\b(?P<count>one|two|three|four|five|both|all|these|\d+)\s+"
-    r"(?:(?:earlier|prior|previous)\s+)?investigations?\s+remains? unresolved"
-    r"(?:\s*:\s*[\s\S]*?)?"
-    r"(?:\.(?=\s+[A-Z0-9])|$)",
-    re.IGNORECASE,
-)
-SUMMARY_INVESTIGATION_CONFLICT_PATTERN = re.compile(
-    r"\b(?:unresolved|needs?\s+operator\s+review|requires?\s+operator\s+review|"
-    r"awaiting\s+(?:operator\s+)?review|advisory.{0,60}operator\s+review)\b",
-    re.IGNORECASE,
-)
-SUMMARY_SENTENCE_SEPARATOR_PATTERN = re.compile(
-    r"(?<=[.!?])(\s+)(?=[A-Z0-9])"
-)
-INVESTIGATION_ACTION_STOP_WORDS = {
-    "a", "an", "and", "at", "by", "failure", "for", "from", "in",
-    "investigation", "of", "on", "or", "parse", "stuck", "the", "to",
-    "uspri", "prod",
-}
+class HandoverGenerationError(RuntimeError):
+    def __init__(self, status_code: int, code: str, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
+        self.message = message
 
 
-def _validate_local_work(summary: dict) -> None:
-    if not summary["available"]:
-        raise ValueError(summary["error"])
+def _validate_shift_date(shift_date: str) -> str:
+    try:
+        date.fromisoformat(shift_date)
+    except (TypeError, ValueError):
+        raise HandoverGenerationError(
+            400, "invalid-shift", "shift_date must use YYYY-MM-DD format."
+        ) from None
+    return shift_date
 
 
-def _remove_active_local_work_section(handover_file) -> None:
-    original = handover_file.read_text(encoding="utf-8")
-    content = LOCAL_WORK_SECTION_PATTERN.sub("", original)
-    if content != original:
-        handover_file.write_text(
-            f"{content.rstrip()}\n" if content.strip() else "",
-            encoding="utf-8",
+def _handover_paths(shift_date: str) -> tuple[Path, Path]:
+    _validate_shift_date(shift_date)
+    root = get_noc_root().resolve()
+    shift_dir = root / shift_date
+    handover_dir = shift_dir / "handover"
+    handover_file = handover_dir / f"handover-{shift_date}.md"
+    provenance_file = handover_dir / PROVENANCE_FILENAME
+    try:
+        shift_dir.resolve(strict=False).relative_to(root)
+        handover_dir.resolve(strict=False).relative_to(root)
+    except ValueError:
+        raise HandoverGenerationError(
+            503, "storage-unavailable", "Handover storage is unavailable."
+        ) from None
+    if shift_dir.is_symlink() or handover_dir.is_symlink():
+        raise HandoverGenerationError(
+            503, "storage-unavailable", "Handover storage is unavailable."
         )
+    return handover_file, provenance_file
 
 
-def _section_matches(content: str):
-    return list(SECTION_PATTERN.finditer(content))
-
-
-def _section_bounds(content: str, section_name: str):
-    matches = _section_matches(content)
-    for index, match in enumerate(matches):
-        if match.group(1).strip().casefold() == section_name.casefold():
-            end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
-            if index + 1 == len(matches):
-                closing = re.search(r"(?m)^Please tag me\b", content[match.end():])
-                if closing:
-                    end = match.end() + closing.start()
-            return match, end
-    return None
-
-
-def _replace_section_body(
-    content: str,
-    section_match,
-    section_end: int,
-    body: str,
-    *,
-    remove_empty: bool = False,
-) -> str:
-    if body.strip():
-        return (
-            content[:section_match.end()]
-            + "\n\n"
-            + body.strip()
-            + "\n\n"
-            + content[section_end:].lstrip("\n")
-        )
-    if remove_empty:
-        return content[:section_match.start()] + content[section_end:].lstrip("\n")
-    return (
-        content[:section_match.end()]
-        + "\n\n"
-        + content[section_end:].lstrip("\n")
-    )
-
-
-def _investigation_keywords(investigation: dict) -> set[str]:
-    title = investigation.get("displayTitle") or investigation.get("title") or ""
-    name = investigation.get("name", "")
-    words = re.findall(r"[a-z0-9]+", f"{title} {name}".casefold())
+def _read_provenance(handover_file: Path) -> dict[str, Any] | None:
+    value = read_handover_provenance(handover_file.parent / PROVENANCE_FILENAME)
+    if value is None:
+        return None
     return {
-        word for word in words
-        if len(word) > 2 and not word.isdigit() and word not in INVESTIGATION_ACTION_STOP_WORDS
+        "formatVersion": value.get("formatVersion"),
+        "evidenceDigest": value.get("evidenceDigest"),
+        "availability": value.get("availability"),
+        "provider": value.get("provider") if isinstance(value.get("provider"), dict) else {},
+        "advisoryStatus": value.get("advisoryStatus"),
+        "advisorySection": value.get("advisorySection"),
+        "references": value.get("references") if isinstance(value.get("references"), dict) else {},
+        "unavailable": value.get("unavailable") if isinstance(value.get("unavailable"), list) else [],
+        "generatedAt": value.get("generatedAt"),
     }
 
 
-def _matches_investigation(text: str, investigations: list[dict]) -> bool:
-    words = set(re.findall(r"[a-z0-9]+", text.casefold()))
-    for investigation in investigations:
-        keywords = _investigation_keywords(investigation)
-        if len(words & keywords) >= min(2, len(keywords)):
-            return True
-    return False
-
-
-def _generated_investigation_action_words(investigations: list[dict]) -> set[str]:
-    words = set()
-    for investigation in investigations:
-        content = investigation.get("advisory", {}).get("content") or ""
-        match = re.search(
-            r"(?ms)^##\s+Next Actions\s*$([\s\S]*?)(?=^##\s|\Z)",
-            content,
-        )
-        if not match:
-            continue
-        for action in re.findall(r"(?m)^\s*(?:[-*]|\d+\.)\s+(.+)$", match.group(1)):
-            action_words = re.findall(r"[a-z0-9]+", action.casefold())
-            words.update(
-                word[:-1] if word.endswith("s") else word
-                for word in action_words
-                if len(word) > 2 and word not in INVESTIGATION_ACTION_STOP_WORDS
-            )
-    return words
-
-
-def _matches_generated_investigation_action(text: str, action_words: set[str]) -> bool:
-    if JIRA_TICKET_PATTERN.match(text):
-        return False
-    words = {
-        word[:-1] if word.endswith("s") else word
-        for word in re.findall(r"[a-z0-9]+", text.casefold())
-        if len(word) > 2 and word not in INVESTIGATION_ACTION_STOP_WORDS
-    }
-    return len(words & action_words) >= 3
-
-
-def _canonical_investigation_section(content: str, investigations: list[dict]) -> str:
-    section_match = INVESTIGATION_SECTION_PATTERN.search(content)
-    if section_match is None and not investigations:
-        return content
-    if section_match is None:
-        insertion = re.search(
-            r"(?m)^##\s+(?:Monitoring & Alerting Improvements|Open Salesforce Tickets|"
-            r"Open Jira Tickets|Next Shift Actions)\s*$",
-            content,
-        )
-        if insertion is None:
-            insertion = re.search(r"(?m)^Please tag me\b", content)
-        insertion_index = insertion.start() if insertion else len(content)
-        content = (
-            content[:insertion_index].rstrip()
-            + "\n\n## Investigation Updates\n"
-            + content[insertion_index:]
-        )
-        section_match = INVESTIGATION_SECTION_PATTERN.search(content)
-        if section_match is None:
-            raise RuntimeError("Could not add the investigation section to the handover.")
-
-    section_matches = _section_matches(content)
-    next_section = next(
-        (match for match in section_matches if match.start() > section_match.start()),
-        None,
-    )
-    section_end = next_section.start() if next_section else len(content)
-    if next_section is None:
-        closing = re.search(r"(?m)^Please tag me\b", content[section_match.end():])
-        if closing:
-            section_end = section_match.end() + closing.start()
-
-    lines = []
-    for investigation in investigations:
-        reviewed = investigation["reviewedFinding"]
-        title = (
-            investigation.get("displayTitle")
-            or investigation.get("title")
-            or investigation["name"]
-        )
-        lines.append(
-            f"- **{title}** — Operator-reviewed finding: {reviewed['finding']}; "
-            f"state: {LIFECYCLE_STATUS_LABELS[investigation['lifecycleStatus']]}."
-        )
-        reference = investigation.get("evidence", {}).get("reference")
-        if reference:
-            lines.append(f"  - Notebook: {reference}")
-    return _replace_section_body(
-        content,
-        section_match,
-        section_end,
-        "\n".join(lines),
-        remove_empty=not investigations,
-    )
-
-
-def _sanitize_open_jira_section(content: str, investigations: list[dict]) -> str:
-    bounds = _section_bounds(content, "Open Jira Tickets")
-    if bounds is None:
-        return content
-    section_match, section_end = bounds
-    body = content[section_match.end():section_end]
-    lines = []
-    in_ticket = False
-    for line in body.splitlines():
-        if JIRA_REVIEW_METADATA_PATTERN.search(line):
-            continue
-        if JIRA_TICKET_PATTERN.match(line):
-            in_ticket = True
-            lines.append(line)
-        elif _matches_investigation(line, investigations):
-            continue
-        elif re.match(r"^\s*[-*]\s+", line):
-            if in_ticket and line[:1].isspace():
-                lines.append(line)
-            else:
-                in_ticket = False
-        elif re.match(r"^\s*No open Jira tickets\.?\s*$", line, re.IGNORECASE):
-            in_ticket = False
-            lines.append(line)
-        elif not line.strip():
-            if in_ticket:
-                lines.append(line)
-        elif in_ticket and line[:1].isspace():
-            lines.append(line)
-        else:
-            in_ticket = False
-    return _replace_section_body(content, section_match, section_end, "\n".join(lines))
-
-
-def _filter_next_shift_actions(content: str, investigations: list[dict]) -> str:
-    bounds = _section_bounds(content, "Next Shift Actions")
-    if bounds is None:
-        return content
-    section_match, section_end = bounds
-    body = content[section_match.end():section_end]
-    generated_action_words = _generated_investigation_action_words(investigations)
-    lines = body.splitlines()
-    filtered = []
-    current_group = []
-
-    def flush_group():
-        if not current_group:
-            return
-        is_ticket_group = bool(JIRA_TICKET_PATTERN.match(current_group[0]))
-        if is_ticket_group:
-            filtered.extend(current_group)
-        elif not _matches_investigation(current_group[0], investigations) and not (
-            _matches_generated_investigation_action(
-                current_group[0],
-                generated_action_words,
-            )
-        ):
-            filtered.extend(
-                line for line in current_group
-                if not _matches_investigation(line, investigations)
-                and not _matches_generated_investigation_action(
-                    line,
-                    generated_action_words,
-                )
-            )
-        current_group.clear()
-
-    for line in lines:
-        if line.startswith("- "):
-            flush_group()
-            current_group.append(line)
-        elif line.startswith("  ") and current_group:
-            current_group.append(line)
-        else:
-            flush_group()
-            if (
-                not _matches_investigation(line, investigations)
-                and not _matches_generated_investigation_action(
-                    line,
-                    generated_action_words,
-                )
-            ):
-                filtered.append(line)
-    flush_group()
-    return _replace_section_body(content, section_match, section_end, "\n".join(filtered))
-
-
-def _append_active_reviewed_actions(content: str, investigations: list[dict]) -> str:
-    bounds = _section_bounds(content, "Next Shift Actions")
-    if bounds is None:
-        return content
-    section_match, section_end = bounds
-    actions = []
-    for investigation in investigations:
-        reviewed = investigation.get("reviewedFinding")
-        if (
-            investigation.get("lifecycle", {}).get("reviewState") != "reviewed"
-            or not reviewed
-            or investigation.get("lifecycleStatus") != "escalated_to_incident"
-        ):
-            continue
-        title = (
-            investigation.get("displayTitle")
-            or investigation.get("title")
-            or investigation["name"]
-        )
-        actions.append(
-            f"- **{title}**: Operator-reviewed follow-up: {reviewed['finding']}"
-        )
-    if not actions:
-        return content
-    body = content[section_match.end():section_end].rstrip()
-    return _replace_section_body(
-        content,
-        section_match,
-        section_end,
-        "\n".join(part for part in (body, *actions) if part),
-    )
-
-
-def _operator_monitoring_updates(shift_date: str) -> list[str]:
-    notes_file = get_noc_root() / shift_date / "shift-notes.md"
-    if not notes_file.is_file():
-        return []
-    notes = notes_file.read_text(encoding="utf-8")
-    bounds = _section_bounds(notes, "Changes / Monitor Updates")
-    if bounds is None:
-        return []
-    section_match, section_end = bounds
-    body = notes[section_match.end():section_end]
-    return [
-        line.rstrip()
-        for line in body.splitlines()
-        if line.strip()
-        and line.strip().casefold() not in {"none", "no changes", "no monitor updates"}
-    ]
-
-
-def _active_reviewed_monitoring_updates(investigations: list[dict]) -> list[str]:
-    updates = []
-    for investigation in investigations:
-        reviewed = investigation.get("reviewedFinding")
-        if (
-            investigation.get("lifecycle", {}).get("reviewState") != "reviewed"
-            or not reviewed
-            or investigation.get("lifecycleStatus") != "escalated_to_incident"
-            or not MONITORING_FOLLOWUP_PATTERN.search(reviewed["finding"])
-        ):
-            continue
-        title = (
-            investigation.get("displayTitle")
-            or investigation.get("title")
-            or investigation["name"]
-        )
-        updates.append(
-            f"- **{title}**: Operator-reviewed follow-up: {reviewed['finding']}"
-        )
-    return updates
-
-
-def _canonical_monitoring_improvements(
-    content: str,
-    shift_date: str,
-    investigations: list[dict],
-) -> str:
-    updates = _operator_monitoring_updates(shift_date)
-    updates.extend(_active_reviewed_monitoring_updates(investigations))
-    bounds = _section_bounds(content, "Monitoring & Alerting Improvements")
-    if bounds is not None:
-        section_match, section_end = bounds
-        return _replace_section_body(
-            content,
-            section_match,
-            section_end,
-            "\n".join(updates),
-            remove_empty=not updates,
-        )
-    if not updates:
-        return content
-
-    insertion = re.search(
-        r"(?m)^##\s+(?:Open Salesforce Tickets|Open Jira Tickets|Next Shift Actions)\s*$",
-        content,
-    )
-    insertion_index = insertion.start() if insertion else len(content)
-    section = "## Monitoring & Alerting Improvements\n\n" + "\n".join(updates)
-    return (
-        content[:insertion_index].rstrip()
-        + "\n\n"
-        + section
-        + "\n\n"
-        + content[insertion_index:].lstrip("\n")
-    )
-
-
-def _correct_resolved_investigation_summary(content: str, investigations: list[dict]) -> str:
-    bounds = _section_bounds(content, "Summary")
-    if bounds is None:
-        return content
-    resolved = [
-        investigation for investigation in investigations
-        if investigation.get("lifecycle", {}).get("reviewState") == "reviewed"
-        and investigation.get("reviewedFinding")
-        and investigation.get("lifecycleStatus") == "cured"
-    ]
-    if not resolved:
-        return content
-
-    all_investigations_resolved = bool(investigations) and all(
-        investigation.get("lifecycle", {}).get("reviewState") == "reviewed"
-        and investigation.get("reviewedFinding")
-        and investigation.get("lifecycleStatus") == "cured"
-        for investigation in investigations
-    )
-
-    def resolved_statements(items: list[dict]) -> str:
-        statements = []
-        for investigation in items:
-            title = (
-                investigation.get("displayTitle")
-                or investigation.get("title")
-                or investigation["name"]
-            )
-            statements.append(f"Operator review marks {title} as Cured.")
-        return " ".join(statements)
-
-    section_match, section_end = bounds
-    body = content[section_match.end():section_end]
-    updated = UNRESOLVED_INVESTIGATIONS_PATTERN.sub(
-        resolved_statements(resolved),
-        body,
-    )
-    count_words = {
-        "one": 1,
-        "two": 2,
-        "three": 3,
-        "four": 4,
-        "five": 5,
-    }
-
-    def replace_unresolved_count(match) -> str:
-        raw_count = match.group("count").casefold()
-        count = (
-            len(resolved)
-            if raw_count in {"both", "all", "these"}
-            else count_words.get(raw_count, int(raw_count) if raw_count.isdigit() else 0)
-        )
-        if all_investigations_resolved and count == len(resolved):
-            return resolved_statements(resolved)
-        return match.group(0)
-
-    updated = UNRESOLVED_COUNT_PATTERN.sub(replace_unresolved_count, updated)
-    sentences = SUMMARY_SENTENCE_SEPARATOR_PATTERN.split(updated)
-    for index in range(0, len(sentences), 2):
-        sentence = sentences[index]
-        sentence_words = set(re.findall(r"[a-z0-9]+", sentence.casefold()))
-        matching = [
-            investigation for investigation in resolved
-            if sentence_words & set(re.findall(
-                r"[a-z0-9]+",
-                (
-                    investigation.get("displayTitle")
-                    or investigation.get("title")
-                    or investigation["name"]
-                ).casefold(),
-            ))
-        ]
-        if matching and "operator review marks" not in sentence.casefold():
-            if SUMMARY_INVESTIGATION_CONFLICT_PATTERN.search(sentence):
-                sentences[index] = resolved_statements(matching)
-            else:
-                sentences[index] = ""
-    updated = re.sub(r"[ \t]{2,}", " ", "".join(sentences))
-    missing_statuses = []
-    for investigation in resolved:
-        title = (
-            investigation.get("displayTitle")
-            or investigation.get("title")
-            or investigation["name"]
-        )
-        statement = f"Operator review marks {title} as Cured."
-        if statement.casefold() not in updated.casefold():
-            missing_statuses.append(statement)
-    if missing_statuses:
-        parts = SUMMARY_SENTENCE_SEPARATOR_PATTERN.split(updated)
-        if len(parts) > 1:
-            updated = (
-                parts[0]
-                + parts[1]
-                + " ".join(missing_statuses)
-                + " "
-                + "".join(parts[2:])
-            )
-        else:
-            updated = " ".join((updated.rstrip(), *missing_statuses))
-        updated = re.sub(r"[ \t]{2,}", " ", updated)
-    if updated != body:
-        return _replace_section_body(content, section_match, section_end, updated)
-    return content
-
-
-def _include_reviewed_findings(handover_file, shift_date: str) -> None:
-    investigations = []
-    for projection in get_investigations(shift_date):
-        source = projection.get("sourceReference")
-        if isinstance(source, dict):
-            detail = get_investigation(
-                source.get("creationShiftDate"),
-                source.get("investigationName"),
-                shift_date,
-            )
-            if detail and detail.get("advisory"):
-                projection["advisory"] = detail["advisory"]
-        investigations.append(projection)
-    reviewed = [
-        investigation for investigation in investigations
-        if investigation.get("lifecycle", {}).get("reviewState") == "reviewed"
-        and investigation.get("reviewedFinding") is not None
-        and investigation.get("validationStatus") != "needs_review"
-        and (
-            investigation.get("lifecycleStatus") == "escalated_to_incident"
-            or (
-                investigation.get("lifecycleStatus") == "cured"
-                and investigation.get("lastLifecycleChangedShiftDate") == shift_date
-            )
-        )
-    ]
-
-    content = handover_file.read_text(encoding="utf-8")
-    content = _canonical_investigation_section(content, reviewed)
-    content = _canonical_monitoring_improvements(
-        content,
-        shift_date,
-        investigations,
-    )
-    content = _sanitize_open_jira_section(content, investigations)
-    content = _filter_next_shift_actions(content, investigations)
-    content = _append_active_reviewed_actions(content, reviewed)
-    content = _correct_resolved_investigation_summary(content, investigations)
-    handover_file.write_text(content, encoding="utf-8")
-
-
-def get_handover(
-    shift_date: str,
-) -> dict:
-
-    noc_root = get_noc_root()
-    handover_file = (
-        noc_root
-        / shift_date
-        / "handover"
-        / f"handover-{shift_date}.md"
-    )
-
-
+def get_handover(shift_date: str) -> dict:
+    handover_file, _ = _handover_paths(shift_date)
     if not handover_file.is_file():
-
         return {
             "shiftDate": shift_date,
             "exists": False,
@@ -606,374 +117,448 @@ def get_handover(
             "content": "",
             "localWork": get_operational_work_summary(),
             "reviewedFindings": get_reviewed_findings(shift_date),
+            "generationMode": "none",
+            "advisoryStatus": None,
+            "evidence": None,
         }
 
-
-    content = handover_file.read_text(
-        encoding="utf-8"
-    )
-
-
+    content = handover_file.read_text(encoding="utf-8")
     sections = []
     intro_lines = []
     closing_lines = []
-
     current_section = None
-
-
     for raw_line in content.splitlines():
-
         line = raw_line.rstrip()
-
-
-        section_match = (
-            SECTION_PATTERN.match(
-                line
-            )
-        )
-
-
+        section_match = SECTION_PATTERN.match(line)
         if section_match:
-
-            current_section = {
-                "name":
-                    section_match
-                    .group(1)
-                    .strip(),
-
-                "content": [],
-            }
-
-            sections.append(
-                current_section
-            )
-
+            current_section = {"name": section_match.group(1).strip(), "content": []}
+            sections.append(current_section)
             continue
-
-
         if current_section is None:
-
             if line.strip():
-                intro_lines.append(
-                    line
-                )
-
+                intro_lines.append(line)
             continue
+        current_section["content"].append(line)
 
-
-        current_section[
-            "content"
-        ].append(line)
-
-
-    # Pull the email-style closing out of
-    # the final section when present.
     if sections:
-
-        final_lines = (
-            sections[-1]["content"]
-        )
-
+        final_lines = sections[-1]["content"]
         closing_start = None
-
-        for index, line in enumerate(
-            final_lines
-        ):
-
-            if line.strip().startswith(
-                "Please tag me"
-            ):
-
+        for index, line in enumerate(final_lines):
+            if line.strip().startswith(CLOSING_LINE):
                 closing_start = index
                 break
-
-
         if closing_start is not None:
+            closing_lines = final_lines[closing_start:]
+            sections[-1]["content"] = final_lines[:closing_start]
 
-            closing_lines = (
-                final_lines[
-                    closing_start:
-                ]
+    normalized_sections = [
+        {"name": section["name"], "content": "\n".join(section["content"]).strip()}
+        for section in sections
+    ]
+    provenance = _read_provenance(handover_file)
+    return {
+        "shiftDate": shift_date,
+        "exists": True,
+        "file": handover_file.name,
+        "intro": "\n".join(intro_lines).strip(),
+        "sections": normalized_sections,
+        "closing": "\n".join(closing_lines).strip(),
+        "content": content.strip(),
+        "localWork": get_operational_work_summary(),
+        "reviewedFindings": get_reviewed_findings(shift_date),
+        "generationMode": "ai-advisory" if provenance else "legacy",
+        "advisoryStatus": provenance.get("advisoryStatus") if provenance else None,
+        "evidence": provenance,
+    }
+
+
+def _ticket_line(ticket: dict[str, Any]) -> str:
+    status = ticket.get("status") or "State not recorded"
+    priority = ticket.get("priority")
+    status_text = f"{status}, {priority}" if priority else status
+    next_action = ticket.get("nextAction") or "Next action not recorded"
+    summary = ticket.get("summary") or "Summary not recorded"
+    parts = [f"- {ticket.get('jiraKey')} — {summary} ({status_text})"]
+    assignee = ticket.get("assignee")
+    if assignee:
+        parts.append(f"Assignee: {assignee}")
+    environment = ticket.get("environment")
+    if environment:
+        parts.append(f"Environment: {environment}")
+    parts.append(f"Next action: {next_action}")
+    return " — ".join(parts)
+
+
+def _salesforce_content(package: dict[str, Any]) -> str:
+    entries = []
+    for note in package.get("shiftNotes", []):
+        if not isinstance(note, dict):
+            continue
+        if "salesforce" not in str(note.get("section", "")).casefold():
+            continue
+        time_value = note.get("time")
+        text = note.get("text")
+        if isinstance(text, str) and text.strip():
+            prefix = f"{time_value} " if isinstance(time_value, str) and time_value else ""
+            entries.append(f"- {prefix}{text.strip()}")
+    return "\n".join(entries) if entries else "No validated Salesforce ticket source is available."
+
+
+def _availability_lines(package: dict[str, Any]) -> list[str]:
+    availability = str(package.get("availability", "unavailable")).upper()
+    lines = [f"- Evidence availability: {availability}."]
+    if availability != "COMPLETE":
+        lines.append(
+            "- Some source data was stale, partial, or unavailable; "
+            "all validated open tickets remain included to the best available data."
+        )
+    return lines
+
+
+def _shift_time_label(now: datetime | None = None) -> str:
+    hour = (now or datetime.now()).hour
+    return "day" if 7 <= hour < 19 else "night"
+
+
+def assemble_handover_content(package: dict[str, Any]) -> tuple[str, list[dict[str, str]], str]:
+    tickets = package.get("tickets") if isinstance(package.get("tickets"), dict) else {}
+    merged = tickets.get("merged") if isinstance(tickets.get("merged"), list) else []
+    investigations = package.get("investigations") if isinstance(package.get("investigations"), list) else []
+    reviewed = [
+        investigation
+        for investigation in investigations
+        if isinstance(investigation, dict)
+        and investigation.get("authoritative") is True
+        and isinstance(investigation.get("reviewedFinding"), dict)
+    ]
+    incidents = package.get("datadogIncidents") if isinstance(package.get("datadogIncidents"), list) else []
+    readiness = package.get("readiness") if isinstance(package.get("readiness"), dict) else {}
+    readiness_ready = bool(readiness.get("summary", {}).get("ready"))
+    summary_lines = [
+        f"- Open tickets: {len(merged)}.",
+        f"- Operator-reviewed investigation findings: {len(reviewed)}.",
+        f"- Datadog incidents in available context: {len(incidents)}.",
+        f"- Handover readiness: {'READY' if readiness_ready else 'BLOCKED'}.",
+        *_availability_lines(package),
+    ]
+    sections = [
+        {"name": "Summary", "content": "\n".join(summary_lines)},
+        {"name": "Open Salesforce Tickets", "content": _salesforce_content(package)},
+        {
+            "name": "Open Jira Tickets",
+            "content": "\n".join(_ticket_line(ticket) for ticket in merged)
+            if merged
+            else "No open tickets.",
+        },
+        {
+            "name": "Investigation Updates",
+            "content": "\n".join(
+                f"- **{investigation.get('displayTitle') or investigation.get('name')}:** "
+                f"{investigation['reviewedFinding'].get('finding', '')} "
+                f"(State: {investigation['reviewedFinding'].get('state') or investigation.get('lifecycleStatus') or 'Review recorded'})"
+                for investigation in reviewed
             )
+            if reviewed
+            else "No operator-reviewed findings are available for handover.",
+        },
+        {
+            "name": "Next Shift Actions",
+            "content": "\n".join(
+                f"- {ticket.get('jiraKey')}: {ticket.get('nextAction')}"
+                for ticket in merged
+                if isinstance(ticket.get("nextAction"), str) and ticket["nextAction"].strip()
+            )
+            if any(
+                isinstance(ticket.get("nextAction"), str) and ticket["nextAction"].strip()
+                for ticket in merged
+            )
+            else "No deterministic next actions were identified from open-ticket next actions.",
+        },
+    ]
+    closing = f"{CLOSING_LINE}\n\n{HANDOVER_SIGNATURE}"
+    intro = (
+        "Hi Team,\n\n"
+        f"Please see the handover for the {_shift_time_label()} shift on "
+        f"{package.get('shiftDate')}."
+    )
+    return intro, sections, closing
 
-            sections[-1][
-                "content"
-            ] = final_lines[
-                :closing_start
-            ]
 
-
-    normalized_sections = []
-
-
+def render_handover_markdown(
+    intro: str,
+    sections: list[dict[str, str]],
+    closing: str,
+) -> str:
+    parts = [intro, ""]
     for section in sections:
+        parts.extend([f"## {section['name']}", section["content"], ""])
+    parts.extend([closing, ""])
+    return "\n".join(parts).rstrip() + "\n"
 
-        section_content = (
-            "\n".join(
-                section["content"]
-            )
-            .strip()
+
+def _provider_metadata(runtime) -> dict[str, Any]:
+    readiness = runtime.readiness if isinstance(runtime.readiness, dict) else {}
+    return {
+        "configuredProvider": runtime.identifier,
+        "model": readiness.get("model"),
+        "readiness": readiness.get("readiness"),
+    }
+
+
+def _require_provider(runtime) -> None:
+    readiness = runtime.readiness if runtime is not None and isinstance(runtime.readiness, dict) else {}
+    if (
+        runtime is None
+        or runtime.provider is None
+        or readiness.get("readiness") == "notConfigured"
+    ):
+        raise HandoverGenerationError(
+            503,
+            "provider-not-configured",
+            "No AI provider is configured for handover generation.",
+        )
+    if readiness.get("readiness") != "ready":
+        raise HandoverGenerationError(
+            503,
+            "provider-not-ready",
+            "The configured AI provider is not ready.",
         )
 
 
-        normalized_sections.append({
-            "name":
-                section["name"],
-
-            "content":
-                section_content,
-        })
+def _resolve_provider():
+    return resolve_provider_runtime(system_prompt=HANDOVER_SYSTEM_PROMPT)
 
 
+def _preview_package(
+    shift_date: str,
+    evidence_loader: Callable[[str], dict[str, Any]] | None,
+) -> dict[str, Any]:
+    loader = evidence_loader or build_handover_evidence
+    try:
+        return loader(shift_date)
+    except HandoverEvidenceError as error:
+        status = 504 if error.code == "evidence-timeout" else 422
+        if error.code in {"evidence-unavailable", "tickets-unavailable"}:
+            status = 503
+        raise HandoverGenerationError(status, error.code, error.message) from None
+
+
+def preview_handover(
+    shift_date: str,
+    *,
+    evidence_loader: Callable[[str], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    _validate_shift_date(shift_date)
+    package = _preview_package(shift_date, evidence_loader)
+    intro, sections, closing = assemble_handover_content(package)
+    readiness = package.get("readiness") if isinstance(package.get("readiness"), dict) else {}
     return {
-        "shiftDate":
-            shift_date,
-
-        "exists":
-            True,
-
-        "file":
-            handover_file.name,
-
-        "intro":
-            "\n".join(
-                intro_lines
-            ).strip(),
-
-        "sections":
-            normalized_sections,
-
-        "closing":
-            "\n".join(
-                closing_lines
-            ).strip(),
-
-        "content":
-            content.strip(),
-
-        "localWork": get_operational_work_summary(),
-        "reviewedFindings": get_reviewed_findings(shift_date),
+        "shiftDate": shift_date,
+        "preview": True,
+        "evidenceDigest": package.get("digest"),
+        "intro": intro,
+        "sections": sections,
+        "closing": closing,
+        "evidence": evidence_summary(package),
+        "readiness": {
+            "enabled": bool(readiness.get("summary", {}).get("ready")),
+            "blockers": readiness.get("blockers", []),
+            "warnings": readiness.get("warnings", []),
+        },
+        "generationMode": "deterministic-preview",
+        "requiresConfirmation": True,
     }
+
+
+def _publish_handover(
+    shift_date: str,
+    markdown: str,
+    provenance: dict[str, Any],
+    *,
+    replace: bool,
+) -> None:
+    handover_file, provenance_file = _handover_paths(shift_date)
+    handover_dir = handover_file.parent
+    try:
+        handover_dir.mkdir(parents=True, exist_ok=True)
+        staging_context = tempfile.TemporaryDirectory(
+            prefix=".handover-generation-",
+            dir=handover_dir,
+        )
+    except OSError:
+        raise HandoverGenerationError(
+            503, "storage-unavailable", "Handover storage is unavailable."
+        ) from None
+    with staging_context as temporary_directory:
+        staging = Path(temporary_directory)
+        published = staging / "published"
+        published.mkdir(mode=0o700)
+        (published / handover_file.name).write_text(markdown, encoding="utf-8")
+        provenance_content = json.dumps(provenance, indent=2) + "\n"
+        if len(provenance_content.encode("utf-8")) > 1024 * 1024:
+            raise HandoverGenerationError(
+                422,
+                "evidence-too-large",
+                "The handover provenance exceeded its size bound.",
+            )
+        (published / PROVENANCE_FILENAME).write_text(
+            provenance_content,
+            encoding="utf-8",
+        )
+        if handover_file.exists() and not replace:
+            raise FileExistsError(f"Handover already exists: {handover_file}")
+        try:
+            os.replace(published / handover_file.name, handover_file)
+            os.replace(published / PROVENANCE_FILENAME, provenance_file)
+        except OSError:
+            raise HandoverGenerationError(
+                500, "storage-failed", "The handover could not be stored."
+            ) from None
+
+
+def _generate_handover(
+    shift_date: str,
+    *,
+    preview_digest: str | None,
+    evidence_loader: Callable[[str], dict[str, Any]] | None,
+    provider_runtime,
+    replace: bool,
+) -> dict[str, Any]:
+    _validate_shift_date(shift_date)
+    handover_file, _ = _handover_paths(shift_date)
+    if handover_file.exists() and not replace:
+        raise FileExistsError(f"Handover already exists: {handover_file}")
+    package = _preview_package(shift_date, evidence_loader)
+    if preview_digest is not None and preview_digest != package.get("digest"):
+        raise HandoverGenerationError(
+            409,
+            "preview-stale",
+            "Handover evidence changed; preview the handover again.",
+        )
+    readiness = package.get("readiness") if isinstance(package.get("readiness"), dict) else {}
+    if not readiness.get("summary", {}).get("ready"):
+        blockers = readiness.get("blockers") or []
+        message = "Handover readiness is blocked."
+        if blockers:
+            message = "Handover readiness is blocked: " + "; ".join(str(item) for item in blockers[:5])
+        raise HandoverGenerationError(409, "handover-readiness-blocked", message)
+    runtime = provider_runtime or _resolve_provider()
+    _require_provider(runtime)
+    intro, sections, closing = assemble_handover_content(package)
+    envelope = build_handover_envelope(package, shift_date=shift_date)
+    try:
+        raw_output = runtime.provider(envelope)
+    except ProviderTimeout:
+        raise HandoverGenerationError(504, "provider-timeout", "The AI provider timed out.") from None
+    except ProviderInvalid:
+        raise HandoverGenerationError(
+            502, "provider-invalid-response", "The AI provider returned an invalid response."
+        ) from None
+    except ProviderUnavailable:
+        raise HandoverGenerationError(
+            503, "provider-unavailable", "The AI provider is unavailable."
+        ) from None
+    except (OSError, TimeoutError):
+        raise HandoverGenerationError(
+            503, "provider-unavailable", "The AI provider is unavailable."
+        ) from None
+    except Exception:
+        raise HandoverGenerationError(
+            502, "provider-invalid-response", "The AI provider returned an invalid response."
+        ) from None
+    try:
+        advisory = validate_advisory_output(raw_output, package)
+    except HandoverAIError as error:
+        raise HandoverGenerationError(422, error.code, error.message) from None
+    advisory_citations = sorted({
+        citation
+        for items in advisory.values()
+        for item in items
+        for citation in extract_citations(item)
+    })
+    markdown = render_handover_markdown(intro, sections, closing)
+    provider = _provider_metadata(runtime)
+    provenance = build_handover_provenance(
+        package,
+        provider_identifier=provider.get("configuredProvider"),
+        model=provider.get("model"),
+        advisory_citations=advisory_citations,
+    )
+    _publish_handover(shift_date, markdown, provenance, replace=replace)
+    result = get_handover(shift_date)
+    result["generationMode"] = "ai-advisory"
+    result["advisoryStatus"] = "completed"
+    result["evidenceDigest"] = package.get("digest")
+    result["evidence"] = _read_provenance(handover_file)
+    return result
+
 
 def generate_handover(
     shift_date: str,
+    *,
+    preview_digest: str | None = None,
+    evidence_loader: Callable[[str], dict[str, Any]] | None = None,
+    provider_runtime=None,
 ) -> dict:
-    local_work = get_operational_work_summary()
-    _validate_local_work(local_work)
-
-    noc_root = get_noc_root()
-    handover_file = (
-        noc_root
-        / shift_date
-        / "handover"
-        / f"handover-{shift_date}.md"
+    return _generate_handover(
+        shift_date,
+        preview_digest=preview_digest,
+        evidence_loader=evidence_loader,
+        provider_runtime=provider_runtime,
+        replace=False,
     )
 
-    if (
-        handover_file.is_file()
-        and handover_file.stat().st_size > 0
-    ):
-        raise FileExistsError(
-            f"Handover already exists: {handover_file}"
+
+def _archive_existing(handover_file: Path, provenance_file: Path) -> tuple[Path, Path | None]:
+    archive_dir = handover_file.parent / "archive"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    archive_file = archive_dir / f"handover-{handover_file.parent.parent.name}-{timestamp}.md"
+    shutil.copy2(handover_file, archive_file)
+    if not archive_file.is_file() or archive_file.stat().st_size == 0:
+        raise HandoverGenerationError(
+            500, "archive-failed", "The previous handover could not be archived."
         )
-
-    command = shutil.which(
-        "noc-handover"
-    )
-
-    if not command:
-        raise FileNotFoundError(
-            "noc-handover command not found"
-        )
-
-    result = subprocess.run(
-        [
-            command,
-            "--date",
-            shift_date,
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=300,
-    )
-
-    if result.returncode != 0:
-
-        message = (
-            result.stderr.strip()
-            or result.stdout.strip()
-            or "noc-handover failed"
-        )
-
-        raise RuntimeError(
-            message
-        )
-
-    if (
-        not handover_file.is_file()
-        or handover_file.stat().st_size == 0
-    ):
-        raise RuntimeError(
-            (
-                "noc-handover completed but "
-                "the expected handover file "
-                "was not created."
+    archive_provenance = None
+    if provenance_file.is_file():
+        archive_provenance = archive_dir / f"handover-provenance-{handover_file.parent.parent.name}-{timestamp}.json"
+        shutil.copy2(provenance_file, archive_provenance)
+        if not archive_provenance.is_file():
+            raise HandoverGenerationError(
+                500, "archive-failed", "The previous handover provenance could not be archived."
             )
-        )
+    return archive_file, archive_provenance
 
-    _remove_active_local_work_section(handover_file)
-    _include_reviewed_findings(handover_file, shift_date)
-    return get_handover(
-        shift_date
-    )
 
 def regenerate_handover(
     shift_date: str,
+    *,
+    preview_digest: str | None = None,
+    evidence_loader: Callable[[str], dict[str, Any]] | None = None,
+    provider_runtime=None,
 ) -> dict:
-    local_work = get_operational_work_summary()
-    _validate_local_work(local_work)
-
-    noc_root = get_noc_root()
-    handover_dir = (
-        noc_root
-        / shift_date
-        / "handover"
-    )
-
-    handover_file = (
-        handover_dir
-        / f"handover-{shift_date}.md"
-    )
-
-    if (
-        not handover_file.is_file()
-        or handover_file.stat().st_size == 0
-    ):
-        raise FileNotFoundError(
-            (
-                "Existing handover not found: "
-                f"{handover_file}"
-            )
-        )
-
-    command = shutil.which(
-        "noc-handover"
-    )
-
-    if not command:
-        raise FileNotFoundError(
-            "noc-handover command not found"
-        )
-
-    archive_dir = (
-        handover_dir / "archive"
-    )
-
-    archive_dir.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    timestamp = datetime.now().strftime(
-        "%Y%m%d-%H%M%S-%f"
-    )
-
-    archive_file = (
-        archive_dir
-        / (
-            f"handover-{shift_date}"
-            f"-{timestamp}.md"
-        )
-    )
-
-    shutil.copy2(
-        handover_file,
-        archive_file,
-    )
-
-    if (
-        not archive_file.is_file()
-        or archive_file.stat().st_size == 0
-    ):
-        raise RuntimeError(
-            "Handover archive verification failed."
-        )
-
+    handover_file, provenance_file = _handover_paths(shift_date)
+    if not handover_file.is_file() or handover_file.stat().st_size == 0:
+        raise FileNotFoundError(f"Existing handover not found: {handover_file}")
+    archive_file, archive_provenance = _archive_existing(handover_file, provenance_file)
     try:
-        result = subprocess.run(
-            [
-                command,
-                "--date",
-                shift_date,
-                "--force",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=300,
+        result = _generate_handover(
+            shift_date,
+            preview_digest=preview_digest,
+            evidence_loader=evidence_loader,
+            provider_runtime=provider_runtime,
+            replace=True,
         )
-
-    except subprocess.TimeoutExpired:
-
-        shutil.copy2(
-            archive_file,
-            handover_file,
-        )
-
+    except Exception:
+        try:
+            shutil.copy2(archive_file, handover_file)
+            if archive_provenance is not None:
+                shutil.copy2(archive_provenance, provenance_file)
+        except OSError:
+            raise HandoverGenerationError(
+                500, "restore-failed", "The previous handover could not be restored."
+            ) from None
         raise
-
-    if result.returncode != 0:
-
-        # Restore the archived version if
-        # regeneration fails.
-        shutil.copy2(
-            archive_file,
-            handover_file,
-        )
-
-        message = (
-            result.stderr.strip()
-            or result.stdout.strip()
-            or "Handover regeneration failed"
-        )
-
-        raise RuntimeError(
-            message
-        )
-
-    if (
-        not handover_file.is_file()
-        or handover_file.stat().st_size == 0
-    ):
-
-        shutil.copy2(
-            archive_file,
-            handover_file,
-        )
-
-        raise RuntimeError(
-            (
-                "Regeneration completed but "
-                "the new handover was not created. "
-                "The previous handover was restored."
-            )
-        )
-
-    try:
-        _remove_active_local_work_section(handover_file)
-        _include_reviewed_findings(handover_file, shift_date)
-    except (OSError, RuntimeError):
-        shutil.copy2(archive_file, handover_file)
-        raise
-
-    handover = get_handover(
-        shift_date
-    )
-
-    handover["regenerated"] = True
-    handover["archivedFile"] = str(
-        archive_file
-    )
-
-    return handover
+    result["regenerated"] = True
+    result["archivedFile"] = str(archive_file)
+    return result

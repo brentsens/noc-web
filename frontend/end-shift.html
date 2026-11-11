@@ -303,13 +303,17 @@
                                 Generate Handover
                             </button>
 
+                            <button id="preview-handover-generation" class="button" type="button">
+                                Preview Handover
+                            </button>
+
                         </div>
 
                         <div id="handover-preview" class="handover-preview hidden">
 
                             <div class="handover-preview-header">
                                 <div>
-                                    <span class="success-text">
+                                    <span id="handover-preview-badge" class="success-text">
                                         ✓ CREATED
                                     </span>
 
@@ -326,7 +330,7 @@
                             <div id="handover-preview-content" class="handover-preview-content"></div>
 
 
-                            <div class="handover-preview-actions">
+                            <div id="handover-preview-actions" class="handover-preview-actions">
 
                                 <button class="button" type="button">
                                     View Full Handover
@@ -568,6 +572,7 @@
             getEndShiftPreflight,
             generateHandover,
             regenerateHandover,
+            previewHandoverGeneration,
             previewHandoverDelivery,
             sendHandoverDelivery
         } from "./js/api.js";
@@ -642,6 +647,21 @@
         const generateButton =
             document.querySelector(
                 "#generate-handover"
+            );
+
+        const previewGenerationButton =
+            document.querySelector(
+                "#preview-handover-generation"
+            );
+
+        const handoverPreviewBadge =
+            document.querySelector(
+                "#handover-preview-badge"
+            );
+
+        const handoverPreviewActions =
+            document.querySelector(
+                "#handover-preview-actions"
             );
 
         const handoverState =
@@ -750,6 +770,7 @@
             );
 
         let previewedRecipient = null;
+        let generationPreview = null;
 
         const sendEmailButton =
             document.querySelector(
@@ -808,29 +829,39 @@
             });
         }
 
-        function getLocalDateString() {
-
-            const now = new Date();
-
-            const year =
-                now.getFullYear();
-
-            const month =
-                String(
-                    now.getMonth() + 1
-                ).padStart(2, "0");
-
-            const day =
-                String(
-                    now.getDate()
-                ).padStart(2, "0");
-
-            return `${year}-${month}-${day}`;
+        function renderHandoverSections(sections) {
+            handoverPreviewContent.innerHTML = "";
+            for (const section of sections) {
+                const heading = document.createElement("h4");
+                heading.textContent = section.name;
+                const content = document.createElement("div");
+                content.className = "handover-section-content";
+                content.textContent = section.content;
+                handoverPreviewContent.appendChild(heading);
+                handoverPreviewContent.appendChild(content);
+            }
         }
 
+        function clearGenerationPreview() {
+            generationPreview = null;
+        }
 
-        endShiftDate.value =
-            getLocalDateString();
+        function renderGenerationPreview(preview) {
+            generationPreview = preview;
+            handoverState.textContent = "PREVIEW";
+            handoverEmpty.classList.remove("hidden");
+            handoverPreview.classList.remove("hidden");
+            handoverPreviewBadge.textContent = "PREVIEW";
+            handoverPreviewActions.style.display = "none";
+            const date = new Date(`${preview.shiftDate}T12:00:00`);
+            handoverPreviewDate.textContent =
+                `${date.toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric"
+                })} · Deterministic preview — no AI or record created`;
+            renderHandoverSections(preview.sections);
+        }
 
         function renderHandover(
             handover
@@ -863,6 +894,8 @@
             handoverPreview.classList.remove(
                 "hidden"
             );
+            handoverPreviewBadge.textContent = "✓ CREATED";
+            handoverPreviewActions.style.display = "";
 
 
             const date =
@@ -881,45 +914,7 @@
                 );
 
 
-            handoverPreviewContent.innerHTML =
-                "";
-
-
-            for (
-                const section
-                of handover.sections
-            ) {
-
-                const heading =
-                    document.createElement(
-                        "h4"
-                    );
-
-                heading.textContent =
-                    section.name;
-
-
-                const content =
-                    document.createElement(
-                        "div"
-                    );
-
-                content.className =
-                    "handover-section-content";
-
-                content.textContent =
-                    section.content;
-
-
-                handoverPreviewContent.appendChild(
-                    heading
-                );
-
-                handoverPreviewContent.appendChild(
-                    content
-                );
-
-            }
+            renderHandoverSections(handover.sections);
 
         }
 
@@ -1116,25 +1111,6 @@
 
         }
 
-        endShiftDate.addEventListener(
-            "change",
-            () => {
-
-                const workflowContext = initializeWorkflow({
-                    step: "end-shift",
-                    dateInput: endShiftDate,
-                    onInvalid: () => renderStatePanel(
-                        document.querySelector(".content"),
-                        { source: "End Shift", kind: "error", message: "Preflight requests were not made." }
-                    )
-                });
-                if (workflowContext.valid) {
-                    loadHandover();
-                    loadReadiness();
-                }
-
-            }
-        );
 
         function setReadinessState(
             icon,
@@ -1785,6 +1761,26 @@
             }
         );
 
+        previewGenerationButton.addEventListener(
+            "click",
+            async () => {
+                const shiftDate = endShiftDate.value;
+                if (!shiftDate) {
+                    return;
+                }
+                previewGenerationButton.disabled = true;
+                try {
+                    const preview = await previewHandoverGeneration(shiftDate);
+                    renderGenerationPreview(preview);
+                } catch (error) {
+                    console.error("Handover preview failed:", error);
+                    window.alert(`Handover preview failed: ${error.message}`);
+                } finally {
+                    previewGenerationButton.disabled = false;
+                }
+            }
+        );
+
         generateButton.addEventListener(
             "click",
             async () => {
@@ -1799,8 +1795,10 @@
                 const confirmed =
                     window.confirm(
                         `Generate the handover for ${shiftDate}?\n\n`
-                        + "This will run noc-handover and use "
-                        + "Copilot to generate the handover.\n\n"
+                        + "This will assemble validated NOC evidence and use the "
+                        + "configured AI provider for internal advisory validation.\n"
+                        + "The final handover remains deterministic and includes all open tickets.\n"
+                        + "Datadog remains read-only.\n\n"
                         + "No email will be sent."
                     );
 
@@ -1824,8 +1822,10 @@
                     const handover =
                         await generateHandover(
                             shiftDate,
-                            true
+                            true,
+                            generationPreview?.evidenceDigest
                         );
+                    generationPreview = null;
 
                     renderHandover(
                         handover
@@ -1870,8 +1870,9 @@
                     window.confirm(
                         `Regenerate the handover for ${shiftDate}?\n\n`
                         + "The existing handover will be archived.\n"
-                        + "Current ticket and shift-note data will be used "
-                        + "to generate a new handover.\n\n"
+                        + "Validated NOC evidence and the configured AI provider will be used "
+                        + "for internal advisory validation; every open ticket remains "
+                        + "deterministically included.\n\n"
                         + "No email will be sent."
                     );
 
@@ -1911,8 +1912,10 @@
                     const handover =
                         await regenerateHandover(
                             shiftDate,
-                            true
+                            true,
+                            generationPreview?.evidenceDigest
                         );
+                    generationPreview = null;
 
                     if (
                         handover.regenerated
@@ -2006,8 +2009,23 @@
             }
         );
 
-        loadHandover();
-        loadReadiness();
+        const workflowContext = initializeWorkflow({
+            step: "end-shift",
+            dateInput: endShiftDate,
+            onDateChange: () => {
+                clearGenerationPreview();
+                loadHandover();
+                loadReadiness();
+            },
+            onInvalid: () => renderStatePanel(
+                document.querySelector(".content"),
+                { source: "End Shift", kind: "error", message: "Preflight requests were not made." }
+            )
+        });
+        if (workflowContext.valid) {
+            loadHandover();
+            loadReadiness();
+        }
 
     </script>
 

@@ -6,11 +6,13 @@ from fastapi import (
     APIRouter,
     HTTPException,
 )
-from pydantic import BaseModel, StrictBool
+from pydantic import BaseModel, StrictBool, StrictStr
 
 from backend.services.handover import (
+    HandoverGenerationError,
     generate_handover,
     get_handover,
+    preview_handover,
     regenerate_handover,
 )
 
@@ -26,6 +28,7 @@ router = APIRouter(
 
 class HandoverActionRequest(BaseModel):
     confirmed: StrictBool
+    previewDigest: StrictStr | None = None
 
 
 @router.get("/{shift_date}/handover")
@@ -51,6 +54,24 @@ def handover(
     return get_handover(
         shift_date
     )
+
+@router.post("/{shift_date}/handover/generation-preview")
+def preview_generation(shift_date: str):
+    try:
+        date.fromisoformat(shift_date)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="shift_date must use YYYY-MM-DD format",
+        )
+    try:
+        return preview_handover(shift_date)
+    except HandoverGenerationError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail={"code": error.code, "message": error.message},
+        ) from None
+
 
 @router.post("/{shift_date}/handover")
 def create_handover(
@@ -87,7 +108,8 @@ def create_handover(
 
     try:
         return generate_handover(
-            shift_date
+            shift_date,
+            preview_digest=request.previewDigest,
         )
 
     except FileExistsError as error:
@@ -101,6 +123,12 @@ def create_handover(
             status_code=404,
             detail=str(error),
         )
+
+    except HandoverGenerationError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail={"code": error.code, "message": error.message},
+        ) from None
 
     except subprocess.TimeoutExpired:
         raise HTTPException(
@@ -176,7 +204,8 @@ def regenerate_existing_handover(
 
     try:
         return regenerate_handover(
-            shift_date
+            shift_date,
+            preview_digest=request.previewDigest,
         )
 
     except FileNotFoundError as error:
@@ -184,6 +213,12 @@ def regenerate_existing_handover(
             status_code=404,
             detail=str(error),
         )
+
+    except HandoverGenerationError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail={"code": error.code, "message": error.message},
+        ) from None
 
     except subprocess.TimeoutExpired:
         raise HTTPException(

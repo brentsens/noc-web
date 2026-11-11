@@ -158,6 +158,21 @@ def test_missing_noc_inv_does_not_make_core_workstation_unready(
     assert result["overallStatus"] == "ready"
 
 
+def test_missing_noc_handover_does_not_make_core_workstation_unready(
+    readiness_workspace,
+):
+    (readiness_workspace.noc_bin / "noc-handover").unlink()
+
+    result = readiness.assess_readiness(readiness_workspace, "2099-12-31")
+    handover_check = next(
+        item for item in result["checks"] if item["id"] == "command.noc-handover"
+    )
+
+    assert handover_check["status"] == "notReady"
+    assert handover_check["required"] is False
+    assert result["overallStatus"] == "ready"
+
+
 def test_readiness_reports_missing_copilot_command(readiness_workspace):
     (readiness_workspace.noc_bin / "copilot").unlink()
 

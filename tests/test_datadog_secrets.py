@@ -182,3 +182,21 @@ def test_investigation_generation_modules_do_not_embed_credential_settings():
             "NOC_WEB_DATADOG_ACCESS_TOKEN",
         ):
             assert sentinel not in source
+
+
+def test_handover_generation_modules_do_not_embed_credentials():
+    root = Path(__file__).resolve().parents[1]
+    for relative in (
+        "backend/services/handover.py",
+        "backend/services/handover_evidence.py",
+        "backend/services/handover_ai.py",
+        "backend/services/handover_provenance.py",
+    ):
+        source = (root / relative).read_text(encoding="utf-8")
+        for sentinel in (
+            "DEEPSEEK_API_KEY",
+            "NOC_WEB_DEEPSEEK_API_KEY",
+            "DD_ACCESS_TOKEN",
+            "NOC_WEB_DATADOG_ACCESS_TOKEN",
+        ):
+            assert sentinel not in source

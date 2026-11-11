@@ -14,14 +14,12 @@ TOOLS = (
     "tix",
     "noc-start",
     "noc-status",
-    "noc-handover",
 )
 
 SCRIPTS = (
     "tix",
     "noc-start",
     "noc-status",
-    "noc-handover",
 )
 
 

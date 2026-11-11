@@ -53,3 +53,29 @@ def test_investigation_generation_has_no_legacy_tool_or_direct_datadog_path():
             "get_monitor(",
         ):
             assert forbidden not in source
+
+
+def test_handover_generation_has_no_legacy_tool_or_datadog_mutation_path():
+    paths = [
+        ROOT / "backend" / "services" / "handover.py",
+        ROOT / "backend" / "services" / "handover_evidence.py",
+        ROOT / "backend" / "services" / "handover_ai.py",
+    ]
+    for path in paths:
+        source = path.read_text(encoding="utf-8").casefold()
+        for forbidden in (
+            "subprocess",
+            "shutil.which",
+            "datadogclient",
+            "search_incidents",
+            "get_notebook(",
+            "get_monitor(",
+            "noc-handover",
+            "copilot_cli",
+            "copilot_mcp",
+        ):
+            assert forbidden not in source
+    evidence_source = (ROOT / "backend" / "services" / "handover_evidence.py").read_text(
+        encoding="utf-8"
+    )
+    assert "schedule_refresh=False" in evidence_source

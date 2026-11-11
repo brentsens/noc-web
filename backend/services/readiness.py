@@ -174,15 +174,15 @@ def _command_checks(profile: ConfigurationProfile) -> list[ReadinessCheck]:
                 identifier, "command", "notReady", f"{command} command",
                 (
                     "A legacy operational command is unavailable."
-                    if command in {"noc-inv", "copilot"}
+                    if command in {"noc-inv", "copilot", "noc-handover"}
                     else "A required operational command is unavailable."
                 ),
                 (
                     "Install or restore the command only if another workflow still needs it."
-                    if command in {"noc-inv", "copilot"}
+                    if command in {"noc-inv", "copilot", "noc-handover"}
                     else "Install or restore the documented command and run readiness again."
                 ),
-                required=command not in {"copilot", "noc-inv"},
+                required=command not in {"copilot", "noc-inv", "noc-handover"},
             ))
             continue
         try:
@@ -216,10 +216,10 @@ def _command_checks(profile: ConfigurationProfile) -> list[ReadinessCheck]:
                 "Install the compatible noc-inv contract only if another workflow needs it."
                 if command == "noc-inv" else
                 "Install or restore the command only if another workflow needs it."
-                if command == "copilot" else
+                if command in {"copilot", "noc-handover"} else
                 "Install or restore the documented command and run readiness again."
             ),
-            required=command not in {"copilot", "noc-inv"},
+            required=command not in {"copilot", "noc-inv", "noc-handover"},
         ))
     return checks
 

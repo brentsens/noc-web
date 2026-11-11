@@ -1472,3 +1472,151 @@ def test_browser_handoff_dirty_tracking_controls_preview_name():
     assert generated["incidentId"] == "aadf7955-1945-4ce6-b6ca-41e7fa734a78"
     assert manual["name"] == "manual-local-name"
     assert manual["displayTitle"] == live_title
+
+
+def test_end_shift_handover_generation_uses_evidence_and_configured_provider():
+    page = (FRONTEND / "end-shift.html").read_text(encoding="utf-8")
+    api = (FRONTEND / "js" / "api.js").read_text(encoding="utf-8")
+
+    assert "Preview Handover" in page
+    assert "previewHandoverGeneration" in page
+    assert "previewHandoverGeneration" in api
+    assert "/handover/generation-preview" in api
+    assert "generationPreview?.evidenceDigest" in page
+    assert "previewDigest" in api
+    assert "assemble validated NOC evidence" in page
+    assert "configured AI provider" in page
+    assert "noc-handover" not in page
+    assert "Copilot" not in page
+    assert "handoverPreviewBadge" in page
+    assert "handoverPreviewActions" in page
+    assert "AI Advisory Synthesis (Unreviewed)" in page or "advisory" in page.casefold()
+
+
+def test_end_shift_selected_shift_uses_shared_workflow_context():
+    module = FRONTEND / "js" / "workflow-context.js"
+    script = """
+      import { readFileSync } from "node:fs";
+      const source = readFileSync(process.argv[1], "utf8");
+      const contextModule = await import(
+        `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
+      );
+      const replaceCalls = [];
+      const assignCalls = [];
+      const makeElement = tagName => {
+        const element = {
+          tagName: tagName.toUpperCase(),
+          className: "",
+          innerHTML: "",
+          textContent: "",
+          attributes: {},
+          children: [],
+          classList: { add() {}, remove() {}, toggle() {} },
+          setAttribute(name, value) { this.attributes[name] = value; },
+          prepend(child) { this.children.unshift(child); },
+          querySelector(selector) {
+            return selector === ".workflow-context" ? this.contextLabel : null;
+          },
+          closest() { return null; }
+        };
+        if (tagName === "nav") {
+          element.contextLabel = makeElement("span");
+        }
+        return element;
+      };
+      const content = makeElement("main");
+      const link = {
+        value: "end-shift.html?shift=2026-10-29",
+        getAttribute() { return this.value.split("?", 1)[0]; },
+        get href() { return this.value; },
+        set href(value) { this.value = value; },
+        classList: { add() {} },
+        closest(selector) { return selector === ".sidebar" ? {} : null; }
+      };
+      const dateInput = {
+        value: "",
+        handlers: {},
+        setAttribute(name, value) { this[name] = value; },
+        addEventListener(name, handler) { this.handlers[name] = handler; }
+      };
+      globalThis.document = {
+        querySelector(selector) { return selector === ".content" ? content : null; },
+        querySelectorAll(selector) { return selector === "a[href]" ? [link] : []; },
+        createElement(tagName) { return makeElement(tagName); }
+      };
+      globalThis.window = {
+        location: {
+          href: "https://noc-web.invalid/end-shift.html?shift=2026-10-30",
+          pathname: "/end-shift.html",
+          assign(url) { assignCalls.push(url); }
+        },
+        history: {
+          replaceState(state, title, url) {
+            replaceCalls.push(String(url));
+            window.location.href = String(url);
+          }
+        }
+      };
+      const changes = [];
+      const context = contextModule.initializeWorkflow({
+        step: "end-shift",
+        dateInput,
+        onDateChange: shift => changes.push(shift)
+      });
+      const initial = {
+        contextShift: context.shift,
+        dateValue: dateInput.value,
+        barShift: content.children[0].contextLabel.textContent,
+        barLinksContainShift: content.children[0].innerHTML.includes("shift=2026-10-30"),
+        linkHref: link.href,
+        changes: [...changes]
+      };
+      dateInput.value = "2026-10-31";
+      dateInput.handlers.change();
+      const changed = {
+        replaceCalls,
+        assignCalls,
+        dateValue: dateInput.value,
+        barShift: content.children[0].contextLabel.textContent,
+        linkHref: link.href,
+        changes: [...changes]
+      };
+      console.log(JSON.stringify({ initial, changed }));
+    """
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script, str(module)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["initial"] == {
+        "contextShift": "2026-10-30",
+        "dateValue": "2026-10-30",
+        "barShift": "Shift 2026-10-30",
+        "barLinksContainShift": True,
+        "linkHref": "end-shift.html?shift=2026-10-30",
+        "changes": [],
+    }
+    assert payload["changed"]["replaceCalls"] == [
+        "https://noc-web.invalid/end-shift.html?shift=2026-10-31"
+    ]
+    assert payload["changed"]["assignCalls"] == []
+    assert payload["changed"]["dateValue"] == "2026-10-31"
+    assert payload["changed"]["barShift"] == "Shift 2026-10-31"
+    assert payload["changed"]["linkHref"] == "end-shift.html?shift=2026-10-31"
+    assert payload["changed"]["changes"] == ["2026-10-31"]
+
+
+def test_end_shift_page_uses_shared_workflow_date_initialization():
+    page = (FRONTEND / "end-shift.html").read_text(encoding="utf-8")
+
+    assert 'step: "end-shift"' in page
+    assert "onDateChange:" in page
+    assert "clearGenerationPreview();" in page
+    assert "loadHandover();" in page
+    assert "loadReadiness();" in page
+    assert "getLocalDateString" not in page
+    assert 'endShiftDate.addEventListener(\n            "change"' not in page
+    assert "initializeWorkflow({" in page
