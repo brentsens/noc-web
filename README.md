@@ -1,127 +1,346 @@
 # SESAMI NOC Operations
 
-SESAMI NOC Operations is a Windows-accessible NOC operations application backed
-by a managed WSL runtime. Operators use a branded Windows shortcut and browser
-UI while noc-web runs locally in WSL.
+**SESAMI NOC Operations** is a locally hosted NOC operations platform that brings shift management, ticket tracking, investigations, operational health, AI-assisted analysis, and shift handover into one interface.
 
-Two installation frontends share the same trusted-release and Feature 011
-runtime engine:
+The application runs in WSL using a Python/FastAPI backend with a lightweight browser UI. It integrates with Atlas Jira, Datadog, Microsoft 365, DeepSeek, and optional local Ollama inference.
 
-1. **WSL-native bootstrap** (`scripts/install-sesami.sh`) — supported baseline
-   and unsigned-install fallback when a Windows EXE is blocked.
-2. **`SESAMI-NOC-Operations-Setup.exe`** — existing Windows wizard frontend.
-   May require Authenticode signing or application-control approval on systems
-   enforcing Smart App Control.
+> **Design principle:** External systems provide data, inference, or transport. NOC Web owns workflow state, evidence validation, safety controls, human approval, and operational persistence.
 
-Automated tests and packaging regressions are validated. **Genuine
-clean-workstation acceptance for both frontends remains pending.**
-
-## Screenshots
-
-<!-- SCREENSHOT: Main NOC Status dashboard
-Future file: docs/images/noc-status.png
+<!-- SCREENSHOT: Main dashboard
+Suggested path: docs/images/dashboard.png
+![SESAMI NOC Operations dashboard](docs/images/dashboard.png)
 -->
-<!-- ![Main NOC Status dashboard](docs/images/noc-status.png) -->
-
-<!-- SCREENSHOT: Health and readiness page
-Future file: docs/images/noc-health.png
--->
-<!-- ![Health and readiness page](docs/images/noc-health.png) -->
-
-<!-- SCREENSHOT: Windows SESAMI NOC Operations shortcut and browser launch
-Future file: docs/images/windows-launch.png
--->
-<!-- ![Windows SESAMI NOC Operations shortcut and browser launch](docs/images/windows-launch.png) -->
 
 ## What It Does
 
-SESAMI NOC Operations supports the operational workflow from shift startup to
-handover:
+SESAMI NOC Operations supports the NOC workflow from shift startup through handover:
 
-- Shift startup, NOC status/dashboard, and health/readiness checks
-- Ticket workflow and investigations
-- AI-assisted operational work, with human review
-- Shift notes and handover/end-shift workflow
+- Start and manage NOC shifts
+- Track Jira tickets and next actions
+- View operational status, health, and readiness
+- Retrieve read-only Datadog incident evidence
+- Create evidence-grounded investigations
+- Run AI Assistant questions and operational AI Actions
+- Review AI-generated work before treating it as operational fact
+- Generate deterministic shift handovers
+- Ensure all validated open tickets are included in the handover
+- Preview and send approved handovers through Microsoft 365
+- Use DeepSeek as the primary AI provider
+- Optionally use Ollama with `qwen3:8b` as a local AI provider
 
-## How It Works
+Core operational workflows no longer depend on GitHub Copilot CLI, `noc-inv`, or `noc-handover`.
+
+## Application Architecture
 
 ```text
-Windows Desktop
-  |
-SESAMI NOC Operations shortcut
-  |
-Microsoft wsl.exe
-  |
-SESAMI Linux launcher (~/.local/bin/sesami-noc-launch)
-  |
-noc-web.service
-  |
-/api/health
-  |
-default Windows browser
-  |
-http://127.0.0.1:8000
+Browser UI
+    │
+    ▼
+Python / FastAPI
+    │
+    ├── API Routes
+    ├── Workflow Services
+    ├── Evidence Collection
+    ├── Validation
+    ├── Safety / Confirmation
+    └── Local Persistence
+              │
+              ▼
+        Provider Adapters
+              │
+       ┌──────┼────────┬─────────┬────────┐
+       ▼      ▼        ▼         ▼        ▼
+   DeepSeek Ollama  Datadog    Atlas    m365
+     HTTP    HTTP   REST API   Jira CLI  CLI
 ```
 
-The Windows EXE path may still install Feature 011's hidden `wscript` launcher
-for compatibility. The WSL-native path creates a Desktop shortcut that targets
-Microsoft's installed `wsl.exe` only — no custom unsigned Windows executable is
-required for daily launch.
+The provider layer deliberately does not own operational policy:
 
-NOC Web listens only on `127.0.0.1:8000`. Normal operators do not need to keep
-a WSL terminal open after installation.
+- Datadog provides evidence.
+- DeepSeek and Ollama provide advisory inference.
+- Atlas provides Jira access.
+- `m365` provides Microsoft 365 transport.
+- Python determines whether data and AI output are acceptable.
 
-## Architecture
+## Safety Model
 
-**Windows**
+SESAMI NOC Operations follows a fail-closed design.
 
-- Optional `SESAMI-NOC-Operations-Setup.exe` wizard frontend
-- Branded SESAMI NOC Operations Desktop shortcut
-- Microsoft `wsl.exe` (WSL-native daily launch path)
-- Default browser
+### AI is treated as untrusted input
 
-**WSL**
+AI output is not accepted simply because a model returned it.
 
-- `scripts/install-sesami.sh` bootstrap frontend
-- noc-web (`v1.0.4`)
-- Python `.venv`
-- `noc-web.service` systemd user service
-- `~/.local/bin/sesami-noc-launch`
-- Optional noc-tools (`v1.0.1`)
-- Operational CLI integrations (Atlas/Copilot/M365 remain optional); Datadog uses a direct read-only API provider
+```text
+Evidence
+    │
+    ▼
+AI Provider
+    │
+    ▼
+Strict Output Schema
+    │
+    ▼
+Evidence ID Validation
+    │
+    ▼
+Freshness / Provenance Validation
+    │
+    ▼
+Workflow Safety Rules
+    │
+    ├── Valid ──────► Continue
+    └── Invalid ────► Fail Closed
+```
 
-Feature 011 owns the managed runtime, health checks, service, `runtime.json`,
-and controlled environment. Feature 012 owns fresh installation frontends,
-trusted acquisition, provisioning, repair/rerun behavior, Windows packaging,
-and the Feature 011 handoff.
+Important controls include:
+
+- Strict response schemas
+- Exact evidence-ID validation
+- Unsupported evidence references are rejected
+- Stale evidence must be identified as stale
+- Partial evidence cannot be represented as complete
+- Provider output is bounded by size and structure
+- AI output remains advisory until human review
+- Read-only Datadog access
+- Explicit confirmation for consequential actions
+- No automatic AI-provider fallback
+- No bundled credentials, tokens, or sessions
+- Credentials are excluded from AI prompts and persisted operational output
+- Frontend and backend API contracts are regression-tested together
+
+Local Ollama inference passes through the same downstream safety controls as DeepSeek.
+
+## Operator Workflow
+
+### 1. Start Shift
+
+The Start Shift workflow prepares the selected NOC shift and verifies the workstation environment.
+
+```text
+Select Shift
+    │
+    ▼
+Preflight
+    │
+    ▼
+Workspace
+    │
+    ├── Tickets
+    ├── Notes
+    ├── Investigations
+    └── Operational Status
+```
+
+<!-- SCREENSHOT: Start Shift
+Suggested path: docs/images/start-shift.png
+![Start Shift workflow](docs/images/start-shift.png)
+-->
+
+### 2. Tickets
+
+NOC Web combines operational ticket information with locally tracked next actions.
+
+The application uses Atlas as its Jira integration while Python owns ticket normalization, workflow state, validation, and presentation.
+
+```text
+NOC Web
+    │
+    ▼
+Atlas
+    │
+    ▼
+Jira
+```
+
+<!-- SCREENSHOT: Tickets
+Suggested path: docs/images/tickets.png
+![Ticket workflow](docs/images/tickets.png)
+-->
+
+### 3. Assistant and AI Actions
+
+The Assistant provides evidence-grounded operational analysis.
+
+DeepSeek is the primary provider. Operators can explicitly choose local Ollama where supported.
+
+```text
+NOC Evidence
+    │
+    ▼
+Selected AI Provider
+    │
+    ▼
+Structured Output
+    │
+    ▼
+NOC Web Validation
+    │
+    ▼
+Advisory Response
+```
+
+The AI cannot directly modify tickets, investigations, Datadog objects, Microsoft 365 objects, or other operational state.
+
+<!-- SCREENSHOT: Assistant provider selector and response
+Suggested path: docs/images/assistant-providers.png
+![Assistant provider selection](docs/images/assistant-providers.png)
+-->
+
+### 4. Investigations
+
+Investigation generation uses validated read-only Datadog evidence.
+
+```text
+Datadog Incident
+      │
+      ▼
+Incident Evidence
+      │
+      ├── Notebook
+      └── Monitor Evidence
+             │
+             ▼
+      Evidence Preview
+             │
+             ▼
+     Operator Confirmation
+             │
+             ▼
+       AI Generation
+             │
+             ▼
+      Strict Validation
+             │
+             ▼
+       Ready for Review
+```
+
+AI-generated investigation content does not automatically become reviewed operational fact.
+
+Investigation persistence includes provenance and generation state separately from reviewed findings.
+
+<!-- SCREENSHOT: Investigation evidence preview
+Suggested path: docs/images/investigation-preview.png
+![Investigation evidence preview](docs/images/investigation-preview.png)
+-->
+
+<!-- SCREENSHOT: Ready for Review
+Suggested path: docs/images/investigation-review.png
+![Investigation ready for review](docs/images/investigation-review.png)
+-->
+
+### 5. End Shift and Handover
+
+Handover generation separates deterministic operational facts from AI assistance.
+
+```text
+Tickets
+Investigations
+Shift Notes
+Datadog Context
+Status / Readiness
+       │
+       ▼
+Validated Evidence
+       │
+       ▼
+Deterministic Handover
+       │
+       ▼
+Bounded AI Assistance
+       │
+       ▼
+Validation
+       │
+       ▼
+Operator Review
+       │
+       ▼
+Delivery Preview
+       │
+       ▼
+Explicit Confirmation
+       │
+       ▼
+Microsoft 365
+```
+
+All validated open tickets are included deterministically. The AI provider does **not** decide which open tickets appear in the handover.
+
+The final handover remains operator-controlled and is delivered through Microsoft 365 only after confirmation.
+
+<!-- SCREENSHOT: End Shift / handover
+Suggested path: docs/images/end-shift.png
+![End Shift handover](docs/images/end-shift.png)
+-->
+
+## Requirements
+
+The supported workstation architecture is:
+
+- Windows 11
+- WSL2
+- Supported Ubuntu distribution
+- Python runtime used by NOC Web
+- `systemd --user`
+- GitHub CLI for trusted-release acquisition
+- Atlas for Jira integration where Jira functionality is required
+- Microsoft 365 CLI (`m365`) for handover email delivery
+
+Provider-specific requirements depend on which integrations are enabled:
+
+- DeepSeek API credentials
+- Datadog read-only API credentials
+- Optional network-accessible Ollama server
+- Microsoft 365 operator authentication
+
+Homebrew is optional.
+
+`jq` is optional and does not block core NOC Web installation.
 
 ## Fresh Installation
 
-### 1. WSL-native bootstrap (supported baseline / unsigned fallback)
+SESAMI NOC Operations currently has two installation frontends.
 
-Do **not** use `curl | bash`. Download the pinned release assets explicitly,
-verify integrity, then run the installer from the verified tree:
+### Option 1: WSL-native bootstrap
+
+**Recommended baseline and fallback when the Windows installer is blocked by application-control policy.**
+
+Do **not** use `curl | bash`.
+
+Download the pinned release assets explicitly and verify them before installation.
 
 ```bash
-# From Windows, open your WSL2 distribution terminal as a non-root operator.
 gh release download v1.0.4 -R brentsens/noc-web \
-  -p noc-web-v1.0.4.tar.gz -p noc-web-v1.0.4.sha256
+  -p noc-web-v1.0.4.tar.gz \
+  -p noc-web-v1.0.4.sha256
+```
 
-# Optional helper shipped in a trusted checkout or prior verified tree:
-# ./scripts/bootstrap/verify_bootstrap_bundle.sh \
-#   --archive noc-web-v1.0.4.tar.gz \
-#   --checksum noc-web-v1.0.4.sha256
+Verify the checksum:
 
-# Or verify manually (pinned digest from packaging/windows/bootstrap-manifest.json):
+```bash
 sha256sum -c noc-web-v1.0.4.sha256
+```
+
+Verify release provenance:
+
+```bash
 gh attestation verify noc-web-v1.0.4.tar.gz \
   --repo brentsens/noc-web \
   --signer-workflow brentsens/noc-web/.github/workflows/release.yml \
   --source-ref refs/tags/v1.0.4
+```
 
+Extract the verified package:
+
+```bash
 tar -xzf noc-web-v1.0.4.tar.gz
-cd noc-web-*   # extracted verified package root
+cd noc-web-*
+```
 
+Run the installer:
+
+```bash
 ./scripts/install-sesami.sh \
   --confirm-prerequisites \
   --github-cli-approved \
@@ -129,55 +348,440 @@ cd noc-web-*   # extracted verified package root
   --confirm-noc-tools
 ```
 
-That path reuses Feature 012 trusted acquisition and Feature 011 runtime
-ownership, installs `~/.local/bin/sesami-noc-launch`, and creates the Desktop
-shortcut targeting Windows-owned `wsl.exe`.
+The installer creates the managed WSL runtime and Windows Desktop launch path.
 
-### 2. Windows EXE wizard
+### Option 2: Windows Installer
+
+The existing Windows frontend is:
 
 ```text
 SESAMI-NOC-Operations-Setup.exe
-  |
-Windows / WSL preflight
-  |
-verified trusted releases
-  |
-noc-web v1.0.4 + noc-tools v1.0.1
-  |
-Feature 011 managed runtime
-  |
-SESAMI NOC Operations shortcut
 ```
 
-Run the EXE from Windows when application-control policy permits it. On
-managed or Smart App Control systems, the unsigned EXE may be blocked until
-Authenticode signing or an allowlisting exception is approved. Use the
-WSL-native path above as the supported fallback.
+Installation flow:
 
-Operators should not need to manually clone noc-web or noc-tools. Consequential
-WSL and prerequisite changes remain operator-controlled. Homebrew remains
-optional and is never installed automatically; `jq` remains optional and does
-not block core noc-web installation.
+```text
+Windows Installer
+      │
+      ▼
+Windows / WSL Preflight
+      │
+      ▼
+Trusted Release Verification
+      │
+      ▼
+Managed WSL Runtime
+      │
+      ▼
+SESAMI NOC Operations Shortcut
+```
+
+On systems enforcing Smart App Control or similar application-control policies, the unsigned installer may require Authenticode signing or an approved allowlisting exception.
+
+Use the WSL-native installation path when the Windows executable is blocked.
+
+> Genuine clean-workstation acceptance for both installation frontends should not be claimed until it has been recorded against a supported clean Windows/WSL workstation.
+
+## Provider Configuration
+
+Provider configuration is separated into managed environment files under:
+
+```text
+~/.config/noc-web/
+```
+
+The managed `systemd` service loads the applicable provider files.
+
+### DeepSeek
+
+DeepSeek is the normal primary AI provider.
+
+Configuration is stored in:
+
+```text
+~/.config/noc-web/ai-provider.env
+```
+
+The actual API credential should never be committed to Git.
+
+After changing provider configuration:
+
+```bash
+systemctl --user restart noc-web.service
+```
+
+### Datadog
+
+Datadog incident and investigation evidence uses the direct read-only Datadog API provider.
+
+Configuration is stored separately in:
+
+```text
+~/.config/noc-web/datadog-provider.env
+```
+
+The Datadog provider is intentionally read-only.
+
+NOC Web does not grant AI providers permission to modify Datadog resources.
+
+### Local Ollama
+
+Ollama is an optional local inference provider.
+
+Configuration:
+
+```text
+~/.config/noc-web/ollama-provider.env
+```
+
+Example:
+
+```ini
+NOC_WEB_OLLAMA_BASE_URL=http://OLLAMA_HOST:11434
+NOC_WEB_OLLAMA_MODEL=qwen3:8b
+```
+
+Protect the configuration file:
+
+```bash
+chmod 600 ~/.config/noc-web/ollama-provider.env
+```
+
+Verify the Ollama host from WSL:
+
+```bash
+curl -sS http://OLLAMA_HOST:11434/api/tags
+```
+
+The currently validated local model is:
+
+```text
+qwen3:8b
+```
+
+The Ollama server may run on another workstation such as a GPU-equipped desktop.
+
+The Ollama host can be offline or asleep without making core NOC Web unavailable.
+
+### Microsoft 365
+
+Microsoft 365 is used for approved handover delivery.
+
+Check authentication using:
+
+```bash
+m365 auth status
+```
+
+A normal delivery flow is:
+
+```text
+Generate Handover
+      │
+      ▼
+Review
+      │
+      ▼
+Preview Delivery
+      │
+      ▼
+Confirm Send
+      │
+      ▼
+Microsoft 365
+```
+
+Delivery remains separate from AI generation.
+
+### Atlas Jira
+
+Atlas remains an external Jira integration.
+
+Conceptually:
+
+```text
+NOC Web Python
+      │
+      ▼
+Atlas CLI
+      │
+      ▼
+Jira
+```
+
+Atlas being an external CLI does not make the NOC workflow Bash-driven. Python remains responsible for application logic, validation, workflow state, and safety.
+
+## Local AI and Provider Selection
+
+The default architecture is:
+
+```text
+DeepSeek API
+   PRIMARY
+      │
+      │ failure
+      ▼
+  FAIL CLOSED
+      │
+      ▼
+Operator decides whether
+to Retry with Local AI
+      │
+      ▼
+Explicit Confirmation
+      │
+      ▼
+Ollama / qwen3:8b
+```
+
+There is **no automatic DeepSeek-to-Ollama fallback**.
+
+Operators may also explicitly select Ollama on supported per-request workflows.
+
+### Ollama response isolation
+
+Ollama returns inference metadata in addition to model output.
+
+NOC Web consumes only the model `response`.
+
+Fields such as:
+
+```text
+thinking
+context
+total_duration
+load_duration
+eval_duration
+```
+
+are not treated as operational output.
+
+They do not enter downstream AI validation or persisted NOC operational records.
+
+## Workstation Runtime
+
+Normal operators launch SESAMI NOC Operations from Windows.
+
+```text
+Windows Desktop
+      │
+      ▼
+SESAMI NOC Operations Shortcut
+      │
+      ▼
+Microsoft wsl.exe
+      │
+      ▼
+~/.local/bin/sesami-noc-launch
+      │
+      ▼
+noc-web.service
+      │
+      ▼
+Python / FastAPI
+      │
+      ▼
+127.0.0.1:8000
+      │
+      ▼
+Default Windows Browser
+```
+
+NOC Web listens only on:
+
+```text
+127.0.0.1:8000
+```
+
+Normal operators do not need to keep an interactive WSL terminal open.
+
+The WSL-native shortcut launches Microsoft's installed `wsl.exe`. The Windows installer may retain the Feature 011 hidden `wscript` launcher for compatibility.
 
 ## Trusted Distribution
+
+Current trusted release components:
 
 | Component | Repository | Release |
 |---|---|---|
 | noc-web | `brentsens/noc-web` | `v1.0.4` |
 | noc-tools | `brentsens/noc-tools` | `v1.0.1` |
 
-Trusted acquisition verifies the pinned SHA-256 digest and GitHub SLSA
-provenance, including repository identity, tag identity, and approved
-signer-workflow identity. The legacy noc-tools compatibility result, when that
-tool is installed for another workflow, is:
+Trusted acquisition validates:
 
-```text
-noc-inv-contract=1
+- Pinned SHA-256 digest
+- GitHub artifact attestation
+- Repository identity
+- Release tag identity
+- Approved release workflow identity
+
+Installation does not require a permanent `~/code/noc-tools` checkout.
+
+## Repair and Reinstall
+
+Installer reruns are designed to be idempotent.
+
+Valid existing state is preserved, including:
+
+- `runtime.json`
+- Operator configuration
+- Operational records
+- Investigations
+- Shift and handover data
+- Authentication/session material
+- Compatible optional tooling
+
+Reruns should avoid creating duplicate:
+
+- Services
+- Launchers
+- Shortcuts
+- Virtual environments
+- Runtime configurations
+- Tools
+
+A failed repair must preserve the previous valid installation.
+
+## Troubleshooting
+
+Run these commands from the WSL/Ubuntu runtime.
+
+### Service status
+
+```bash
+systemctl --user status noc-web.service --no-pager -l
 ```
 
-## noc-tools
+### Recent logs
 
-The approved distribution provides:
+```bash
+journalctl --user -u noc-web.service \
+  --since "10 minutes ago" \
+  --no-pager
+```
+
+### API health
+
+```bash
+curl -sS http://127.0.0.1:8000/api/health
+```
+
+### Validate systemd unit
+
+```bash
+systemd-analyze --user verify \
+  ~/.config/systemd/user/noc-web.service
+```
+
+### Atlas
+
+```bash
+command -v atlas
+```
+
+### Microsoft 365
+
+```bash
+m365 auth status
+```
+
+### Ollama
+
+```bash
+curl -sS http://OLLAMA_HOST:11434/api/tags
+```
+
+If the Ollama server is on another PC and fails after a restart or sleep cycle:
+
+1. Confirm the remote PC is awake.
+2. Confirm Ollama is listening on port `11434`.
+3. Confirm the host/IP is still correct.
+4. Update `NOC_WEB_OLLAMA_BASE_URL` if the DHCP address changed.
+5. Restart `noc-web.service`.
+
+## Development
+
+WSL/Ubuntu is the primary development and runtime environment.
+
+From the repository:
+
+```bash
+source .venv/bin/activate
+python -m pytest -q
+```
+
+Also run:
+
+```bash
+git diff --check
+```
+
+The project maintains regression coverage for:
+
+- Backend workflow contracts
+- Frontend/backend API consistency
+- Provider isolation
+- AI schema and evidence validation
+- Datadog read-only guarantees
+- Investigation generation
+- Handover generation
+- Ollama integration
+- Local retry behavior
+- Runtime installation
+- Windows packaging
+
+The exact test count is intentionally not documented here because the suite continues to grow.
+
+## Building the Windows Installer
+
+The Inno Setup source and build scripts remain supported for the Windows frontend.
+
+Prerequisites:
+
+- Windows PowerShell 5.1
+- Inno Setup 6
+- Approved SESAMI branding asset
+
+Generate the icon:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass `
+  -File .\packaging\windows\generate-icon.ps1
+```
+
+Build:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass `
+  -File .\packaging\windows\build-installer.ps1
+```
+
+Output:
+
+```text
+dist\windows\SESAMI-NOC-Operations-Setup.exe
+```
+
+The current Windows installer should not be treated as Authenticode-signed unless signing has been independently verified.
+
+## Repository Layout
+
+| Path | Purpose |
+|---|---|
+| `backend/` | FastAPI routes, workflow services, providers, validation, persistence, and operational logic |
+| `frontend/` | Static browser UI and API client |
+| `scripts/` | Runtime, bootstrap, installer, and launcher tooling |
+| `systemd/` | Managed WSL user-service template |
+| `packaging/windows/` | Windows installer, manifest, icon, and build tooling |
+| `assets/windows/` | SESAMI Windows branding |
+| `tests/` | Backend, frontend-contract, integration, runtime, and security regression coverage |
+| `specs/` | Feature specifications, plans, research, contracts, checklists, and task history |
+| `docs/` | Runtime and supporting technical documentation |
+
+## Legacy Compatibility
+
+SESAMI NOC Operations is being migrated away from legacy shell-driven workflow orchestration.
+
+Optional `noc-tools` compatibility may still provide:
 
 ```text
 tix
@@ -187,174 +791,59 @@ noc-inv
 noc-handover
 ```
 
-Installation does not require a `~/code/noc-tools` checkout.
+However, the core modern workflows no longer require `noc-inv` or `noc-handover` for:
 
-## Integrations and Readiness
+- AI Assistant
+- Datadog evidence retrieval
+- Investigation generation
+- Handover generation
 
-| State | Meaning |
-|---|---|
-| `READY` | The bounded availability and applicable authentication or compatibility check succeeded. |
-| `SETUP_REQUIRED` | The software, operator sign-in, site access, or configuration needs action. |
-| `UNAVAILABLE` | A command, approved artifact, compatibility check, or bounded probe failed. |
+GitHub Copilot CLI may remain available as a compatibility capability but is not required for the provider-independent workflows.
 
-Readiness independently reports Atlas Jira, the configured AI provider, the
-Datadog API provider, Microsoft 365, and legacy noc-tools. Datadog incident and
-evidence retrieval uses a direct read-only API with a process-environment bearer
-token. Datadog investigation generation uses Feature 015 read-only evidence and the
-configured AI provider; it does not require noc-inv, GitHub Copilot CLI, or
-Datadog MCP. Handover generation assembles all validated open tickets and factual
-sections deterministically, then uses the configured AI provider for internal advisory
-validation; the final handover remains deterministic and contains no AI-specific sections or
-internal citation markers. It does not require noc-handover or Copilot CLI. Authentication
-is operator-specific. Credentials, tokens, cookies,
-sessions, and another operator's authentication are never bundled or copied by
-the installer.
-
-Assistant and AI Action inference additionally report the explicitly configured
-provider (`deepseek-api`, `github-copilot-cli`, or `ollama`) and its static
-readiness. The optional local Ollama provider requires only
-`NOC_WEB_OLLAMA_BASE_URL` (no authentication secret), defaults to the `qwen3:8b`
-model, and is available through explicit per-request selection or an explicitly
-confirmed **Retry with Local AI** action after a primary failure. Static readiness
-never contacts Ollama; the Status page provides an explicit probe that checks the
-model list without inference. There is no automatic fallback or automatic retry. No
-provider is selected by default, provider changes require a restart, and there is
-no automatic fallback. Configure provider settings through the process
-environment or the managed-service provider environment files
-(`ai-provider.env`, `datadog-provider.env`, and the optional
-`ollama-provider.env`) described in
-[docs/workstation-runtime.md](docs/workstation-runtime.md). Credentials are never
-returned by the API, written to logs, or persisted in reports.
-
-## Safety Model
-
-- Localhost-only binding
-- Read-only defaults and explicit confirmation for consequential actions
-- AI output is advisory and human-reviewed
-- Fail-closed release verification
-- No bundled credentials, tokens, or sessions
-- Controlled systemd PATH
-- Failed repair preserves the previous valid installation
-- Pytest regression coverage isolates operational state
-- Backend API and frontend UI contracts change together
-
-## Repair and Reinstall
-
-Installer reruns are idempotent. They preserve valid:
-
-- `runtime.json`
-- Operator configuration and operational records
-- Investigations and shift/handover data
-- Authentication and session material
-- Compatible noc-tools
-
-Reruns avoid duplicate services, launchers, shortcuts, virtual environments,
-runtime configurations, and tools.
-
-## Building the Windows Installer
-
-The Inno Setup source and build scripts remain supported. Keep them for the
-Windows wizard frontend even when the WSL-native path is preferred.
-
-Prerequisites:
-
-- Windows PowerShell 5.1
-- Inno Setup 6
-- Approved SESAMI branding asset
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\packaging\windows\generate-icon.ps1
-
-powershell.exe -ExecutionPolicy Bypass -File .\packaging\windows\build-installer.ps1
-```
-
-Output:
-
-```text
-dist\windows\SESAMI-NOC-Operations-Setup.exe
-```
-
-ICO generation was validated on Windows, and Inno Setup 6.7.3 compilation was
-validated. The current EXE is **NotSigned** by Authenticode. Do not treat the
-installer as digitally signed. Environments that enforce Smart App Control or
-similar application control may require Authenticode signing or an explicit
-allowlisting exception before the EXE can run.
-
-## Development
-
-WSL/Ubuntu is the development and runtime environment. From the repository:
-
-```bash
-source .venv/bin/activate
-python -m pytest -q
-```
-
-## Validation
-
-Current validated state:
-
-- pytest: **569 passed**
-- `git diff --check`: passed
-- focused WSL-native / bootstrap / launcher regressions: passed
-- Windows Pester 6.2.0 suite: available via
-  `packaging/windows/run-pester-regression.ps1` (includes WSL-native shortcut
-  contract checks; re-run on Windows after pulling these changes)
-- Windows ICO generation / Inno Setup build: previously validated; EXE source
-  retained
-- **T050 clean-workstation acceptance (EXE and WSL-native): PENDING**
-
-Do not claim fresh-machine acceptance for either frontend until that result is
-recorded on a genuine clean supported Windows/WSL workstation.
-
-## Troubleshooting
-
-Run these commands in the WSL/Ubuntu runtime:
-
-```bash
-systemctl --user status noc-web --no-pager -l
-journalctl --user -u noc-web -n 100 --no-pager
-curl -sS http://127.0.0.1:8000/api/health
-systemd-analyze --user verify ~/.config/systemd/user/noc-web.service
-command -v atlas
-# Optional only if another workflow still uses these legacy tools:
-command -v copilot
-command -v noc-inv
-noc-inv --contract-version
-```
-
-WSL-native daily launch uses:
-
-```text
-Desktop\SESAMI NOC Operations.lnk
-  -> %SystemRoot%\System32\wsl.exe
-  -> --distribution <WSL_DISTRO_NAME> --exec ~/.local/bin/sesami-noc-launch
-```
-
-The EXE/Feature 011 path may still place a compatibility launcher under:
-
-```text
-%LOCALAPPDATA%\SESAMI\NOC Operations\launch-hidden.vbs
-```
-
-The shortcut uses the Windows Desktop known folder and supports a
-OneDrive-redirected Desktop.
-
-## Repository Layout
-
-| Path | Purpose |
-|---|---|
-| `backend/` | FastAPI application, services, and operational logic |
-| `frontend/` | Static browser UI |
-| `scripts/` | Runtime, bootstrap, and Windows launcher scripts |
-| `packaging/windows/` | Inno Setup package, manifest, icon, and build tooling |
-| `assets/windows/` | Approved SESAMI branding asset |
-| `tests/` | Python and Windows Pester regression coverage |
-| `specs/` | Feature specifications, plans, contracts, and task records |
+Atlas Jira and `m365` are intentionally retained as bounded external adapters. The modernization target is **Python-owned workflow logic**, not necessarily zero subprocess calls.
 
 ## Project Status
 
-Feature 011: implemented and accepted.
+The current architecture includes:
 
-Feature 012: implemented and converged.
+- Managed WSL runtime
+- Browser-based operator interface
+- Python/FastAPI workflow orchestration
+- Jira ticket workflow through Atlas
+- Direct read-only Datadog provider
+- Provider-independent AI Assistant and AI Actions
+- Evidence-grounded investigation generation
+- Deterministic handover generation
+- Microsoft 365 handover delivery
+- DeepSeek primary AI inference
+- Optional Ollama / `qwen3:8b` local inference
+- Explicit provider selection
+- Confirmation-gated local AI retry
+- Strict AI output and evidence validation
+- Fail-closed provider behavior
 
-T050: pending genuine clean-workstation acceptance.
+Feature-level design decisions, acceptance criteria, contracts, research, implementation plans, and task history are maintained under:
+
+```text
+specs/
+```
+
+The remaining modernization work is primarily around legacy shell compatibility and clean-workstation installation validation rather than the core provider-independent NOC workflows.
+
+## Suggested Screenshots
+
+Before publishing screenshots, sanitize customer names, internal ticket contents, email addresses, Datadog URLs, internal IP addresses, tokens, and other operationally sensitive information.
+
+Recommended files:
+
+```text
+docs/images/
+├── dashboard.png
+├── start-shift.png
+├── tickets.png
+├── assistant-providers.png
+├── investigation-preview.png
+├── investigation-review.png
+├── end-shift.png
+└── health-providers.png
+```
