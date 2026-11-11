@@ -172,9 +172,17 @@ def _command_checks(profile: ConfigurationProfile) -> list[ReadinessCheck]:
         if not executable.is_file() or not os.access(executable, os.X_OK):
             checks.append(_check(
                 identifier, "command", "notReady", f"{command} command",
-                "A required operational command is unavailable.",
-                "Install or restore the documented command and run readiness again.",
-                required=command != "copilot",
+                (
+                    "A legacy operational command is unavailable."
+                    if command in {"noc-inv", "copilot"}
+                    else "A required operational command is unavailable."
+                ),
+                (
+                    "Install or restore the command only if another workflow still needs it."
+                    if command in {"noc-inv", "copilot"}
+                    else "Install or restore the documented command and run readiness again."
+                ),
+                required=command not in {"copilot", "noc-inv"},
             ))
             continue
         try:
@@ -199,14 +207,19 @@ def _command_checks(profile: ConfigurationProfile) -> list[ReadinessCheck]:
             status = "notReady"
         checks.append(_check(
             identifier, "command", status, f"{command} command",
-            "The required command completed safely." if status == "ready" else
-            "A required operational command cannot complete safely.",
+            (
+                "The command completed safely."
+                if status == "ready"
+                else "The command cannot complete safely."
+            ),
             "No action required." if status == "ready" else (
-                "Install the compatible noc-inv contract and run readiness again."
+                "Install the compatible noc-inv contract only if another workflow needs it."
                 if command == "noc-inv" else
+                "Install or restore the command only if another workflow needs it."
+                if command == "copilot" else
                 "Install or restore the documented command and run readiness again."
             ),
-            required=command != "copilot",
+            required=command not in {"copilot", "noc-inv"},
         ))
     return checks
 

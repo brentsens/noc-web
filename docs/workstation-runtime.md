@@ -109,7 +109,22 @@ request and does not assert that credentials were accepted or that the provider
 is reachable. Provider readiness is warning-only in shift health so it cannot
 block End Shift or handover workflows.
 
-## Datadog evidence provider
+## Datadog evidence provider and investigation generation
+
+The Investigations page uses the direct read-only Datadog API provider for
+Feature 015 evidence and the configured AI provider for investigation generation.
+Preview is non-generative and read-only. The configured AI provider is called
+only after explicit operator confirmation; it receives a bounded evidence package
+with stable evidence identifiers, not Datadog credentials, Authorization
+headers, unrelated environment values, or raw provider payloads. Datadog remains
+structurally read-only. `noc-inv`, GitHub Copilot CLI, and Datadog MCP are not
+requirements for this path.
+
+Generated investigations are advisory until reviewed. They use the existing
+local persistence, collision protection, provenance, lifecycle, and review rules,
+and record system-authored evidence availability plus a provenance map. DeepSeek
+Flash is supported through the existing `deepseek-api` configuration; there is no
+automatic fallback between DeepSeek and Copilot.
 
 Live incident retrieval and on-demand incident, notebook, and monitor evidence
 use a direct read-only Datadog API provider. This path does not require,

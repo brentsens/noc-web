@@ -6,11 +6,18 @@ No credential value is stored in a serializable field, logged, or returned.
 
 from __future__ import annotations
 
+import functools
 import os
 import shutil
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from urllib.parse import urlsplit
+
+from backend.services.copilot_mcp import (
+    ProviderInvalid,
+    ProviderTimeout,
+    ProviderUnavailable,
+)
 
 
 PROVIDER_DEEPSEEK = "deepseek-api"
@@ -299,6 +306,8 @@ def provider_readiness(environ: Mapping[str, str] | None = None) -> dict:
 def build_deepseek_provider(
     configuration: ProviderConfiguration,
     environ: Mapping[str, str] | None = None,
+    *,
+    system_prompt: str | None = None,
 ) -> AssistantProvider:
     """Build a callable that keeps the credential inside a closure only."""
     source = _environment(environ)
@@ -316,6 +325,7 @@ def build_deepseek_provider(
             model=model,
             base_url=base_url,
             timeout_seconds=timeout_seconds,
+            system_prompt=system_prompt,
         )
 
     return provider
@@ -323,6 +333,8 @@ def build_deepseek_provider(
 
 def resolve_provider_runtime(
     environ: Mapping[str, str] | None = None,
+    *,
+    system_prompt: str | None = None,
 ) -> ProviderRuntime:
     """Resolve the selected provider and callable; never falls back."""
     readiness = provider_readiness(environ)
@@ -343,7 +355,11 @@ def resolve_provider_runtime(
             )
         return ProviderRuntime(
             identifier=configuration.identifier,
-            provider=build_deepseek_provider(configuration, environ),
+            provider=build_deepseek_provider(
+                configuration,
+                environ,
+                system_prompt=system_prompt,
+            ),
             readiness=readiness,
         )
 
@@ -355,8 +371,13 @@ def resolve_provider_runtime(
         )
     from backend.services.copilot_cli import answer_with_copilot_cli
 
+    provider = (
+        functools.partial(answer_with_copilot_cli, prompt=system_prompt)
+        if system_prompt
+        else answer_with_copilot_cli
+    )
     return ProviderRuntime(
         identifier=configuration.identifier,
-        provider=answer_with_copilot_cli,
+        provider=provider,
         readiness=readiness,
     )

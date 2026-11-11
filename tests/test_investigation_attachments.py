@@ -228,3 +228,28 @@ def test_attachment_write_failure_preserves_previous_reference(
 
     assert response.status_code == 500
     assert context_file.read_bytes() == before
+
+
+def test_ai_evidence_investigation_can_attach_current_incident(
+    investigation_factory, monkeypatch,
+):
+    directory = investigation_factory(
+        shift_date=CREATION_SHIFT,
+        name="memory",
+        title="Memory pressure",
+        reviewed_context=_escalated_context(),
+    )
+    (directory / "evidence-provenance.json").write_text(json.dumps({
+        "provenance": "ai-evidence",
+        "availability": "complete",
+        "references": {},
+    }), encoding="utf-8")
+    _install_snapshot(monkeypatch)
+
+    response = TestClient(app).post(
+        f"/api/shifts/{CREATION_SHIFT}/investigations/memory/datadog-incident",
+        json=_attach_request(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["datadogIncidentReference"]["incidentId"] == "IR-24"

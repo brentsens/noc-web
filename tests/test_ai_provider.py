@@ -184,3 +184,23 @@ def test_no_automatic_fallback_when_selected_provider_is_not_ready(monkeypatch):
     assert runtime.identifier == "deepseek-api"
     assert runtime.provider is None
     assert runtime.readiness["readiness"] == "notReady"
+
+
+def test_investigation_system_prompt_is_passed_to_selected_provider(monkeypatch):
+    from backend.services import deepseek_provider
+
+    captured = {}
+
+    def answer(envelope, **kwargs):
+        captured.update(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(deepseek_provider, "answer_with_deepseek_api", answer)
+    runtime = ai_provider.resolve_provider_runtime(
+        _deepseek(),
+        system_prompt="Investigation prompt profile",
+    )
+
+    assert runtime.provider({"evidence": []}) == {"ok": True}
+    assert captured["system_prompt"] == "Investigation prompt profile"
+    assert captured["model"] == "deepseek-flash"

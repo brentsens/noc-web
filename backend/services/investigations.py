@@ -45,6 +45,7 @@ ACTIVE_REVIEW_STATES = frozenset({
     "follow-up required",
     "follow up required",
 })
+SUPPORTED_PROVENANCE = frozenset({"noc-inv", "copilot-mcp", "ai-evidence"})
 SAFE_SHIFT_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 SAFE_INVESTIGATION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
 
@@ -113,8 +114,48 @@ def _read_metadata(investigation_file: Path) -> tuple[str, dict[str, str]]:
     return title_match.group(1).strip(), metadata
 
 
+def _read_evidence_provenance(investigation_dir: Path) -> dict | None:
+    provenance_file = investigation_dir / "evidence-provenance.json"
+    if not provenance_file.is_file():
+        return None
+    try:
+        if provenance_file.stat().st_size > 1_000_000:
+            return None
+        value = json.loads(provenance_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(value, dict) or value.get("provenance") != "ai-evidence":
+        return None
+    availability = value.get("availability")
+    if availability not in {"complete", "partial"}:
+        availability = "partial"
+    references = {}
+    raw_references = value.get("references")
+    if isinstance(raw_references, dict):
+        for identifier, item in list(raw_references.items())[:30]:
+            if not isinstance(identifier, str) or not isinstance(item, dict):
+                continue
+            references[identifier[:160]] = {
+                "kind": item.get("kind")[:32] if isinstance(item.get("kind"), str) else None,
+                "sourceUrl": item.get("sourceUrl")[:2048] if isinstance(item.get("sourceUrl"), str) else None,
+                "source": item.get("source")[:64] if isinstance(item.get("source"), str) else None,
+                "availability": item.get("availability")[:32] if isinstance(item.get("availability"), str) else "unavailable",
+            }
+    return {
+        "provenance": "ai-evidence",
+        "availability": availability,
+        "incidentId": value.get("incidentId")[:128] if isinstance(value.get("incidentId"), str) else None,
+        "references": references,
+    }
+
+
 def _provenance(investigation_dir: Path, metadata: dict[str, str]) -> str | None:
+    evidence_provenance = _read_evidence_provenance(investigation_dir)
+    if evidence_provenance is not None:
+        return "ai-evidence"
     source = " ".join(metadata.values()).casefold()
+    if "ai-evidence" in source:
+        return "ai-evidence"
     if (investigation_dir / "evidence" / "copilot-notebook-summary.md").is_file() or "copilot" in source:
         return "copilot-mcp"
     if (investigation_dir / "noc-inv.log").is_file() or "noc-inv" in source:
@@ -338,6 +379,19 @@ def _project(investigation_file: Path) -> dict:
     )
     context, review_state = _read_reviewed_context(investigation_dir)
     availability = "available" if provenance else "unavailable"
+    ai_evidence = (
+        _read_evidence_provenance(investigation_dir)
+        if provenance == "ai-evidence"
+        else None
+    )
+    if ai_evidence is not None:
+        availability = (
+            "partial"
+            if ai_evidence["availability"] == "partial"
+            else "available"
+        )
+    elif provenance == "ai-evidence":
+        availability = "unavailable"
     validation_status = generation.get("validationStatus") if generation else None
     lifecycle_status = context["lifecycleStatus"] if context else "ready_for_review"
     lifecycle_label = LIFECYCLE_STATUS_LABELS[lifecycle_status]
@@ -378,6 +432,15 @@ def _project(investigation_file: Path) -> dict:
             "availability": availability,
             "access": "read-only",
             "reference": _source_reference(investigation_dir, metadata),
+            **(
+                {
+                    "status": ai_evidence["availability"],
+                    "incidentId": ai_evidence.get("incidentId"),
+                    "references": ai_evidence.get("references", {}),
+                }
+                if ai_evidence
+                else {}
+            ),
         },
         "advisory": {
             "available": provenance is not None and review_state == "unreviewed",
@@ -564,8 +627,8 @@ def transition_investigation(
         raise ValueError("Investigation operator context is unavailable.")
     if projected.get("validationStatus") == "needs_review":
         raise ValueError("This generated investigation needs validation and cannot be reviewed.")
-    if projected["evidence"]["provenance"] not in {"noc-inv", "copilot-mcp"}:
-        raise ValueError("Investigations require noc-inv or Copilot MCP provenance.")
+    if projected["evidence"]["provenance"] not in SUPPORTED_PROVENANCE:
+        raise ValueError("Investigations require supported evidence provenance.")
     current_status = projected["lifecycleStatus"]
     allowed_transitions = {
         "ready_for_review": {"escalated_to_incident", "cured"},
@@ -690,10 +753,10 @@ def review_investigation(
     if projected.get("validationStatus") == "needs_review":
         raise ValueError("This generated investigation needs validation and cannot be reviewed.")
     if (
-        projected["evidence"]["provenance"] not in {"noc-inv", "copilot-mcp"}
+        projected["evidence"]["provenance"] not in SUPPORTED_PROVENANCE
         and projected.get("validationStatus") != "needs_review"
     ):
-        raise ValueError("Investigations require noc-inv or Copilot MCP provenance.")
+        raise ValueError("Investigations require supported evidence provenance.")
     clean_finding, clean_state = " ".join(finding.split()), " ".join(state.split())
     if not clean_finding or not clean_state:
         raise ValueError("A concise reviewed finding and state are required.")
@@ -720,8 +783,8 @@ def reject_investigation(shift_date: str, investigation_name: str) -> dict:
     projected = _project(investigation_file)
     if projected.get("error"):
         raise ValueError("Investigation operator context is unavailable.")
-    if projected["evidence"]["provenance"] not in {"noc-inv", "copilot-mcp"}:
-        raise ValueError("Investigations require noc-inv or Copilot MCP provenance.")
+    if projected["evidence"]["provenance"] not in SUPPORTED_PROVENANCE:
+        raise ValueError("Investigations require supported evidence provenance.")
     if projected["lifecycleStatus"] != "ready_for_review":
         raise ValueError("Only Ready for Review investigations can reject an advisory.")
     context, review_state = _read_reviewed_context(investigation_file.parent)

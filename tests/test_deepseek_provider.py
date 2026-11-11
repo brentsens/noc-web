@@ -277,3 +277,32 @@ def test_malformed_stale_claims_are_left_for_the_validator_to_reject(monkeypatch
     opener = _Opener(response=_content_response(json.dumps(result)))
 
     assert _call(monkeypatch, opener, STALE_ENVELOPE) == result
+
+
+def test_custom_system_prompt_is_sent_for_investigation_generation(monkeypatch):
+    opener = _Opener(response=_content_response(
+        json.dumps({
+            "summary": ["incident:test"],
+            "confirmedFindings": ["incident:test"],
+            "currentStatus": ["incident:test"],
+            "nextActions": ["incident:test"],
+            "handoverSummary": ["incident:test"],
+        })
+    ))
+    monkeypatch.setattr(deepseek_provider, "_opener", opener)
+    prompt = "Investigation prompt profile"
+
+    result = deepseek_provider.answer_with_deepseek_api(
+        {"evidence": []},
+        api_key=SENTINEL,
+        model=MODEL,
+        base_url=BASE_URL,
+        timeout_seconds=17,
+        system_prompt=prompt,
+    )
+
+    assert result["summary"] == ["incident:test"]
+    request, _ = opener.calls[0]
+    body = json.loads(request.data.decode("utf-8"))
+    assert body["messages"][0]["content"] == prompt
+    assert SENTINEL not in json.dumps(body)

@@ -170,7 +170,7 @@ def _valid_report_result(shift_date: str, response: object) -> dict[str, Any]:
                 if route["label"] == "Open Investigations" and not any(
                     evidence_by_id[identifier]["kind"] == "investigation"
                     and evidence_by_id[identifier]["provenance"]
-                    in {"noc-inv", "copilot-mcp"}
+                    in {"noc-inv", "copilot-mcp", "ai-evidence"}
                     and evidence_by_id[identifier]["availability"] == "available"
                     for identifier in item["evidenceIds"]
                 ):

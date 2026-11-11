@@ -328,8 +328,8 @@ def assess_external_capabilities(
             "external.nocTools",
             "noc-tools compatibility",
             "unavailable",
-            "A required noc-tools command could not complete its compatibility check.",
-            "Repair the approved noc-tools installation and run Recheck.",
+            "A legacy noc-tools command could not complete its compatibility check.",
+            "Repair the approved noc-tools installation only if another workflow needs it.",
             "unavailable",
         ))
     elif noc_tools_missing:
@@ -337,8 +337,8 @@ def assess_external_capabilities(
             "external.nocTools",
             "noc-tools compatibility",
             "setup_required",
-            "Workflows using one or more required noc-tools commands are unavailable.",
-            "Restore the compatible noc-tools commands and run Recheck.",
+            "Workflows that still use the legacy noc-tools commands may be unavailable.",
+            "Restore the compatible noc-tools commands only if another workflow needs them.",
             "setup_required",
         ))
     elif _executable("jq", noc_bin) is None:

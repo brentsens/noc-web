@@ -248,3 +248,15 @@ def datadog_environment(monkeypatch):
     )
     monkeypatch.setenv("NOC_WEB_DATADOG_TIMEOUT_SECONDS", "90")
     return token
+
+
+@pytest.fixture(autouse=True)
+def reset_investigation_preview_store():
+    """Keep the process-local investigation preview store isolated per test."""
+    from backend.services.investigation_preview_store import (
+        reset_preview_store_for_tests,
+    )
+
+    reset_preview_store_for_tests()
+    yield
+    reset_preview_store_for_tests()

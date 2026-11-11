@@ -5,6 +5,8 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from backend.api.investigations import PreviewInvestigationRequest
+
 
 FRONTEND = Path(__file__).parents[1] / "frontend"
 MODULE_SCRIPT_PATTERN = re.compile(
@@ -1162,16 +1164,42 @@ def test_investigations_route_requires_datadog_provenance_in_frontend_validation
 def test_investigation_creation_uses_preview_and_confirmed_api_contract():
     page = (FRONTEND / "investigations.html").read_text(encoding="utf-8")
     api = (FRONTEND / "js" / "api.js").read_text(encoding="utf-8")
+    naming = (FRONTEND / "js" / "investigation-preview.js").read_text(
+        encoding="utf-8"
+    )
 
-    assert "+ Create from Datadog Notebook" in page
+    assert "+ Create from Datadog Incident" in page
     assert "FINAL Datadog Notebook URL" in page
     assert "Create Investigation" in page
+    assert "Feature 015 read-only Datadog evidence" in page
+    assert "configured AI provider" in page
     assert "await previewInvestigation(" in page
     assert "await createInvestigation(" in page
+    assert "previewId: pendingPreview.previewId" in page
+    assert "incidentId: incidentHandoff.incidentId" in page
+    assert "displayTitle: incidentHandoff.title" in page
+    assert "investigation-preview.js" in page
+    assert "investigationNameController.applyPreview(pendingPreview)" in page
+    assert "name: investigationNameController.previewName()" in page
+    assert "displayTitleInput.value = handoff" in naming
+    assert "nameInput.value = value" in naming
+    assert "manuallyEdited = true" in naming
+    assert "manuallyEdited = false" in naming
+    assert "Datadog Incident Title" in page
+    assert "Local Investigation Identifier" in page
+    assert "createNameInput.value = incidentTitleHint.trim()" not in page
     assert "window.confirm(confirmation)" in page
-    assert "This does not modify evidence, Datadog, or Jira." in page
+    assert "Datadog remains read-only" in page
+    assert "noc-inv" not in page
+    assert "Copilot" not in page
+    assert "MCP" not in page
     assert "export function previewInvestigation(" in api
     assert "export function createInvestigation(" in api
+    assert "const payload = { incidentId, displayTitle, notebookUrl };" in api
+    assert "payload.name = name;" in api
+    assert "body: JSON.stringify(payload)" in api
+    assert "previewId," in api
+    assert "body: JSON.stringify({" in api
     assert "fetch(pendingPreview.notebookUrl" not in page
     end_shift = (FRONTEND / "end-shift.html").read_text(encoding="utf-8")
     assert "preflight.investigations.needsReview" in end_shift
@@ -1194,3 +1222,253 @@ def test_health_panel_and_client_expose_provider_readiness_without_secrets():
     assert "external.aiProvider" in client
     assert "aiProviderCapability" in client
     assert "test-sentinel" not in client
+
+
+def test_investigations_incident_handoff_and_preview_invalidation():
+    page = (FRONTEND / "investigations.html").read_text(encoding="utf-8")
+    active = (FRONTEND / "js" / "active-incidents.js").read_text(encoding="utf-8")
+    api = (FRONTEND / "js" / "api.js").read_text(encoding="utf-8")
+
+    naming = (FRONTEND / "js" / "investigation-preview.js").read_text(
+        encoding="utf-8"
+    )
+    assert "noc-web:incident-handoff" in active
+    assert "incidentId: incident.id" in active
+    assert "JSON.stringify({" in active
+    assert '"noc-web:incident-handoff"' in naming
+    assert "readIncidentHandoff(window.sessionStorage)" in page
+    assert "createIncidentInput.value = incidentHandoff.incidentId" in page
+    assert "investigationNameController.resetForIncident" in page
+    assert "investigationNameController.previewName()" in page
+    assert "previewEvidence.textContent" in page
+    assert "pendingPreview.evidence" in page
+    assert "pendingPreview.provider" in page
+    assert "AI evidence (Feature 015)" in page
+    assert "investigation.evidence.status" in page
+    assert "investigation.evidence.references" in page
+    assert "resetCreatePreview();" in page
+    assert "createShiftInput.value = shift;" in page
+    assert "loadInvestigations();" in page
+    assert "onDateChange: shift => {" in page
+    assert "previewInvestigation(" in api
+    assert "createInvestigation(" in api
+
+
+def test_preview_request_body_matches_backend_pydantic_contract():
+    module = FRONTEND / "js" / "api.js"
+    live_title = (
+        "[PROD] SITEF integration backlog: export service heap exhaustion / "
+        "CPU saturation (tenant 6)"
+    )
+    script = """
+      import { readFileSync } from "node:fs";
+      const source = readFileSync(process.argv[1], "utf8");
+      const api = await import(
+        `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
+      );
+      const calls = [];
+      globalThis.fetch = async (path, options) => {
+        calls.push({ path, body: JSON.parse(options.body) });
+        return { ok: true, json: async () => ({}) };
+      };
+      await api.previewInvestigation("2099-12-31", {
+        incidentId: "aadf7955-1945-4ce6-b6ca-41e7fa734a78",
+        displayTitle: process.argv[2],
+        name: undefined,
+        notebookUrl: "https://app.datadoghq.com/notebook/16295624/runbook"
+      });
+      await api.previewInvestigation("2099-12-31", {
+        incidentId: "aadf7955-1945-4ce6-b6ca-41e7fa734a78",
+        displayTitle: process.argv[2],
+        name: "manual-local-name",
+        notebookUrl: "https://app.datadoghq.com/notebook/16295624/runbook"
+      });
+      console.log(JSON.stringify(calls.map(call => call.body)));
+    """
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script, str(module), live_title],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    generated, manual = json.loads(result.stdout)
+
+    assert "name" not in generated
+    assert generated["displayTitle"] == live_title
+    generated_model = PreviewInvestigationRequest.model_validate(generated)
+    assert generated_model.displayTitle == live_title
+    assert generated_model.name is None
+    assert generated_model.incidentId == "aadf7955-1945-4ce6-b6ca-41e7fa734a78"
+    assert generated_model.notebookUrl == (
+        "https://app.datadoghq.com/notebook/16295624/runbook"
+    )
+
+    assert manual["name"] == "manual-local-name"
+    manual_model = PreviewInvestigationRequest.model_validate(manual)
+    assert manual_model.name == "manual-local-name"
+    assert manual_model.displayTitle == live_title
+
+
+def test_browser_handoff_dirty_tracking_controls_preview_name():
+    handoff_module = FRONTEND / "js" / "investigation-preview.js"
+    api_module = FRONTEND / "js" / "api.js"
+    live_title = (
+        "[PROD] SITEF integration backlog: export service heap exhaustion / "
+        "CPU saturation (tenant 6)"
+    )
+    script = """
+      import { readFileSync } from "node:fs";
+      const load = async path => {
+        const source = readFileSync(path, "utf8");
+        return import(
+          `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
+        );
+      };
+      const handoffModule = await load(process.argv[1]);
+      const api = await load(process.argv[2]);
+      const values = {
+        "noc-web:incident-handoff": JSON.stringify({
+          incidentId: "aadf7955-1945-4ce6-b6ca-41e7fa734a78",
+          title: process.argv[3]
+        })
+      };
+      const storage = {
+        getItem(key) { return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null; },
+        removeItem(key) { delete values[key]; }
+      };
+      const handlers = [];
+      const nameInput = {
+        _value: "",
+        get value() { return this._value; },
+        set value(next) {
+          this._value = next;
+          for (const handler of handlers) handler();
+        },
+        addEventListener(type, handler) {
+          if (type === "input") handlers.push(handler);
+        },
+        type(next) {
+          this._value = next;
+          for (const handler of handlers) handler();
+        }
+      };
+      const displayTitleInput = { value: "" };
+      let resetCount = 0;
+      const controller = handoffModule.createInvestigationNameController({
+        nameInput,
+        displayTitleInput,
+        onResetPreview: () => { resetCount += 1; }
+      });
+      const handoffState = handoffModule.readIncidentHandoff(storage);
+      controller.resetForIncident(handoffState.incidentHandoff);
+      const initial = {
+        previewNameIsUndefined: controller.previewName() === undefined,
+        nameValue: nameInput.value,
+        displayTitle: displayTitleInput.value,
+        resetCount,
+        manuallyEdited: controller.isManuallyEdited()
+      };
+      controller.applyPreview({
+        displayTitle: process.argv[3],
+        normalizedName: "generated-local-name"
+      });
+      const afterPreview = {
+        previewNameIsUndefined: controller.previewName() === undefined,
+        nameValue: nameInput.value,
+        resetCount,
+        manuallyEdited: controller.isManuallyEdited()
+      };
+      const calls = [];
+      globalThis.fetch = async (path, options) => {
+        calls.push(JSON.parse(options.body));
+        return { ok: true, json: async () => ({}) };
+      };
+      await api.previewInvestigation("2099-12-31", {
+        incidentId: handoffState.incidentHandoff.incidentId,
+        displayTitle: displayTitleInput.value,
+        name: controller.previewName(),
+        notebookUrl: "https://app.datadoghq.com/notebook/16295624/runbook"
+      });
+      nameInput.type("manual-local-name");
+      const afterEdit = {
+        previewName: controller.previewName(),
+        resetCount,
+        manuallyEdited: controller.isManuallyEdited()
+      };
+      controller.applyPreview({
+        displayTitle: process.argv[3],
+        normalizedName: "manual-local-name"
+      });
+      await api.previewInvestigation("2099-12-31", {
+        incidentId: handoffState.incidentHandoff.incidentId,
+        displayTitle: displayTitleInput.value,
+        name: controller.previewName(),
+        notebookUrl: "https://app.datadoghq.com/notebook/16295624/runbook"
+      });
+      controller.resetForIncident({
+        incidentId: "different-incident",
+        title: "Different incident"
+      });
+      const afterDifferentIncident = {
+        previewNameIsUndefined: controller.previewName() === undefined,
+        nameValue: nameInput.value,
+        displayTitle: displayTitleInput.value,
+        manuallyEdited: controller.isManuallyEdited()
+      };
+      console.log(JSON.stringify({
+        initial,
+        afterPreview,
+        afterEdit,
+        afterDifferentIncident,
+        bodies: calls
+      }));
+    """
+    result = subprocess.run(
+        [
+            "node",
+            "--input-type=module",
+            "-e",
+            script,
+            str(handoff_module),
+            str(api_module),
+            live_title,
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+
+    assert payload["initial"] == {
+        "previewNameIsUndefined": True,
+        "nameValue": "",
+        "displayTitle": live_title,
+        "resetCount": 0,
+        "manuallyEdited": False,
+    }
+    assert payload["afterPreview"] == {
+        "previewNameIsUndefined": True,
+        "nameValue": "generated-local-name",
+        "resetCount": 0,
+        "manuallyEdited": False,
+    }
+    assert payload["afterEdit"] == {
+        "previewName": "manual-local-name",
+        "resetCount": 1,
+        "manuallyEdited": True,
+    }
+    assert payload["afterDifferentIncident"] == {
+        "previewNameIsUndefined": True,
+        "nameValue": "",
+        "displayTitle": "Different incident",
+        "manuallyEdited": False,
+    }
+    generated, manual = payload["bodies"]
+    assert "name" not in generated
+    assert '"name"' not in json.dumps(generated)
+    assert generated["displayTitle"] == live_title
+    assert generated["incidentId"] == "aadf7955-1945-4ce6-b6ca-41e7fa734a78"
+    assert manual["name"] == "manual-local-name"
+    assert manual["displayTitle"] == live_title

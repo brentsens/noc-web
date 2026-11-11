@@ -522,14 +522,15 @@ def test_ordinary_jira_salesforce_correlation_is_not_routed_to_investigations(
     assert response["recommendations"] == []
 
 
-def test_investigations_route_requires_available_noc_inv_provenance(monkeypatch):
+@pytest.mark.parametrize("provenance", ["noc-inv", "copilot-mcp", "ai-evidence"])
+def test_investigations_route_requires_supported_provenance(monkeypatch, provenance):
     from backend.services import assistant
     from backend.services.assistant import AssistantQuestion
 
     evidence = [{
         "id": "investigation:dd-monitor-1",
         "kind": "investigation",
-        "provenance": "noc-inv",
+        "provenance": provenance,
         "availability": "available",
         "summary": {"title": "Monitor investigation"},
     }, {

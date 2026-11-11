@@ -31,7 +31,6 @@ DEPENDENCIES = (
     "copilot",
     "tix",
     "noc-start",
-    "noc-inv",
     "noc-handover",
 )
 

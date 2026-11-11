@@ -118,8 +118,16 @@ function renderIncident(incident, allowCreateInvestigation) {
           "noc-web:incident-title-handoff",
           incident.title
         );
+        window.sessionStorage.setItem(
+          "noc-web:incident-handoff",
+          JSON.stringify({
+            incidentId: incident.id,
+            title: incident.title,
+            url: incident.url
+          })
+        );
       } catch {
-        // The existing form remains usable without the optional title prefill.
+        // Navigation remains available without the optional handoff.
       }
       window.location.href = "investigations.html";
     });

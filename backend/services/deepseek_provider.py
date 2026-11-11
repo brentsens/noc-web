@@ -80,12 +80,16 @@ def _timeout() -> CopilotProviderTimeout:
     )
 
 
-def _request_body(envelope: dict[str, Any], model: str) -> bytes:
+def _request_body(
+    envelope: dict[str, Any],
+    model: str,
+    system_prompt: str,
+) -> bytes:
     return json.dumps(
         {
             "model": model,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
                     "content": json.dumps(envelope, ensure_ascii=False),
@@ -108,11 +112,12 @@ def answer_with_deepseek_api(
     model: str,
     base_url: str,
     timeout_seconds: int,
+    system_prompt: str | None = None,
 ) -> dict[str, Any]:
     """Send one bounded request and return only the parsed provider object."""
     request = urllib.request.Request(
         f"{base_url.rstrip('/')}{CHAT_COMPLETIONS_PATH}",
-        data=_request_body(envelope, model),
+        data=_request_body(envelope, model, system_prompt or SYSTEM_PROMPT),
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",

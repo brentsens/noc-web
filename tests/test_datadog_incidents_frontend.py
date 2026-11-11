@@ -60,17 +60,24 @@ def test_incident_handoff_prefills_title_only_and_keeps_confirmation_gates():
     investigations = (FRONTEND / "investigations.html").read_text(
         encoding="utf-8"
     )
+    naming = (FRONTEND / "js" / "investigation-preview.js").read_text(
+        encoding="utf-8"
+    )
 
     assert '"noc-web:incident-title-handoff"' in renderer
+    assert '"noc-web:incident-handoff"' in renderer
     assert 'window.location.href = "investigations.html"' in renderer
     assert "createInvestigation" not in renderer
-    assert 'getItem(\n                "noc-web:incident-title-handoff"' in investigations
-    assert "createNameInput.value = incidentTitleHint.trim()" in investigations
+    assert '"noc-web:incident-handoff"' in naming
+    assert "readIncidentHandoff(window.sessionStorage)" in investigations
+    assert "displayTitleInput.value = handoff" in naming
+    assert "createNameInput.value = incidentTitleHint.trim()" not in investigations
+    assert "nameInput.value = value" in naming
     assert "notebookUrlInput.value = incidentTitleHint" not in investigations
     assert "previewInvestigation(" in investigations
     assert "createInvestigation(" in investigations
     assert "if (!window.confirm(confirmation))" in investigations
-    assert "confirmed: true" in investigations or "pendingPreview.notebookUrl,\n                    true" in investigations
+    assert "confirmed: true" in investigations
 
 
 def test_failed_incident_get_preserves_the_last_successful_snapshot():

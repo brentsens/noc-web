@@ -503,7 +503,7 @@ def _validate_provider_result(
         if route["href"].startswith("investigations.html?") and not any(
             item.get("id") in recommendation["evidenceIds"]
             and item.get("kind") == "investigation"
-            and item.get("provenance") in {"noc-inv", "copilot-mcp"}
+            and item.get("provenance") in {"noc-inv", "copilot-mcp", "ai-evidence"}
             and item.get("availability") == "available"
             for item in available_evidence
         ):

@@ -7,7 +7,7 @@ from fastapi import (
     HTTPException,
     Query,
 )
-from pydantic import BaseModel, StrictBool, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 
 from backend.config import ConfigurationError
 from backend.services.investigations import (
@@ -50,11 +50,20 @@ class AttachDatadogIncidentRequest(BaseModel):
 
 
 class PreviewInvestigationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    incidentId: StrictStr
+    displayTitle: StrictStr | None = None
     name: StrictStr | None = None
-    notebookUrl: StrictStr | None = None
+    notebookUrl: StrictStr
 
 
-class CreateInvestigationRequest(PreviewInvestigationRequest):
+class CreateInvestigationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    previewId: StrictStr
+    name: StrictStr
+    notebookUrl: StrictStr
     confirmed: StrictBool
 
 
@@ -106,7 +115,11 @@ def preview(
     _validate_generation_shift(shift_date)
     try:
         return preview_investigation(
-            shift_date, request.name, request.notebookUrl
+            shift_date,
+            request.name,
+            request.notebookUrl,
+            request.incidentId,
+            display_title=request.displayTitle,
         )
     except GenerationError as error:
         raise HTTPException(
@@ -140,14 +153,13 @@ def create(
     request: CreateInvestigationRequest,
 ):
     _validate_generation_shift(shift_date)
-    if request.confirmed is not True:
-        raise HTTPException(
-            status_code=422,
-            detail="This operation requires confirmed: true.",
-        )
     try:
         result = create_investigation(
-            shift_date, request.name, request.notebookUrl
+            shift_date,
+            request.name,
+            request.notebookUrl,
+            request.previewId,
+            request.confirmed,
         )
         return result.record
     except GenerationError as error:

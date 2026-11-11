@@ -967,3 +967,87 @@ def test_answer_without_a_configured_provider_fails_closed(monkeypatch):
         assistant.answer(
             AssistantQuestion(SHIFT, "What requires attention?", True)
         )
+
+
+def test_assistant_context_includes_ai_evidence_investigations(noc_root):
+    _write_context(noc_root)
+    investigation = noc_root / SHIFT / "investigations" / "memory"
+    (investigation / "investigation.md").write_text(
+        "# Investigation: Memory\n"
+        "- Display Title: Memory\n"
+        "- Investigation Name: memory\n"
+        f"- Shift Date: {SHIFT}\n"
+        "- FINAL Datadog Notebook: https://app.datadoghq.com/notebook/123/example\n"
+        "- Evidence Provenance: ai-evidence\n"
+        "- Evidence Status: COMPLETE\n",
+        encoding="utf-8",
+    )
+    (investigation / "evidence-provenance.json").write_text(json.dumps({
+        "provenance": "ai-evidence",
+        "availability": "complete",
+        "references": {
+            "incident:incident-1": {
+                "kind": "incident",
+                "sourceUrl": "https://app.datadoghq.com/incidents/incident-1",
+                "source": "incident_detail",
+                "availability": "available",
+            }
+        },
+    }), encoding="utf-8")
+    (investigation / "reviewed-context.json").write_text(json.dumps({
+        "reviewState": "reviewed",
+        "finding": "Memory remains elevated.",
+        "state": "monitoring",
+    }), encoding="utf-8")
+
+    evidence = {item["id"]: item for item in assistant_context.collect_context(SHIFT)}
+
+    item = evidence["investigation:memory"]
+    assert item["provenance"] == "ai-evidence"
+    assert item["availability"] == "available"
+
+
+def test_ai_evidence_investigation_route_is_valid(noc_root, monkeypatch):
+    _write_context(noc_root)
+    investigation = noc_root / SHIFT / "investigations" / "memory"
+    (investigation / "investigation.md").write_text(
+        "# Investigation: Memory\n"
+        "- Display Title: Memory\n"
+        "- Investigation Name: memory\n"
+        f"- Shift Date: {SHIFT}\n"
+        "- FINAL Datadog Notebook: https://app.datadoghq.com/notebook/123/example\n"
+        "- Evidence Provenance: ai-evidence\n"
+        "- Evidence Status: COMPLETE\n",
+        encoding="utf-8",
+    )
+    (investigation / "evidence-provenance.json").write_text(json.dumps({
+        "provenance": "ai-evidence",
+        "availability": "complete",
+        "references": {
+            "incident:incident-1": {
+                "kind": "incident",
+                "sourceUrl": "https://app.datadoghq.com/incidents/incident-1",
+                "source": "incident_detail",
+                "availability": "available",
+            }
+        },
+    }), encoding="utf-8")
+
+    result = _answer("investigation:memory")
+    result["recommendations"][0]["route"] = {
+        "label": "Open Investigations",
+        "href": "investigations.html",
+        "requiresConfirmation": True,
+    }
+    monkeypatch.setattr(assistant, "ask_copilot", lambda envelope: result)
+
+    response = assistant.answer(AssistantQuestion(
+        SHIFT,
+        "What reviewed Datadog findings are relevant to this shift?",
+        True,
+    ))
+
+    assert response["status"] == "complete"
+    assert response["recommendations"][0]["route"]["href"] == (
+        f"investigations.html?shift={SHIFT}"
+    )

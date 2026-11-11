@@ -138,7 +138,24 @@ def test_readiness_rejects_incompatible_noc_inv_contract(readiness_workspace):
     checks = {item["id"]: item for item in result["checks"]}
 
     assert checks["command.noc-inv"]["status"] == "notReady"
+    assert checks["command.noc-inv"]["required"] is False
     assert "compatible noc-inv contract" in checks["command.noc-inv"]["correctiveAction"]
+    assert result["overallStatus"] == "ready"
+
+
+def test_missing_noc_inv_does_not_make_core_workstation_unready(
+    readiness_workspace,
+):
+    (readiness_workspace.noc_bin / "noc-inv").unlink()
+
+    result = readiness.assess_readiness(readiness_workspace, "2099-12-31")
+    noc_inv = next(
+        item for item in result["checks"] if item["id"] == "command.noc-inv"
+    )
+
+    assert noc_inv["status"] == "notReady"
+    assert noc_inv["required"] is False
+    assert result["overallStatus"] == "ready"
 
 
 def test_readiness_reports_missing_copilot_command(readiness_workspace):

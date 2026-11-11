@@ -34,3 +34,22 @@ def test_datadog_modules_have_no_copilot_mcp_or_shell_retrieval_path():
             "shutil",
         ):
             assert forbidden not in source
+
+
+def test_investigation_generation_has_no_legacy_tool_or_direct_datadog_path():
+    paths = [
+        ROOT / "backend" / "services" / "investigation_generation.py",
+        ROOT / "backend" / "services" / "investigation_evidence.py",
+        ROOT / "backend" / "services" / "investigation_ai.py",
+    ]
+    for path in paths:
+        source = path.read_text(encoding="utf-8").casefold()
+        for forbidden in (
+            "subprocess",
+            "shutil.which",
+            "datadogclient",
+            "search_incidents",
+            "get_notebook(",
+            "get_monitor(",
+        ):
+            assert forbidden not in source

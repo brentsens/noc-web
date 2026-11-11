@@ -130,7 +130,7 @@
                         </h1>
 
                         <p>
-                            Read-only noc-inv and Copilot MCP investigation context for the selected shift.
+                            Read-only Datadog REST evidence and configured AI provider investigation context for the selected shift.
                         </p>
 
                     </div>
@@ -139,7 +139,7 @@
                         <label class="form-label" for="investigation-date">Selected Shift</label>
                         <input id="investigation-date" class="date-control" type="date">
                         <button id="show-create-investigation" class="button" type="button">
-                            + Create from Datadog Notebook
+                            + Create from Datadog Incident
                         </button>
 
                     </div>
@@ -154,12 +154,20 @@
 
                 <section id="create-investigation-panel" class="panel investigation-create-panel hidden" aria-labelledby="create-investigation-title">
                     <div class="panel-header">
-                        <h2 id="create-investigation-title">Create from Datadog Notebook</h2>
+                        <h2 id="create-investigation-title">Create from Datadog Incident</h2>
                         <span class="count-badge">Explicit confirmation required</span>
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="create-investigation-name">Investigation Name</label>
-                        <input id="create-investigation-name" class="form-control" type="text" maxlength="120">
+                        <label class="form-label" for="create-incident-id">Datadog Incident ID</label>
+                        <input id="create-incident-id" class="form-control" type="text" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="create-incident-title">Datadog Incident Title</label>
+                        <input id="create-incident-title" class="form-control" type="text" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="create-investigation-name">Local Investigation Identifier</label>
+                        <input id="create-investigation-name" class="form-control" type="text" maxlength="120" placeholder="Generated from the incident title if left blank">
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="create-notebook-url">FINAL Datadog Notebook URL</label>
@@ -176,8 +184,9 @@
                     <div id="create-investigation-preview" class="investigation-section hidden" aria-live="polite">
                         <h3>Confirmation preview</h3>
                         <p id="create-preview-values"></p>
+                        <p id="create-preview-evidence"></p>
                         <ul>
-                            <li>Generation path: noc-inv → GitHub Copilot CLI → Datadog MCP.</li>
+                            <li>Generation path: Feature 015 read-only Datadog evidence → configured AI provider.</li>
                             <li>Datadog remains read-only. No Jira or Datadog data will be modified.</li>
                             <li>A local investigation record may be created and requires validation and operator review.</li>
                             <li>Creation requires your separate explicit confirmation.</li>
@@ -391,6 +400,7 @@
         } from "./js/api.js";
         import { initializeWorkflow, renderStatePanel, renderStatePanels } from "./js/workflow-context.js";
         import { mountActiveIncidents } from "./js/active-incidents.js";
+        import { createInvestigationNameController, readIncidentHandoff } from "./js/investigation-preview.js";
 
         let investigations = [];
         let selectedInvestigation = null;
@@ -417,9 +427,12 @@
         const createNameInput = document.querySelector("#create-investigation-name");
         const notebookUrlInput = document.querySelector("#create-notebook-url");
         const createShiftInput = document.querySelector("#create-investigation-shift");
+        const createIncidentInput = document.querySelector("#create-incident-id");
+        const createDisplayTitleInput = document.querySelector("#create-incident-title");
         const previewButton = document.querySelector("#preview-create-investigation");
         const previewPanel = document.querySelector("#create-investigation-preview");
         const previewValues = document.querySelector("#create-preview-values");
+        const previewEvidence = document.querySelector("#create-preview-evidence");
         const confirmCreateButton = document.querySelector("#confirm-create-investigation");
         const sourceStates = document.createElement("div");
         sourceStates.id = "investigation-source-states";
@@ -778,9 +791,17 @@
             document.querySelector("#investigation-name").textContent = investigation.name;
             document.querySelector("#investigation-title").textContent = investigation.title;
             document.querySelector("#investigation-source").textContent =
-                investigation.evidence.provenance || "Unavailable";
+                investigation.evidence.provenance === "ai-evidence"
+                    ? "AI evidence (Feature 015)"
+                    : (investigation.evidence.provenance || "Unavailable");
+            const evidenceStatus = investigation.evidence.status
+                ? ` · ${investigation.evidence.status}`
+                : "";
+            const evidenceReferences = investigation.evidence.references
+                ? ` · ${Object.keys(investigation.evidence.references).length} references`
+                : "";
             document.querySelector("#investigation-capture").textContent =
-                `${investigation.evidence.availability} · ${investigation.evidence.access}`;
+                `${investigation.evidence.availability}${evidenceStatus} · ${investigation.evidence.access}${evidenceReferences}`;
             document.querySelector("#investigation-generation-status").textContent =
                 investigation.generationStatus
                     ? `${investigation.generationStatus} · ${investigation.validationStatus}`
@@ -905,13 +926,28 @@
         );
 
         let pendingPreview = null;
+        let incidentHandoff = null;
         function resetCreatePreview() {
             pendingPreview = null;
+            previewEvidence.textContent = "";
             previewPanel.classList.add("hidden");
             confirmCreateButton.disabled = true;
         }
+        const investigationNameController = createInvestigationNameController({
+            nameInput: createNameInput,
+            displayTitleInput: createDisplayTitleInput,
+            onResetPreview: resetCreatePreview
+        });
 
         showCreateButton.addEventListener("click", () => {
+            if (!incidentHandoff || !incidentHandoff.incidentId) {
+                renderStatePanel(sourceStates, {
+                    source: "Investigation preview",
+                    kind: "error",
+                    message: "Select Create Investigation from a current Datadog incident first."
+                });
+                return;
+            }
             createShiftInput.value = investigationDate.value;
             resetCreatePreview();
             createPanel.classList.remove("hidden");
@@ -920,12 +956,10 @@
 
         cancelCreateButton.addEventListener("click", () => {
             createPanel.classList.add("hidden");
-            createNameInput.value = "";
+            investigationNameController.reset();
             notebookUrlInput.value = "";
             resetCreatePreview();
         });
-
-        createNameInput.addEventListener("input", resetCreatePreview);
         notebookUrlInput.addEventListener("input", resetCreatePreview);
 
         previewButton.addEventListener("click", async () => {
@@ -935,6 +969,14 @@
                     source: "Investigation preview",
                     kind: "error",
                     message: "Select a valid shift before previewing."
+                });
+                return;
+            }
+            if (!incidentHandoff || !incidentHandoff.incidentId) {
+                renderStatePanel(sourceStates, {
+                    source: "Investigation preview",
+                    kind: "error",
+                    message: "Select Create Investigation from a current Datadog incident first."
                 });
                 return;
             }
@@ -949,15 +991,30 @@
             try {
                 pendingPreview = await previewInvestigation(
                     investigationDate.value,
-                    createNameInput.value,
-                    notebookUrlInput.value
+                    {
+                        incidentId: incidentHandoff.incidentId,
+                        displayTitle: incidentHandoff.title || createDisplayTitleInput.value,
+                        name: investigationNameController.previewName(),
+                        notebookUrl: notebookUrlInput.value
+                    }
                 );
+                investigationNameController.applyPreview(pendingPreview);
+                const evidence = pendingPreview.evidence || {};
+                const provider = pendingPreview.provider || {};
                 previewValues.textContent =
                     `Shift: ${pendingPreview.shiftDate}\n`
-                    + `Investigation: ${pendingPreview.displayTitle}\n`
+                    + `Incident: ${pendingPreview.incident?.id || incidentHandoff.incidentId}\n`
+                    + `Datadog Incident Title: ${pendingPreview.displayTitle}\n`
                     + `Local identifier: ${pendingPreview.normalizedName}\n`
-                    + `FINAL Notebook: ${pendingPreview.notebookUrl}\n`
-                    + `Target: ${pendingPreview.target}`;
+                    + `FINAL Notebook: ${pendingPreview.notebookUrl}`;
+                previewEvidence.textContent =
+                    `Evidence: ${String(evidence.status || "unknown").toUpperCase()}`
+                    + ` (${evidence.notebookCount || 0} notebooks, ${evidence.monitorCount || 0} monitors)`
+                    + ` | Provider: ${provider.label || provider.configuredProvider || "configured provider"}`
+                    + (provider.model ? ` (${provider.model})` : "")
+                    + (evidence.unavailable && evidence.unavailable.length
+                        ? ` | Unavailable: ${evidence.unavailable.map(item => item.id).join(", ")}`
+                        : "");
                 previewPanel.classList.remove("hidden");
                 confirmCreateButton.disabled = false;
                 renderStatePanel(sourceStates, {
@@ -987,10 +1044,13 @@
             const confirmation =
                 "Create this Datadog investigation now?\n\n"
                 + `Shift: ${pendingPreview.shiftDate}\n`
-                + `Investigation: ${pendingPreview.displayTitle}\n`
+                + `Incident: ${pendingPreview.incident?.id || incidentHandoff.incidentId}\n`
+                + `Datadog Incident Title: ${pendingPreview.displayTitle}\n`
                 + `Local identifier: ${pendingPreview.normalizedName}\n`
-                + `FINAL Notebook: ${pendingPreview.notebookUrl}\n\n`
-                + "This will run noc-inv using GitHub Copilot CLI and Datadog MCP.\n"
+                + `FINAL Notebook: ${pendingPreview.notebookUrl}\n`
+                + `Evidence: ${String(pendingPreview.evidence?.status || "unknown").toUpperCase()}\n`
+                + `Provider: ${pendingPreview.provider?.label || pendingPreview.provider?.configuredProvider || "configured provider"}\n\n`
+                + "This will use Feature 015 read-only Datadog evidence and the configured AI provider.\n"
                 + "Datadog remains read-only. A local investigation record may be created.";
             if (!window.confirm(confirmation)) {
                 return;
@@ -999,9 +1059,12 @@
             try {
                 const created = await createInvestigation(
                     pendingPreview.shiftDate,
-                    createNameInput.value,
-                    pendingPreview.notebookUrl,
-                    true
+                    {
+                        previewId: pendingPreview.previewId,
+                        name: createNameInput.value,
+                        notebookUrl: pendingPreview.notebookUrl,
+                        confirmed: true
+                    }
                 );
                 createPanel.classList.add("hidden");
                 renderStatePanel(sourceStates, {
@@ -1022,7 +1085,7 @@
                 } else {
                     showInvestigationDetails(created);
                 }
-                createNameInput.value = "";
+                investigationNameController.reset();
                 notebookUrlInput.value = "";
                 resetCreatePreview();
             } catch (error) {
@@ -1180,29 +1243,35 @@
         if (workflowContext.valid) {
             loadInvestigations();
         }
-        let incidentTitleHint = null;
-        try {
-            incidentTitleHint = window.sessionStorage.getItem(
-                "noc-web:incident-title-handoff"
-            );
-            window.sessionStorage.removeItem("noc-web:incident-title-handoff");
-        } catch {
-            incidentTitleHint = null;
+        const handoffState = readIncidentHandoff(window.sessionStorage);
+        incidentHandoff = handoffState.incidentHandoff;
+        const incidentTitleHint = handoffState.incidentTitleHint;
+        if (incidentHandoff) {
+            createIncidentInput.value = incidentHandoff.incidentId;
+            investigationNameController.resetForIncident({
+                incidentId: incidentHandoff.incidentId,
+                title: incidentHandoff.title || incidentTitleHint || ""
+            });
         }
         if (
             workflowContext.valid
             && typeof incidentTitleHint === "string"
             && incidentTitleHint.trim()
-            && incidentTitleHint.length <= 120
+            && incidentTitleHint.length <= 200
             && !/[\u0000-\u001f\u007f]/.test(incidentTitleHint)
         ) {
+            if (!incidentHandoff) {
+                investigationNameController.resetForIncident({
+                    incidentId: null,
+                    title: incidentTitleHint.trim()
+                });
+            }
             createShiftInput.value = investigationDate.value;
-            createNameInput.value = incidentTitleHint.trim();
             createPanel.classList.remove("hidden");
             renderStatePanel(sourceStates, {
                 source: "Datadog incident",
                 kind: "read-only",
-                message: "Review the incident title, provide a FINAL Notebook URL, then use Preview. No investigation was created."
+                message: "Review the Datadog Incident Title, provide a FINAL Notebook URL, then use Preview. The local identifier is generated from the incident title unless you provide one. No investigation was created."
             });
         }
 

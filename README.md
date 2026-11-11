@@ -168,7 +168,8 @@ not block core noc-web installation.
 
 Trusted acquisition verifies the pinned SHA-256 digest and GitHub SLSA
 provenance, including repository identity, tag identity, and approved
-signer-workflow identity. The required noc-tools compatibility result is:
+signer-workflow identity. The legacy noc-tools compatibility result, when that
+tool is installed for another workflow, is:
 
 ```text
 noc-inv-contract=1
@@ -196,12 +197,14 @@ Installation does not require a `~/code/noc-tools` checkout.
 | `SETUP_REQUIRED` | The software, operator sign-in, site access, or configuration needs action. |
 | `UNAVAILABLE` | A command, approved artifact, compatibility check, or bounded probe failed. |
 
-Readiness independently reports Atlas Jira, GitHub Copilot CLI, the Datadog API
-provider, Microsoft 365, and noc-tools. Datadog incident and evidence retrieval
-uses a direct read-only API with a process-environment bearer token; it does not
-require GitHub Copilot CLI or Datadog MCP. Authentication is operator-specific.
-Credentials, tokens, cookies, sessions, and another operator's authentication
-are never bundled or copied by the installer.
+Readiness independently reports Atlas Jira, the configured AI provider, the
+Datadog API provider, Microsoft 365, and legacy noc-tools. Datadog incident and
+evidence retrieval uses a direct read-only API with a process-environment bearer
+token. Datadog investigation generation uses Feature 015 read-only evidence and
+the configured AI provider; it does not require noc-inv, GitHub Copilot CLI, or
+Datadog MCP. Authentication is operator-specific. Credentials, tokens, cookies,
+sessions, and another operator's authentication are never bundled or copied by
+the installer.
 
 Assistant and AI Action inference additionally report the explicitly configured
 provider (`deepseek-api` or `github-copilot-cli`) and its static readiness. No
@@ -301,6 +304,7 @@ journalctl --user -u noc-web -n 100 --no-pager
 curl -sS http://127.0.0.1:8000/api/health
 systemd-analyze --user verify ~/.config/systemd/user/noc-web.service
 command -v atlas
+# Optional only if another workflow still uses these legacy tools:
 command -v copilot
 command -v noc-inv
 noc-inv --contract-version

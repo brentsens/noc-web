@@ -95,7 +95,7 @@ def test_non_noc_inv_or_copilot_source_cannot_be_reviewed(noc_root):
             SHIFT_DATE, "memory", "Should not publish", "blocked"
         )
     except ValueError as error:
-        assert "noc-inv or Copilot MCP" in str(error)
+        assert "supported evidence provenance" in str(error)
     else:
         raise AssertionError("Unsupported evidence provenance was accepted")
 
@@ -402,3 +402,124 @@ def test_legacy_migration_write_failure_preserves_previous_context(
 
     assert projected["error"]["code"] == "investigation-unavailable"
     assert context_file.read_text(encoding="utf-8") == original
+
+
+def test_ai_evidence_provenance_is_projected_and_reviewable(noc_root):
+    directory = noc_root / SHIFT_DATE / "investigations" / "ai-evidence"
+    directory.mkdir(parents=True)
+    (directory / "investigation.md").write_text(
+        "# Investigation: AI evidence\n"
+        "- Display Title: AI evidence\n"
+        "- Investigation Name: ai-evidence\n"
+        f"- Shift Date: {SHIFT_DATE}\n"
+        "- FINAL Datadog Notebook: https://app.datadoghq.com/notebook/123456/runbook\n"
+        "- Evidence Provenance: ai-evidence\n"
+        "- Evidence Status: COMPLETE\n"
+        "\n## Summary\nEvidence-backed summary.\n"
+        "\n## Confirmed Findings\nEvidence-backed finding.\n"
+        "\n## Current Status\nMonitoring.\n"
+        "\n## Next Actions\nReview.\n"
+        "\n## Handover Summary\nHandover.\n",
+        encoding="utf-8",
+    )
+    (directory / "evidence-provenance.json").write_text(
+        json.dumps({
+            "provenance": "ai-evidence",
+            "availability": "complete",
+            "incidentId": "aadf7955-1945-4ce6-b6ca-41e7fa734a78",
+            "references": {
+                "incident:aadf7955-1945-4ce6-b6ca-41e7fa734a78": {
+                    "kind": "incident",
+                    "sourceUrl": "https://app.datadoghq.com/incidents/aadf7955-1945-4ce6-b6ca-41e7fa734a78",
+                    "source": "incident_detail",
+                    "availability": "available",
+                }
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    result = investigations.get_investigation(SHIFT_DATE, "ai-evidence")
+    assert result["evidence"]["provenance"] == "ai-evidence"
+    assert result["evidence"]["status"] == "complete"
+    assert result["evidence"]["references"]
+
+    reviewed = investigations.review_investigation(
+        SHIFT_DATE, "ai-evidence", "Reviewed finding", "resolved"
+    )
+    assert reviewed["reviewedFinding"]["finding"] == "Reviewed finding"
+
+
+def test_ai_evidence_partial_availability_is_projected(noc_root):
+    directory = noc_root / SHIFT_DATE / "investigations" / "partial-evidence"
+    directory.mkdir(parents=True)
+    (directory / "investigation.md").write_text(
+        "# Investigation: Partial evidence\n"
+        "- Display Title: Partial evidence\n"
+        "- Investigation Name: partial-evidence\n"
+        f"- Shift Date: {SHIFT_DATE}\n"
+        "- FINAL Datadog Notebook: https://app.datadoghq.com/notebook/123456/runbook\n"
+        "- Evidence Provenance: ai-evidence\n"
+        "- Evidence Status: PARTIAL\n",
+        encoding="utf-8",
+    )
+    (directory / "evidence-provenance.json").write_text(json.dumps({
+        "provenance": "ai-evidence",
+        "availability": "partial",
+        "references": {},
+    }), encoding="utf-8")
+
+    result = investigations.get_investigation(SHIFT_DATE, "partial-evidence")
+
+    assert result["evidence"]["provenance"] == "ai-evidence"
+    assert result["evidence"]["availability"] == "partial"
+    assert result["evidence"]["status"] == "partial"
+
+
+def test_ai_evidence_investigation_can_be_rejected(noc_root):
+    directory = noc_root / SHIFT_DATE / "investigations" / "ai-reject"
+    directory.mkdir(parents=True)
+    (directory / "investigation.md").write_text(
+        "# Investigation: AI reject\n"
+        "- Display Title: AI reject\n"
+        "- Investigation Name: ai-reject\n"
+        f"- Shift Date: {SHIFT_DATE}\n"
+        "- FINAL Datadog Notebook: https://app.datadoghq.com/notebook/123456/runbook\n"
+        "- Evidence Provenance: ai-evidence\n"
+        "- Evidence Status: COMPLETE\n",
+        encoding="utf-8",
+    )
+    (directory / "evidence-provenance.json").write_text(json.dumps({
+        "provenance": "ai-evidence",
+        "availability": "complete",
+        "references": {},
+    }), encoding="utf-8")
+    (directory / "reviewed-context.json").write_text(json.dumps({
+        "reviewState": "unreviewed",
+        "lifecycleStatus": "ready_for_review",
+        "finding": "",
+        "state": "",
+    }), encoding="utf-8")
+
+    result = investigations.reject_investigation(SHIFT_DATE, "ai-reject")
+
+    assert result["lifecycle"]["reviewState"] == "rejected"
+
+
+def test_ai_evidence_without_provenance_file_is_unavailable(noc_root):
+    directory = noc_root / SHIFT_DATE / "investigations" / "missing-provenance"
+    directory.mkdir(parents=True)
+    (directory / "investigation.md").write_text(
+        "# Investigation: Missing provenance\n"
+        "- Display Title: Missing provenance\n"
+        "- Investigation Name: missing-provenance\n"
+        f"- Shift Date: {SHIFT_DATE}\n"
+        "- FINAL Datadog Notebook: https://app.datadoghq.com/notebook/123456/runbook\n"
+        "- Evidence Provenance: ai-evidence\n",
+        encoding="utf-8",
+    )
+
+    result = investigations.get_investigation(SHIFT_DATE, "missing-provenance")
+
+    assert result["evidence"]["provenance"] == "ai-evidence"
+    assert result["evidence"]["availability"] == "unavailable"

@@ -14,7 +14,6 @@ TOOLS = (
     "tix",
     "noc-start",
     "noc-status",
-    "noc-inv",
     "noc-handover",
 )
 
@@ -22,7 +21,6 @@ SCRIPTS = (
     "tix",
     "noc-start",
     "noc-status",
-    "noc-inv",
     "noc-handover",
 )
 

@@ -136,7 +136,11 @@ def _log_invalid_response(
     )
 
 
-def answer_with_copilot_cli(envelope: dict[str, Any]) -> dict[str, Any]:
+def answer_with_copilot_cli(
+    envelope: dict[str, Any],
+    *,
+    prompt: str | None = None,
+) -> dict[str, Any]:
     """Run one tool-less Copilot prompt using a disposable selected-shift context file."""
     executable = shutil.which("copilot")
     if executable is None:
@@ -167,7 +171,7 @@ def answer_with_copilot_cli(envelope: dict[str, Any]) -> dict[str, Any]:
                         "--available-tools",
                         "--silent",
                         "-p",
-                        COPILOT_PROMPT,
+                        prompt or COPILOT_PROMPT,
                     ],
                     cwd=working_directory,
                     env=environment,

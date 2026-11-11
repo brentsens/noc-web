@@ -164,3 +164,21 @@ def test_sentinel_token_is_absent_from_created_files(
     for path in Path(tmp_path).rglob("*"):
         if path.is_file():
             assert TOKEN not in path.read_text(encoding="utf-8", errors="ignore")
+
+
+def test_investigation_generation_modules_do_not_embed_credential_settings():
+    root = Path(__file__).resolve().parents[1]
+    for relative in (
+        "backend/services/investigation_generation.py",
+        "backend/services/investigation_evidence.py",
+        "backend/services/investigation_ai.py",
+        "backend/services/investigation_preview_store.py",
+    ):
+        source = (root / relative).read_text(encoding="utf-8")
+        for sentinel in (
+            "DEEPSEEK_API_KEY",
+            "NOC_WEB_DEEPSEEK_API_KEY",
+            "DD_ACCESS_TOKEN",
+            "NOC_WEB_DATADOG_ACCESS_TOKEN",
+        ):
+            assert sentinel not in source

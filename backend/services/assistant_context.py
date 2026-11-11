@@ -15,7 +15,7 @@ from backend.services.status import get_status
 from backend.services.tickets import get_operational_work_summary
 
 
-VALID_AVAILABILITY = {"available", "unavailable", "stale", "malformed", "conflicting"}
+VALID_AVAILABILITY = {"available", "partial", "unavailable", "stale", "malformed", "conflicting"}
 JIRA_FRESHNESS = {"current", "stale", "unavailable", "malformed"}
 MAX_CONTEXT_TEXT = 4000
 
@@ -205,7 +205,7 @@ def _project_investigations(shift_date: str) -> list[dict[str, Any]]:
             review_state = "unreviewed"
         source_availability = _availability(source.get("availability"))
         provenance = source.get("provenance")
-        if provenance not in {"noc-inv", "copilot-mcp"}:
+        if provenance not in {"noc-inv", "copilot-mcp", "ai-evidence"}:
             source_availability = "unavailable"
             provenance = "noc-inv"
         if investigation.get("error", {}).get("code") == "reviewed-context-unavailable":

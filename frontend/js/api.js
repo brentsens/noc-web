@@ -1,139 +1,139 @@
 export async function apiRequest(
-    path,
-    options = {}
-  ) {
+  path,
+  options = {}
+) {
 
-    const response =
-      await fetch(
-        path,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            ...(options.headers || {})
-          },
-          ...options
-        }
-      );
-
-
-    if (!response.ok) {
-
-      let message =
-        `Request failed: ${response.status}`;
-      let field;
-      let code;
+  const response =
+    await fetch(
+      path,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {})
+        },
+        ...options
+      }
+    );
 
 
-      try {
+  if (!response.ok) {
 
-        const error =
-          await response.json();
+    let message =
+      `Request failed: ${response.status}`;
+    let field;
+    let code;
 
 
-        if (typeof error.detail === "string") {
-          message = error.detail;
-        } else if (error.detail && typeof error.detail.message === "string") {
-          message = error.detail.message;
-          field = error.detail.field;
-          code = error.detail.code;
-        }
+    try {
 
-      } catch {
-        // Keep default error message.
+      const error =
+        await response.json();
+
+
+      if (typeof error.detail === "string") {
+        message = error.detail;
+      } else if (error.detail && typeof error.detail.message === "string") {
+        message = error.detail.message;
+        field = error.detail.field;
+        code = error.detail.code;
       }
 
-
-      const requestError = new Error(message);
-      requestError.field = field;
-      requestError.code = code;
-      throw requestError;
-
+    } catch {
+      // Keep default error message.
     }
 
 
-    return response.json();
-  }
-
-
-  export function getDashboard(
-    shiftDate
-  ) {
-
-    return apiRequest(
-      `/api/dashboard/${shiftDate}`
-    );
+    const requestError = new Error(message);
+    requestError.field = field;
+    requestError.code = code;
+    throw requestError;
 
   }
 
-  export function getDatadogIncidents() {
 
-    return apiRequest(
-      "/api/datadog/incidents"
-    );
+  return response.json();
+}
 
-  }
 
-  export function refreshDatadogIncidents() {
-
-    return apiRequest(
-      "/api/datadog/incidents/refresh",
-      {
-        method: "POST"
-      }
-    );
-
-  }
-
-  export function getTickets() {
-
-    return apiRequest(
-      "/api/tickets"
-    );
-
-  }
-
-  export function createLocalTracking(ticket, confirmed = false) {
-    return apiRequest("/api/tickets/tracking", {
-      method: "POST",
-      body: JSON.stringify({ ...ticket, confirmed })
-    });
-  }
-
-  export function updateLocalTracking(ticketId, context, confirmed = false) {
-    return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking`, {
-      method: "PATCH",
-      body: JSON.stringify({ ...context, confirmed })
-    });
-  }
-
-  export function syncLocalTracking(ticketId, confirmed = false) {
-    return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking/sync`, {
-      method: "POST",
-      body: JSON.stringify({ confirmed })
-    });
-  }
-
-  export function closeLocalTracking(ticketId, confirmed = false) {
-    return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking/close`, {
-      method: "POST",
-      body: JSON.stringify({ confirmed })
-    });
-  }
-
-  export function reactivateLocalTracking(ticketId, confirmed = false) {
-    return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking/reactivate`, {
-      method: "POST",
-      body: JSON.stringify({ confirmed })
-    });
-  }
-
-  export function getShiftNotes(
-    shiftDate
+export function getDashboard(
+  shiftDate
 ) {
 
-    return apiRequest(
-        `/api/shifts/${shiftDate}/notes`
-    );
+  return apiRequest(
+    `/api/dashboard/${shiftDate}`
+  );
+
+}
+
+export function getDatadogIncidents() {
+
+  return apiRequest(
+    "/api/datadog/incidents"
+  );
+
+}
+
+export function refreshDatadogIncidents() {
+
+  return apiRequest(
+    "/api/datadog/incidents/refresh",
+    {
+      method: "POST"
+    }
+  );
+
+}
+
+export function getTickets() {
+
+  return apiRequest(
+    "/api/tickets"
+  );
+
+}
+
+export function createLocalTracking(ticket, confirmed = false) {
+  return apiRequest("/api/tickets/tracking", {
+    method: "POST",
+    body: JSON.stringify({ ...ticket, confirmed })
+  });
+}
+
+export function updateLocalTracking(ticketId, context, confirmed = false) {
+  return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking`, {
+    method: "PATCH",
+    body: JSON.stringify({ ...context, confirmed })
+  });
+}
+
+export function syncLocalTracking(ticketId, confirmed = false) {
+  return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking/sync`, {
+    method: "POST",
+    body: JSON.stringify({ confirmed })
+  });
+}
+
+export function closeLocalTracking(ticketId, confirmed = false) {
+  return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking/close`, {
+    method: "POST",
+    body: JSON.stringify({ confirmed })
+  });
+}
+
+export function reactivateLocalTracking(ticketId, confirmed = false) {
+  return apiRequest(`/api/tickets/${encodeURIComponent(ticketId)}/tracking/reactivate`, {
+    method: "POST",
+    body: JSON.stringify({ confirmed })
+  });
+}
+
+export function getShiftNotes(
+  shiftDate
+) {
+
+  return apiRequest(
+    `/api/shifts/${shiftDate}/notes`
+  );
 
 }
 
@@ -162,7 +162,7 @@ export function getInvestigations(
 ) {
 
   return apiRequest(
-      `/api/shifts/${shiftDate}/investigations?view=${encodeURIComponent(view)}`
+    `/api/shifts/${shiftDate}/investigations?view=${encodeURIComponent(view)}`
   );
 
 }
@@ -175,31 +175,48 @@ export function getInvestigation(
 ) {
 
   return apiRequest(
-      `/api/shifts/${creationShiftDate}/investigations/${
-          encodeURIComponent(
-              investigationName
-          )
-      }?selectedShiftDate=${encodeURIComponent(selectedShiftDate)}`
+    `/api/shifts/${creationShiftDate}/investigations/${encodeURIComponent(
+      investigationName
+    )
+    }?selectedShiftDate=${encodeURIComponent(selectedShiftDate)}`
   );
 
 }
 
-export function previewInvestigation(shiftDate, name, notebookUrl) {
+export function previewInvestigation(shiftDate, {
+  incidentId,
+  displayTitle,
+  name,
+  notebookUrl
+} = {}) {
+  const payload = { incidentId, displayTitle, notebookUrl };
+  if (
+    typeof name === "string"
+    && name.trim()
+    && name !== displayTitle
+  ) {
+    payload.name = name;
+  }
   return apiRequest(`/api/shifts/${shiftDate}/investigations/preview`, {
     method: "POST",
-    body: JSON.stringify({ name, notebookUrl })
+    body: JSON.stringify(payload)
   });
 }
 
-export function createInvestigation(
-  shiftDate,
+export function createInvestigation(shiftDate, {
+  previewId,
   name,
   notebookUrl,
   confirmed = false
-) {
+} = {}) {
   return apiRequest(`/api/shifts/${shiftDate}/investigations`, {
     method: "POST",
-    body: JSON.stringify({ name, notebookUrl, confirmed })
+    body: JSON.stringify({
+      previewId,
+      name,
+      notebookUrl,
+      confirmed: confirmed === true
+    })
   });
 }
 
@@ -260,7 +277,7 @@ export function getAiReports(
 ) {
 
   return apiRequest(
-      `/api/shifts/${shiftDate}/ai-reports`
+    `/api/shifts/${shiftDate}/ai-reports`
   );
 
 }
@@ -272,9 +289,8 @@ export function getAiReport(
 ) {
 
   return apiRequest(
-      `/api/shifts/${shiftDate}/ai-reports/${
-          encodeURIComponent(reportName)
-      }`
+    `/api/shifts/${shiftDate}/ai-reports/${encodeURIComponent(reportName)
+    }`
   );
 
 }
@@ -284,7 +300,7 @@ export function getHandover(
 ) {
 
   return apiRequest(
-      `/api/shifts/${shiftDate}/handover`
+    `/api/shifts/${shiftDate}/handover`
   );
 
 }
@@ -391,11 +407,11 @@ function isAssistantItem(item, evidence, {
     ...(route ? ["route"] : [])
   ]);
   if (!item || typeof item !== "object"
-      || Object.keys(item).some(key => !allowedKeys.has(key))
-      || typeof item.text !== "string"
-      || !Array.isArray(item.evidenceIds)
-      || (item.evidenceIds.length === 0 && !(route && allowUnlinked && item.route))
-      || item.evidenceIds.some(id => !evidence.has(id))) {
+    || Object.keys(item).some(key => !allowedKeys.has(key))
+    || typeof item.text !== "string"
+    || !Array.isArray(item.evidenceIds)
+    || (item.evidenceIds.length === 0 && !(route && allowUnlinked && item.route))
+    || item.evidenceIds.some(id => !evidence.has(id))) {
     return false;
   }
   if (reviewed && typeof item.state !== "string") {
@@ -403,8 +419,8 @@ function isAssistantItem(item, evidence, {
   }
   if (route && item.route !== undefined) {
     if (!item.route || typeof item.route !== "object"
-        || typeof item.route.href !== "string"
-        || typeof item.route.requiresConfirmation !== "boolean") {
+      || typeof item.route.href !== "string"
+      || typeof item.route.requiresConfirmation !== "boolean") {
       return false;
     }
     let href;
@@ -416,22 +432,22 @@ function isAssistantItem(item, evidence, {
     const file = href.pathname.slice(1);
     const expectedRoute = ASSISTANT_ROUTES.get(file);
     if (href.origin !== "https://noc-web.invalid"
-        || !expectedRoute
-        || [...href.searchParams.entries()].length !== 1
-        || href.searchParams.get("shift") !== shiftDate) {
+      || !expectedRoute
+      || [...href.searchParams.entries()].length !== 1
+      || href.searchParams.get("shift") !== shiftDate) {
       return false;
     }
     if (item.route.label !== expectedRoute.label
-        || item.route.requiresConfirmation !== expectedRoute.requiresConfirmation) {
+      || item.route.requiresConfirmation !== expectedRoute.requiresConfirmation) {
       return false;
     }
     if (file === "investigations.html"
-        && !item.evidenceIds.some(id => {
-          const source = evidence.get(id);
-          return source?.kind === "investigation"
-            && ["noc-inv", "copilot-mcp"].includes(source.provenance)
-            && source.availability === "available";
-        })) {
+      && !item.evidenceIds.some(id => {
+        const source = evidence.get(id);
+        return source?.kind === "investigation"
+          && ["noc-inv", "copilot-mcp", "ai-evidence"].includes(source.provenance)
+          && source.availability === "available";
+      })) {
       return false;
     }
   }
@@ -440,34 +456,34 @@ function isAssistantItem(item, evidence, {
 
 function validateAssistantResponse(response, shiftDate) {
   if (!response || typeof response !== "object"
-      || response.shiftDate !== shiftDate
-      || !ASSISTANT_STATUSES.has(response.status)
-      || !ASSISTANT_PROVIDERS.has(response.provider)
-      || typeof response.providerInvoked !== "boolean"
-      || !ASSISTANT_PROVIDER_STATUSES.has(response.providerStatus)
-      || (response.providerStatus === "success"
-        && (!response.providerInvoked || response.status !== "complete"))
-      || (response.providerStatus === "unavailable"
-        && response.status !== "unavailable")
-      || (["timeout", "invalid"].includes(response.providerStatus)
-        && (!response.providerInvoked || response.status !== "unavailable"))
-      || (response.providerStatus === "not-invoked"
-        && (response.providerInvoked || response.status !== "limited"))
-      || !Array.isArray(response.evidence)
-      || !Array.isArray(response.limitations)
-      || response.limitations.some(item => typeof item !== "string")) {
+    || response.shiftDate !== shiftDate
+    || !ASSISTANT_STATUSES.has(response.status)
+    || !ASSISTANT_PROVIDERS.has(response.provider)
+    || typeof response.providerInvoked !== "boolean"
+    || !ASSISTANT_PROVIDER_STATUSES.has(response.providerStatus)
+    || (response.providerStatus === "success"
+      && (!response.providerInvoked || response.status !== "complete"))
+    || (response.providerStatus === "unavailable"
+      && response.status !== "unavailable")
+    || (["timeout", "invalid"].includes(response.providerStatus)
+      && (!response.providerInvoked || response.status !== "unavailable"))
+    || (response.providerStatus === "not-invoked"
+      && (response.providerInvoked || response.status !== "limited"))
+    || !Array.isArray(response.evidence)
+    || !Array.isArray(response.limitations)
+    || response.limitations.some(item => typeof item !== "string")) {
     return false;
   }
   const evidence = new Map();
   for (const item of response.evidence) {
     if (!item || typeof item.id !== "string"
-        || typeof item.kind !== "string"
-        || typeof item.provenance !== "string"
-        || !ASSISTANT_AVAILABILITY.has(item.availability)
-        || !(item.reference === null || typeof item.reference === "string")
-        || (item.freshness !== undefined
-          && !["current", "stale", "unavailable", "malformed"].includes(item.freshness))
-        || evidence.has(item.id)) {
+      || typeof item.kind !== "string"
+      || typeof item.provenance !== "string"
+      || !ASSISTANT_AVAILABILITY.has(item.availability)
+      || !(item.reference === null || typeof item.reference === "string")
+      || (item.freshness !== undefined
+        && !["current", "stale", "unavailable", "malformed"].includes(item.freshness))
+      || evidence.has(item.id)) {
       return false;
     }
     evidence.set(item.id, item);
@@ -530,31 +546,31 @@ export async function runAssistantAction(
     `^ai-${action.reportSlug}-\\d{8}T\\d{12}Z-[0-9a-f]{8}\\.md$`
   );
   if (!result || typeof result !== "object"
-      || Object.keys(result).length !== 3
-      || !Object.hasOwn(result, "assistant")
-      || !Object.hasOwn(result, "report")
-      || !Object.hasOwn(result, "reportSaveWarning")
-      || !validateAssistantResponse(result.assistant, shiftDate)
-      || !(result.report === null
-        || (result.report
-          && Object.keys(result.report).length === 4
-          && Object.hasOwn(result.report, "name")
-          && Object.hasOwn(result.report, "title")
-          && Object.hasOwn(result.report, "file")
-          && Object.hasOwn(result.report, "available")
-          && result.report.available === true
-          && typeof result.report.name === "string"
-          && result.report.name === result.report.file
-          && result.report.title === action.title
-          && reportPattern.test(result.report.file)))
-      || !(result.reportSaveWarning === null
-        || result.reportSaveWarning === REPORT_SAVE_WARNING)
-      || (result.assistant.providerStatus === "success"
-        && result.report === null
-        && !result.reportSaveWarning)
-      || (result.report !== null && result.reportSaveWarning !== null)
-      || (result.assistant.providerStatus !== "success"
-        && (result.report !== null || result.reportSaveWarning !== null))) {
+    || Object.keys(result).length !== 3
+    || !Object.hasOwn(result, "assistant")
+    || !Object.hasOwn(result, "report")
+    || !Object.hasOwn(result, "reportSaveWarning")
+    || !validateAssistantResponse(result.assistant, shiftDate)
+    || !(result.report === null
+      || (result.report
+        && Object.keys(result.report).length === 4
+        && Object.hasOwn(result.report, "name")
+        && Object.hasOwn(result.report, "title")
+        && Object.hasOwn(result.report, "file")
+        && Object.hasOwn(result.report, "available")
+        && result.report.available === true
+        && typeof result.report.name === "string"
+        && result.report.name === result.report.file
+        && result.report.title === action.title
+        && reportPattern.test(result.report.file)))
+    || !(result.reportSaveWarning === null
+      || result.reportSaveWarning === REPORT_SAVE_WARNING)
+    || (result.assistant.providerStatus === "success"
+      && result.report === null
+      && !result.reportSaveWarning)
+    || (result.report !== null && result.reportSaveWarning !== null)
+    || (result.assistant.providerStatus !== "success"
+      && (result.report !== null || result.reportSaveWarning !== null))) {
     throw new Error("Assistant returned an invalid action response.");
   }
   return result;
@@ -600,8 +616,8 @@ export function getEndShiftPreflight(
 }
 
 export function generateHandover(
-shiftDate,
-confirmed = false
+  shiftDate,
+  confirmed = false
 ) {
 
   return apiRequest(
@@ -633,8 +649,8 @@ export function previewHandoverDelivery(
 
 export function sendHandoverDelivery(
   shiftDate,
-recipient = null,
-confirmed = false
+  recipient = null,
+  confirmed = false
 ) {
 
   return apiRequest(
@@ -670,8 +686,8 @@ export function getTicketSyncState() {
 }
 
 export function regenerateHandover(
-shiftDate,
-confirmed = false
+  shiftDate,
+  confirmed = false
 ) {
 
   return apiRequest(
@@ -701,8 +717,8 @@ export function previewJiraTicket(
 }
 
 export function createJiraTicket(
-ticket,
-confirmed = false
+  ticket,
+  confirmed = false
 ) {
 
   return apiRequest(
