@@ -219,3 +219,32 @@ def test_status_reports_static_datadog_provider_without_secrets(
     assert result["datadogProvider"]["readiness"] == "ready"
     assert result["datadogProvider"]["credentialPresent"] is True
     assert sentinel not in str(result)
+
+
+def test_status_reports_distinct_primary_and_local_provider_state(
+    noc_root,
+    monkeypatch,
+):
+    sentinel = "test-sentinel-deepseek-key"
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "deepseek-api")
+    monkeypatch.setenv("NOC_WEB_DEEPSEEK_API_KEY", sentinel)
+    monkeypatch.setenv("NOC_WEB_OLLAMA_BASE_URL", "http://ollama.lan:11434")
+    monkeypatch.setenv("NOC_WEB_OLLAMA_MODEL", "qwen3:8b")
+    mock_status_dependencies(
+        monkeypatch,
+        {
+            "available": True,
+            "refreshedAt": None,
+            "freshness": "current",
+        },
+    )
+
+    result = status.get_status(SHIFT_DATE)
+
+    assert result["aiProvider"]["primaryProvider"]["configuredProvider"] == "deepseek-api"
+    assert result["aiProvider"]["primaryProvider"]["readiness"] == "ready"
+    assert result["aiProvider"]["localProvider"]["configuredProvider"] == "ollama"
+    assert result["aiProvider"]["localProvider"]["readiness"] == "ready"
+    assert result["aiProvider"]["localProvider"]["endpointConfigured"] is True
+    assert result["aiProvider"]["localProvider"]["model"] == "qwen3:8b"
+    assert sentinel not in str(result)

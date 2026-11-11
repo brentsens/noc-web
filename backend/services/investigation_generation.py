@@ -38,6 +38,13 @@ from backend.services.investigation_preview_store import (
     PreviewStoreError,
     get_preview_store,
 )
+from backend.services.ollama_provider import OllamaModelMissing
+from backend.services.local_retry import (
+    RetrySnapshotError,
+    capture_local_retry,
+    get_retry_store,
+    resolve_retry_runtime,
+)
 
 
 GenerationStatus = Literal["completed", "failed", "timed_out", "unavailable"]
@@ -71,12 +78,14 @@ class GenerationError(Exception):
         message: str,
         *,
         field: str | None = None,
+        retry_metadata: dict | None = None,
     ):
         super().__init__(message)
         self.status_code = status_code
         self.code = code
         self.message = message
         self.field = field
+        self.retry_metadata = retry_metadata
 
 
 class InvestigationValidationError(ValueError):
@@ -420,6 +429,102 @@ def _require_provider(runtime) -> None:
 
 def _resolve_provider():
     return resolve_provider_runtime(system_prompt=INVESTIGATION_SYSTEM_PROMPT)
+
+
+def _retry_payload(request, package, envelope):
+    return {
+        "request": {
+            "shift_date": request.shift_date,
+            "display_title": request.display_title,
+            "name": request.name,
+            "notebook_url": request.notebook_url,
+            "incident_id": request.incident_id,
+        },
+        "package": package,
+        "envelope": envelope,
+    }
+
+
+def _capture_retry(request, package, envelope):
+    return capture_local_retry(
+        workflow="investigation",
+        shift_date=request.shift_date,
+        identity=request.name,
+        payload=_retry_payload(request, package, envelope),
+    )
+
+
+def _provider_error(error, request, package, envelope):
+    retry = _capture_retry(request, package, envelope)
+    if isinstance(error, ProviderTimeout):
+        return GenerationError(
+            504,
+            "provider-timeout",
+            "The AI provider timed out.",
+            retry_metadata=retry,
+        )
+    if isinstance(error, ProviderInvalid):
+        return GenerationError(
+            502,
+            "provider-invalid-response",
+            "The AI provider returned an invalid response.",
+            retry_metadata=retry,
+        )
+    if isinstance(error, OllamaModelMissing):
+        return GenerationError(
+            503,
+            "ollama-model-missing",
+            "The configured local model is unavailable.",
+            retry_metadata=retry,
+        )
+    if isinstance(error, ProviderUnavailable):
+        return GenerationError(
+            503,
+            "provider-unavailable",
+            "The AI provider is unavailable.",
+            retry_metadata=retry,
+        )
+    return GenerationError(
+        502,
+        "provider-invalid-response",
+        "The AI provider returned an invalid response.",
+        retry_metadata=retry,
+    )
+
+
+def _run_provider(runtime, envelope, *, request=None, package=None):
+    try:
+        return runtime.provider(envelope)
+    except (ProviderTimeout, ProviderInvalid, ProviderUnavailable) as error:
+        if request is not None and package is not None:
+            raise _provider_error(error, request, package, envelope) from None
+        if isinstance(error, OllamaModelMissing):
+            raise GenerationError(
+                503,
+                "ollama-model-missing",
+                "The configured local model is unavailable.",
+            ) from None
+        if isinstance(error, ProviderTimeout):
+            raise GenerationError(504, "provider-timeout", "The AI provider timed out.") from None
+        if isinstance(error, ProviderInvalid):
+            raise GenerationError(
+                502, "provider-invalid-response", "The AI provider returned an invalid response."
+            ) from None
+        raise GenerationError(
+            503, "provider-unavailable", "The AI provider is unavailable."
+        ) from None
+    except (OSError, TimeoutError):
+        if request is not None and package is not None:
+            raise _provider_error(ProviderUnavailable("down"), request, package, envelope) from None
+        raise GenerationError(
+            503, "provider-unavailable", "The AI provider is unavailable."
+        ) from None
+    except Exception:
+        if request is not None and package is not None:
+            raise _provider_error(ProviderInvalid("bad"), request, package, envelope) from None
+        raise GenerationError(
+            502, "provider-invalid-response", "The AI provider returned an invalid response."
+        ) from None
 
 
 def _evidence_error(error: InvestigationEvidenceError) -> GenerationError:
@@ -820,26 +925,103 @@ def create_investigation(
         "shiftDate": request.shift_date,
         "notebookUrl": request.notebook_url,
     })
+    raw_output = _run_provider(
+        runtime,
+        envelope,
+        request=request,
+        package=package,
+    )
     try:
-        raw_output = runtime.provider(envelope)
-    except ProviderTimeout:
-        raise GenerationError(504, "provider-timeout", "The AI provider timed out.") from None
-    except ProviderInvalid:
+        output = validate_ai_output(raw_output, package)
+    except InvestigationAIError as error:
         raise GenerationError(
-            502, "provider-invalid-response", "The AI provider returned an invalid response."
+            422,
+            error.code,
+            error.message,
+            retry_metadata=_capture_retry(request, package, envelope),
         ) from None
-    except ProviderUnavailable:
+    content = _render_markdown(request, package, output)
+    _, validation_errors = _validate_generated_record(content, request)
+    if validation_errors:
         raise GenerationError(
-            503, "provider-unavailable", "The AI provider is unavailable."
-        ) from None
-    except (OSError, TimeoutError):
+            500,
+            "generated-output-invalid",
+            "The generated investigation record did not pass validation.",
+            retry_metadata=_capture_retry(request, package, envelope),
+        )
+    _publish(request, package, content, runtime)
+    record = investigations.get_investigation(request.shift_date, request.name)
+    if record is None:
         raise GenerationError(
-            503, "provider-unavailable", "The AI provider is unavailable."
-        ) from None
-    except Exception:
+            500,
+            "record-unavailable",
+            "The created investigation record is unavailable.",
+        )
+    return InvestigationGenerationResult(
+        generation_status="completed",
+        validation_status="ready_for_review",
+        review_state="unreviewed",
+        record=record,
+        error_code=None,
+    )
+
+
+def retry_investigation_generation(
+    shift_date: str,
+    retry_token: str,
+    *,
+    store=None,
+) -> InvestigationGenerationResult:
+    try:
+        snapshot = (store or get_retry_store()).consume(
+            retry_token,
+            workflow="investigation",
+            shift_date=shift_date,
+        )
+    except RetrySnapshotError as error:
         raise GenerationError(
-            502, "provider-invalid-response", "The AI provider returned an invalid response."
+            error.status_code,
+            error.code,
+            error.message,
         ) from None
+    payload = snapshot.get("payload")
+    request_data = payload.get("request") if isinstance(payload, dict) else None
+    package = payload.get("package") if isinstance(payload, dict) else None
+    envelope = payload.get("envelope") if isinstance(payload, dict) else None
+    if (
+        not isinstance(request_data, dict)
+        or not isinstance(package, dict)
+        or not isinstance(envelope, dict)
+    ):
+        raise GenerationError(
+            409,
+            "retry-snapshot-unavailable",
+            "The exact failed-request snapshot is unavailable.",
+        )
+    try:
+        request = InvestigationRequest(**request_data)
+    except TypeError:
+        raise GenerationError(
+            409,
+            "retry-snapshot-unavailable",
+            "The exact failed-request snapshot is unavailable.",
+        ) from None
+    if request.shift_date != shift_date:
+        raise GenerationError(
+            409,
+            "retry-snapshot-unavailable",
+            "The exact failed-request snapshot is unavailable.",
+        )
+    try:
+        runtime = resolve_retry_runtime()
+    except RetrySnapshotError as error:
+        raise GenerationError(
+            error.status_code,
+            error.code,
+            error.message,
+        ) from None
+    _require_provider(runtime)
+    raw_output = _run_provider(runtime, envelope)
     try:
         output = validate_ai_output(raw_output, package)
     except InvestigationAIError as error:

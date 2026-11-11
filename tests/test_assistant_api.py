@@ -563,3 +563,79 @@ def test_api_responses_never_include_the_configured_credential(
     assert failure_response.status_code == 200
     assert failure_response.json()["providerStatus"] == "unavailable"
     assert sentinel not in failure_response.text
+
+
+def test_ai_action_local_retry_is_confirmed_and_single_use(noc_root, monkeypatch):
+    from backend.services import ai_provider
+    from backend.services.copilot_mcp import CopilotProviderTimeout
+
+    evidence = {
+        "id": "jira-cache",
+        "kind": "jira-cache",
+        "provenance": "noc-web",
+        "availability": "available",
+        "freshness": "current",
+        "summary": {"tickets": []},
+    }
+
+    def primary(_envelope):
+        raise CopilotProviderTimeout("primary timed out")
+
+    monkeypatch.setattr(app.state, "assistant_provider", primary)
+    monkeypatch.setattr(app.state, "assistant_provider_identifier", "deepseek-api")
+    monkeypatch.setattr(assistant, "collect_context", lambda _shift: [evidence])
+    monkeypatch.setenv("NOC_WEB_OLLAMA_BASE_URL", "http://ollama.lan:11434")
+    monkeypatch.setenv("NOC_WEB_OLLAMA_MODEL", "qwen3:8b")
+    local_calls = []
+
+    def builder(configuration, *, system_prompt=None):
+        def provider(envelope):
+            local_calls.append(envelope)
+            return {
+                "aiObservations": [{
+                    "text": "The selected shift has one bounded local observation.",
+                    "evidenceIds": ["jira-cache"],
+                }],
+                "recommendations": [],
+            }
+
+        return provider
+
+    monkeypatch.setattr(ai_provider, "build_ollama_provider", builder)
+    (noc_root / SHIFT / "reports").mkdir(parents=True, exist_ok=True)
+    client = TestClient(app)
+
+    failed = client.post(
+        f"/api/shifts/{SHIFT}/assistant/actions/summary",
+        json={"providerDisclosureAcknowledged": True},
+    )
+
+    assert failed.status_code == 200
+    local_retry = failed.json()["assistant"]["localRetry"]
+    assert local_retry["available"] is True
+    assert local_calls == []
+
+    token = local_retry["retryToken"]
+    unconfirmed = client.post(
+        f"/api/shifts/{SHIFT}/assistant/actions/summary/local-retry",
+        json={"retryToken": token, "confirmed": False},
+    )
+    assert unconfirmed.status_code == 422
+    assert local_calls == []
+
+    confirmed = client.post(
+        f"/api/shifts/{SHIFT}/assistant/actions/summary/local-retry",
+        json={"retryToken": token, "confirmed": True},
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json()["assistant"]["provider"] == "ollama"
+    assert confirmed.json()["assistant"]["providerStatus"] == "success"
+    assert confirmed.json()["report"] is not None
+    assert len(local_calls) == 1
+
+    reused = client.post(
+        f"/api/shifts/{SHIFT}/assistant/actions/summary/local-retry",
+        json={"retryToken": token, "confirmed": True},
+    )
+    assert reused.status_code == 409
+    assert reused.json()["detail"]["code"] == "retry-snapshot-used"

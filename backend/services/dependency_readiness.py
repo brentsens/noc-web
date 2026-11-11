@@ -212,6 +212,8 @@ def assess_external_capabilities(
         "configuredProvider": provider["configuredProvider"],
         "model": provider["model"],
         "providerReadiness": provider["readiness"],
+        "primaryProvider": provider.get("primaryProvider"),
+        "localProvider": provider.get("localProvider"),
     })
     results.append(ai_provider)
 

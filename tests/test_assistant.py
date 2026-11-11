@@ -633,9 +633,17 @@ def test_provider_validation_diagnostics_are_rule_specific_and_redacted(
         if record.name == assistant.__name__
     ]
     assert response["providerStatus"] == "invalid"
-    assert diagnostics == [
-        f"Assistant provider result rejected: rule={expected_rule} category={category}"
-    ]
+    if case == "unexpected_top_level_keys":
+        expected_diagnostic = (
+            "Assistant provider result rejected: rule=unexpected_top_level_keys "
+            "keys=['aiObservations', 'privateExtra', 'recommendations']"
+        )
+    else:
+        expected_diagnostic = (
+            f"Assistant provider result rejected: rule={expected_rule} "
+            f"category={category}"
+        )
+    assert diagnostics == [expected_diagnostic]
     assert "PRIVATE_PROVIDER_TEXT" not in diagnostics[0]
     assert "PRIVATE_TICKET_ID" not in diagnostics[0]
 

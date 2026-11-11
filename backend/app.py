@@ -72,6 +72,9 @@ from backend.api.datadog_incidents import (
 from backend.api.assistant import (
     router as assistant_router,
 )
+from backend.api.providers import (
+    router as providers_router,
+)
 from backend.services.ai_provider import (
     provider_readiness,
     resolve_provider_runtime,
@@ -217,6 +220,8 @@ app.include_router(
 app.include_router(
     assistant_router
 )
+
+app.include_router(providers_router)
 
 
 app.mount(

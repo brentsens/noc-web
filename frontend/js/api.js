@@ -22,6 +22,7 @@ export async function apiRequest(
       `Request failed: ${response.status}`;
     let field;
     let code;
+    let detail = null;
 
 
     try {
@@ -36,6 +37,7 @@ export async function apiRequest(
         message = error.detail.message;
         field = error.detail.field;
         code = error.detail.code;
+        detail = error.detail;
       }
 
     } catch {
@@ -46,6 +48,7 @@ export async function apiRequest(
     const requestError = new Error(message);
     requestError.field = field;
     requestError.code = code;
+    requestError.detail = detail;
     throw requestError;
 
   }
@@ -187,9 +190,13 @@ export function previewInvestigation(shiftDate, {
   incidentId,
   displayTitle,
   name,
-  notebookUrl
+  notebookUrl,
+  provider = null
 } = {}) {
   const payload = { incidentId, displayTitle, notebookUrl };
+  if (typeof provider === "string" && provider) {
+    payload.provider = provider;
+  }
   if (
     typeof name === "string"
     && name.trim()
@@ -207,16 +214,32 @@ export function createInvestigation(shiftDate, {
   previewId,
   name,
   notebookUrl,
-  confirmed = false
+  confirmed = false,
+  provider = null
 } = {}) {
+  const body = {
+    previewId,
+    name,
+    notebookUrl,
+    confirmed: confirmed === true
+  };
+  if (typeof provider === "string" && provider) {
+    body.provider = provider;
+  }
   return apiRequest(`/api/shifts/${shiftDate}/investigations`, {
     method: "POST",
-    body: JSON.stringify({
-      previewId,
-      name,
-      notebookUrl,
-      confirmed: confirmed === true
-    })
+    body: JSON.stringify(body)
+  });
+}
+
+export function retryInvestigationLocal(
+  shiftDate,
+  retryToken,
+  confirmed = false
+) {
+  return apiRequest(`/api/shifts/${shiftDate}/investigations/local-retry`, {
+    method: "POST",
+    body: JSON.stringify({ retryToken, confirmed: confirmed === true })
   });
 }
 
@@ -330,14 +353,28 @@ export function getReadiness(shiftDate) {
 }
 
 const ASSISTANT_STATUSES = new Set(["complete", "limited", "unavailable"]);
-const ASSISTANT_PROVIDERS = new Set(["deepseek-api", "github-copilot-cli"]);
+const ASSISTANT_PROVIDERS = new Set(["deepseek-api", "github-copilot-cli", "ollama"]);
 const ASSISTANT_PROVIDER_LABELS = new Map([
   ["deepseek-api", "DeepSeek API"],
-  ["github-copilot-cli", "GitHub Copilot CLI"]
+  ["github-copilot-cli", "GitHub Copilot CLI"],
+  ["ollama", "Ollama"]
 ]);
 
 export function getProviderHealth() {
   return apiRequest("/api/health");
+}
+
+export function probeOllamaProvider() {
+  return apiRequest("/api/providers/ollama/probe", {
+    method: "POST"
+  });
+}
+
+export function retryHandoverLocal(shiftDate, retryToken, confirmed = false) {
+  return apiRequest(`/api/shifts/${shiftDate}/handover/local-retry`, {
+    method: "POST",
+    body: JSON.stringify({ retryToken, confirmed: confirmed === true })
+  });
 }
 
 export function assistantProviderLabel(provider) {
@@ -511,14 +548,23 @@ function validateAssistantResponse(response, shiftDate) {
   );
 }
 
-export async function askAssistant(shiftDate, question, providerDisclosureAcknowledged = false) {
+export async function askAssistant(
+  shiftDate,
+  question,
+  providerDisclosureAcknowledged = false,
+  provider = null
+) {
+  const body = {
+    shiftDate,
+    question,
+    providerDisclosureAcknowledged
+  };
+  if (typeof provider === "string" && provider) {
+    body.provider = provider;
+  }
   const response = await apiRequest(`/api/shifts/${encodeURIComponent(shiftDate)}/assistant/questions`, {
     method: "POST",
-    body: JSON.stringify({
-      shiftDate,
-      question,
-      providerDisclosureAcknowledged
-    })
+    body: JSON.stringify(body)
   });
   if (!validateAssistantResponse(response, shiftDate)) {
     throw new Error("Assistant returned an invalid response.");
@@ -526,10 +572,49 @@ export async function askAssistant(shiftDate, question, providerDisclosureAcknow
   return response;
 }
 
+export function retryAssistantQuestion(
+  shiftDate,
+  retryToken,
+  confirmed = false
+) {
+  return apiRequest(
+    `/api/shifts/${encodeURIComponent(shiftDate)}/assistant/questions/local-retry`,
+    {
+      method: "POST",
+      body: JSON.stringify({ retryToken, confirmed: confirmed === true })
+    }
+  );
+}
+
+export async function retryAssistantAction(
+  shiftDate,
+  actionType,
+  retryToken,
+  confirmed = false
+) {
+  const action = ASSISTANT_ACTIONS.get(actionType);
+  if (!action) {
+    throw new Error("Assistant action is not available.");
+  }
+  const result = await apiRequest(
+    `/api/shifts/${encodeURIComponent(shiftDate)}/assistant/actions/${actionType}/local-retry`,
+    {
+      method: "POST",
+      body: JSON.stringify({ retryToken, confirmed: confirmed === true })
+    }
+  );
+  if (!result || typeof result !== "object"
+    || !validateAssistantResponse(result.assistant, shiftDate)) {
+    throw new Error("Assistant returned an invalid local retry response.");
+  }
+  return result;
+}
+
 export async function runAssistantAction(
   shiftDate,
   actionType,
-  providerDisclosureAcknowledged = false
+  providerDisclosureAcknowledged = false,
+  provider = null
 ) {
   const action = ASSISTANT_ACTIONS.get(actionType);
   if (!action) {
@@ -539,7 +624,10 @@ export async function runAssistantAction(
     `/api/shifts/${encodeURIComponent(shiftDate)}/assistant/actions/${actionType}`,
     {
       method: "POST",
-      body: JSON.stringify({ providerDisclosureAcknowledged })
+      body: JSON.stringify({
+        providerDisclosureAcknowledged,
+        ...(typeof provider === "string" && provider ? { provider } : {})
+      })
     }
   );
   const reportPattern = new RegExp(
@@ -631,11 +719,15 @@ export function previewHandoverGeneration(
 export function generateHandover(
   shiftDate,
   confirmed = false,
-  previewDigest = null
+  previewDigest = null,
+  provider = null
 ) {
   const body = { confirmed };
   if (typeof previewDigest === "string") {
     body.previewDigest = previewDigest;
+  }
+  if (typeof provider === "string" && provider) {
+    body.provider = provider;
   }
   return apiRequest(
     `/api/shifts/${shiftDate}/handover`,
@@ -705,11 +797,15 @@ export function getTicketSyncState() {
 export function regenerateHandover(
   shiftDate,
   confirmed = false,
-  previewDigest = null
+  previewDigest = null,
+  provider = null
 ) {
   const body = { confirmed };
   if (typeof previewDigest === "string") {
     body.previewDigest = previewDigest;
+  }
+  if (typeof provider === "string" && provider) {
+    body.provider = provider;
   }
   return apiRequest(
     `/api/shifts/${shiftDate}/handover/regenerate`,

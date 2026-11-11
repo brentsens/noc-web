@@ -6,7 +6,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import date
-from typing import Any
+from typing import Any, Callable
 
 from backend.services.ai_provider import (
     SUPPORTED_PROVIDERS,
@@ -394,7 +394,19 @@ def _route(value: Any, shift_date: str) -> dict[str, Any] | None:
     }
 
 
-def _log_provider_validation_failure(rule: str, category: str = "result") -> None:
+def _log_provider_validation_failure(
+    rule: str,
+    category: str = "result",
+    *,
+    top_level_keys: list[str] | None = None,
+) -> None:
+    if top_level_keys is not None:
+        logger.warning(
+            "Assistant provider result rejected: rule=%s keys=%r",
+            rule,
+            sorted(top_level_keys),
+        )
+        return
     logger.warning(
         "Assistant provider result rejected: rule=%s category=%s",
         rule,
@@ -450,7 +462,10 @@ def _validate_provider_result(
         _log_provider_validation_failure("invalid_top_level_type")
         return None
     if set(result) != {"aiObservations", "recommendations"}:
-        _log_provider_validation_failure("unexpected_top_level_keys")
+        _log_provider_validation_failure(
+            "unexpected_top_level_keys",
+            top_level_keys=[str(key) for key in result],
+        )
         return None
     if not isinstance(result["aiObservations"], list):
         _log_provider_validation_failure("expected_list", "aiObservations")
@@ -808,6 +823,10 @@ def answer(
     question: AssistantQuestion,
     provider: CopilotProvider | None = None,
     provider_identifier: str | None = None,
+    *,
+    prepared: dict[str, Any] | None = None,
+    failure_hook: Callable[[dict[str, Any]], None] | None = None,
+    provider_timeout: int | None = None,
 ) -> dict[str, Any]:
     """Answer one request and discard all temporary values before returning."""
     active_provider = provider_identifier or active_provider_identifier()
@@ -821,67 +840,111 @@ def answer(
     provider_result: dict[str, Any] | None = None
     facts: list[dict[str, Any]] | None = None
     reviewed_findings: list[dict[str, Any]] | None = None
-    try:
+    limitations: list[str] = []
+
+    def offer_retry() -> None:
         if (
-            any(pattern.search(question.question) for pattern in PROHIBITED_ACTION_PATTERNS)
-            or OVERRIDE_PATTERN.search(question.question)
-            or not SUPPORTED_CONTEXT_PATTERN.search(question.question)
+            failure_hook is None
+            or envelope is None
+            or active_provider == "ollama"
         ):
-            return _refusal(question, active_provider)
+            return
+        failure_hook({
+            "envelope": envelope,
+            "context": context or [],
+            "facts": facts or [],
+            "reviewedFindings": reviewed_findings or [],
+            "limitations": limitations,
+        })
 
-        context = collect_context(question.shift_date)
-        facts = _source_facts(context)
-        reviewed_findings = _reviewed_findings(context)
-        limitations = _limitation_messages(context)
-        provider_evidence = [
-            item for item in context
-            if item.get("availability") in {"available", "stale"}
-        ]
-        available_ids = {item["id"] for item in provider_evidence}
-        if not available_ids or not _has_question_sufficient_context(
-            question.question,
-            context,
-        ):
-            if TIMELINE_QUESTION_PATTERN.search(question.question):
-                facts.extend(_activity_gap_fact(question.shift_date, context))
-            return _response(
-                question.shift_date,
-                active_provider,
-                "limited",
+    try:
+        if prepared is None:
+            if (
+                any(pattern.search(question.question) for pattern in PROHIBITED_ACTION_PATTERNS)
+                or OVERRIDE_PATTERN.search(question.question)
+                or not SUPPORTED_CONTEXT_PATTERN.search(question.question)
+            ):
+                return _refusal(question, active_provider)
+
+            context = collect_context(question.shift_date)
+            facts = _source_facts(context)
+            reviewed_findings = _reviewed_findings(context)
+            limitations = _limitation_messages(context)
+            provider_evidence = [
+                item for item in context
+                if item.get("availability") in {"available", "stale"}
+            ]
+            available_ids = {item["id"] for item in provider_evidence}
+            if not available_ids or not _has_question_sufficient_context(
+                question.question,
                 context,
-                limitations + [
-                    _insufficient_context_reason(
-                        question.shift_date,
-                        question.question,
-                        context,
-                    )
-                ],
-                facts=facts,
-                reviewed_findings=reviewed_findings,
-            )
+            ):
+                if TIMELINE_QUESTION_PATTERN.search(question.question):
+                    facts.extend(_activity_gap_fact(question.shift_date, context))
+                return _response(
+                    question.shift_date,
+                    active_provider,
+                    "limited",
+                    context,
+                    limitations + [
+                        _insufficient_context_reason(
+                            question.shift_date,
+                            question.question,
+                            context,
+                        )
+                    ],
+                    facts=facts,
+                    reviewed_findings=reviewed_findings,
+                )
 
-        envelope = {
-            "shiftDate": question.shift_date,
-            "question": question.question,
-            "evidence": provider_evidence,
-            "policy": (
-                "Read-only advisory analysis. Return only aiObservations and recommendations. "
-                "Use only evidence IDs whose availability is available or stale. Clearly label "
-                "stale evidence and never claim it represents current state. Do not claim facts, "
-                "create reviewed findings, "
-                "perform actions, use tools, execute commands, query external systems, or refresh data."
-            ),
-        }
+            envelope = {
+                "shiftDate": question.shift_date,
+                "question": question.question,
+                "evidence": provider_evidence,
+                "policy": (
+                    "Read-only advisory analysis. Return only aiObservations and recommendations. "
+                    "Use only evidence IDs whose availability is available or stale. Clearly label "
+                    "stale evidence and never claim it represents current state. Do not claim facts, "
+                    "create reviewed findings, "
+                    "perform actions, use tools, execute commands, query external systems, or refresh data."
+                ),
+            }
+        else:
+            context = prepared.get("context") if isinstance(prepared.get("context"), list) else []
+            facts = prepared.get("facts") if isinstance(prepared.get("facts"), list) else []
+            reviewed_findings = (
+                prepared.get("reviewedFindings")
+                if isinstance(prepared.get("reviewedFindings"), list)
+                else []
+            )
+            limitations = (
+                prepared.get("limitations")
+                if isinstance(prepared.get("limitations"), list)
+                else []
+            )
+            envelope = prepared.get("envelope")
+            if not isinstance(envelope, dict):
+                raise CopilotProviderUnavailable(
+                    "The retry snapshot is unavailable.",
+                    provider_invoked=False,
+                )
+            provider_evidence = [
+                item for item in envelope.get("evidence", [])
+                if isinstance(item, dict)
+                and item.get("availability") in {"available", "stale"}
+            ]
+            available_ids = {item.get("id") for item in provider_evidence}
         try:
             provider_result = (
                 ask_copilot(envelope)
                 if provider is None
                 else CopilotMcpAdapter(
                     provider,
-                    timeout_seconds=provider_timeout_seconds(),
+                    timeout_seconds=provider_timeout or provider_timeout_seconds(),
                 ).ask(envelope)
             )
         except CopilotProviderTimeout as error:
+            offer_retry()
             return _response(
                 question.shift_date,
                 active_provider,
@@ -894,6 +957,7 @@ def answer(
                 provider_status="timeout",
             )
         except CopilotProviderInvalid as error:
+            offer_retry()
             return _response(
                 question.shift_date,
                 active_provider,
@@ -906,6 +970,7 @@ def answer(
                 provider_status="invalid",
             )
         except CopilotProviderUnavailable as error:
+            offer_retry()
             return _response(
                 question.shift_date,
                 active_provider,
@@ -925,6 +990,7 @@ def answer(
             provider_evidence,
         )
         if validated is None:
+            offer_retry()
             return _response(
                 question.shift_date,
                 active_provider,

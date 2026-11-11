@@ -581,3 +581,26 @@ def test_live_deepseek_unsupplied_citation_fails_closed(
     assert response.json()["detail"]["code"] == "evidence-reference-invalid"
     assert len(runtime.calls) == 1
     assert not _record_dir(investigation_workspace).exists()
+
+
+def test_local_ollama_invalid_citation_fails_closed(investigation_workspace, monkeypatch):
+    package = _package()
+    output = valid_output(package)
+    output["summary"] = ["Local output without a citation."]
+    runtime = fake_runtime(
+        identifier="ollama",
+        model="qwen3:8b",
+        output=output,
+    )
+    _prepare(monkeypatch, runtime=runtime)
+    client = TestClient(app)
+    preview = _preview(client)
+
+    response = _create(client, preview.json()["previewId"])
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] in {
+        "ai-output-invalid",
+        "evidence-reference-invalid",
+    }
+    assert not _record_dir(investigation_workspace).exists()

@@ -126,6 +126,11 @@ def test_install_is_repeatable_and_preserves_config_and_noc_records(tmp_path):
     } == original_hashes
     assert (systemd_directory / "noc-web.service").is_file()
     assert (systemd_directory / "noc-web.service.bak").is_file()
+    installed_unit = (systemd_directory / "noc-web.service").read_text(encoding="utf-8")
+    provider_config_directory = config_path.parent
+    assert f"EnvironmentFile=-{provider_config_directory / 'ai-provider.env'}" in installed_unit
+    assert f"EnvironmentFile=-{provider_config_directory / 'datadog-provider.env'}" in installed_unit
+    assert f"EnvironmentFile=-{provider_config_directory / 'ollama-provider.env'}" in installed_unit
     assert any("pip" in arguments and "install" in arguments for arguments, _ in calls)
     commands = [arguments for arguments, _ in calls]
     assert ["systemctl", "--user", "reset-failed", "noc-web.service"] in commands

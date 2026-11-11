@@ -337,3 +337,21 @@ def test_readiness_discards_sensitive_command_output(tmp_path, monkeypatch):
     monkeypatch.setattr(readiness.subprocess, "run", failed_run)
     result = readiness.assess_readiness(profile, "2099-12-31")
     assert secret not in str(result)
+
+
+def test_static_provider_projection_is_distinct_and_never_contacts_ollama(monkeypatch):
+    from backend.services.ai_provider import provider_readiness
+
+    monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "deepseek-api")
+    monkeypatch.setenv("NOC_WEB_DEEPSEEK_API_KEY", "test-sentinel-deepseek-key")
+    monkeypatch.setenv("NOC_WEB_OLLAMA_BASE_URL", "http://ollama.lan:11434")
+    monkeypatch.setenv("NOC_WEB_OLLAMA_MODEL", "qwen3:8b")
+
+    state = provider_readiness()
+
+    assert state["configuredProvider"] == "deepseek-api"
+    assert state["primaryProvider"]["configuredProvider"] == "deepseek-api"
+    assert state["localProvider"]["configuredProvider"] == "ollama"
+    assert state["localProvider"]["readiness"] == "ready"
+    assert state["localProvider"]["probe"] is None
+    assert "test-sentinel-deepseek-key" not in str(state)

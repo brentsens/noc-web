@@ -275,6 +275,10 @@ def test_service_environment_copies_only_the_provider_allowlist(tmp_path):
             "NOC_WEB_DATADOG_ACCESS_TOKEN": "test-sentinel-datadog-token",
             "NOC_WEB_DATADOG_BASE_URL": "https://api.datadoghq.com",
             "NOC_WEB_DATADOG_TIMEOUT_SECONDS": "90",
+            "NOC_WEB_OLLAMA_BASE_URL": "http://ollama.lan:11434",
+            "NOC_WEB_OLLAMA_MODEL": "qwen3:8b",
+            "NOC_WEB_OLLAMA_TIMEOUT_SECONDS": "120",
+            "NOC_WEB_OLLAMA_CONNECT_TIMEOUT_SECONDS": "5",
             "COPILOT_TOKEN": "must-not-copy",
             "UNRELATED_SECRET": "must-not-copy",
         },
@@ -287,6 +291,10 @@ def test_service_environment_copies_only_the_provider_allowlist(tmp_path):
     assert environment["NOC_WEB_DATADOG_ACCESS_TOKEN"] == "test-sentinel-datadog-token"
     assert environment["NOC_WEB_DATADOG_BASE_URL"] == "https://api.datadoghq.com"
     assert environment["NOC_WEB_DATADOG_TIMEOUT_SECONDS"] == "90"
+    assert environment["NOC_WEB_OLLAMA_BASE_URL"] == "http://ollama.lan:11434"
+    assert environment["NOC_WEB_OLLAMA_MODEL"] == "qwen3:8b"
+    assert environment["NOC_WEB_OLLAMA_TIMEOUT_SECONDS"] == "120"
+    assert environment["NOC_WEB_OLLAMA_CONNECT_TIMEOUT_SECONDS"] == "5"
     assert "COPILOT_TOKEN" not in environment
     assert "UNRELATED_SECRET" not in environment
 
@@ -302,5 +310,8 @@ def test_generated_unit_references_the_optional_provider_environment_file(tmp_pa
     ) in unit
     assert (
         f"EnvironmentFile=-{config_path.parent / 'datadog-provider.env'}"
+    ) in unit
+    assert (
+        f"EnvironmentFile=-{config_path.parent / 'ollama-provider.env'}"
     ) in unit
     assert "test-sentinel" not in unit

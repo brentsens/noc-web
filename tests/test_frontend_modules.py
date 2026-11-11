@@ -1620,3 +1620,72 @@ def test_end_shift_page_uses_shared_workflow_date_initialization():
     assert "getLocalDateString" not in page
     assert 'endShiftDate.addEventListener(\n            "change"' not in page
     assert "initializeWorkflow({" in page
+
+
+def test_local_retry_ui_requires_explicit_confirmation_for_all_workflows():
+    assistant_page = (FRONTEND / "assistant.html").read_text(encoding="utf-8")
+    investigations_page = (FRONTEND / "investigations.html").read_text(encoding="utf-8")
+    end_shift_page = (FRONTEND / "end-shift.html").read_text(encoding="utf-8")
+    ai_actions_page = (FRONTEND / "ai-actions.html").read_text(encoding="utf-8")
+
+    for page, retry_call, confirmation in (
+        (assistant_page, "retryAssistantQuestion(", "Retry this request with the local AI provider?"),
+        (investigations_page, "retryInvestigationLocal(", "Retry this investigation with the local AI provider?"),
+        (end_shift_page, "retryHandoverLocal(", "Retry the handover with the local AI provider"),
+        (ai_actions_page, "retryAssistantAction(", "Retry this action with the local AI provider?"),
+    ):
+        assert "localRetry?.available" in page
+        assert "window.confirm(" in page
+        assert confirmation in page
+        assert retry_call in page
+
+
+def test_status_provider_panel_is_static_and_probe_is_explicit():
+    page = (FRONTEND / "status.html").read_text(encoding="utf-8")
+    module = (FRONTEND / "js" / "provider-status.js").read_text(encoding="utf-8")
+
+    assert 'id="status-primary-provider"' in page
+    assert 'id="status-local-provider"' in page
+    assert 'id="status-local-probe"' in page
+    assert 'id="status-probe-local"' in page
+    assert "No explicit probe run." in page
+    assert "renderProviderReadiness(status.aiProvider)" in page
+    assert "probeLocalProvider()" in page
+    assert "probeOllamaProvider" in module
+    assert '"/api/providers/ollama/probe"' in (FRONTEND / "js" / "api.js").read_text(
+        encoding="utf-8"
+    )
+
+
+
+def test_per_request_provider_selectors_are_wired_to_existing_clients():
+    assistant_page = (FRONTEND / "assistant.html").read_text(encoding="utf-8")
+    investigations_page = (FRONTEND / "investigations.html").read_text(encoding="utf-8")
+    end_shift_page = (FRONTEND / "end-shift.html").read_text(encoding="utf-8")
+    api = (FRONTEND / "js" / "api.js").read_text(encoding="utf-8")
+
+    assert 'id="assistant-provider"' in assistant_page
+    assert "providerSelect.value || null" in assistant_page
+    assert "provider" in api
+
+    assert 'id="create-investigation-provider"' in investigations_page
+    assert "provider: createProviderInput.value || null" in investigations_page
+
+    assert 'id="handover-provider"' in end_shift_page
+    assert "handoverProvider.value || null" in end_shift_page
+
+
+def test_health_page_renders_distinct_primary_and_local_provider_state():
+    page = (FRONTEND / "health.html").read_text(encoding="utf-8")
+
+    assert "function renderProviderSummary(" in page
+    assert "health.aiProvider" in page
+    assert "providerState.primaryProvider" in page
+    assert "providerState.localProvider" in page
+    assert "endpointConfigured" in page
+    assert "Not configured" in page
+    assert "Unknown" in page
+    assert "textContent" in page
+    assert "innerHTML = `" not in page[
+        page.index("function renderProviderSummary("):page.index("function renderChecks(")
+    ]

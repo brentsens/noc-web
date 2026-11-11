@@ -127,6 +127,13 @@
                         <label class="form-label" for="end-shift-date">Selected Shift</label>
                         <input id="end-shift-date" class="date-control" type="date">
 
+                        <label class="form-label" for="handover-provider">AI provider</label>
+                        <select id="handover-provider" class="form-control">
+                            <option value="">Configured default</option>
+                            <option value="deepseek-api">DeepSeek API</option>
+                            <option value="ollama">Ollama (local)</option>
+                        </select>
+
                         <span class="end-ready-badge">
                             READY FOR REVIEW
                         </span>
@@ -574,6 +581,7 @@
             regenerateHandover,
             previewHandoverGeneration,
             previewHandoverDelivery,
+            retryHandoverLocal,
             sendHandoverDelivery
         } from "./js/api.js";
         import { initializeWorkflow, renderStatePanel } from "./js/workflow-context.js";
@@ -682,6 +690,11 @@
         const endShiftDate =
             document.querySelector(
                 "#end-shift-date"
+            );
+
+        const handoverProvider =
+            document.querySelector(
+                "#handover-provider"
             );
 
         const handoverPreviewDate =
@@ -1781,6 +1794,34 @@
             }
         );
 
+        async function offerHandoverLocalRetry(error, shiftDate) {
+            const localRetry = error.detail?.localRetry;
+            if (localRetry?.available !== true) {
+                return false;
+            }
+            const confirmed = window.confirm(
+                `Retry the handover with the local AI provider ${localRetry.provider} (${localRetry.model})?\n\n`
+                + "The exact failed-request evidence will be reused. No automatic retry occurs."
+            );
+            if (!confirmed) {
+                return false;
+            }
+            try {
+                const handover = await retryHandoverLocal(
+                    shiftDate,
+                    localRetry.retryToken,
+                    true
+                );
+                generationPreview = null;
+                previewedRecipient = null;
+                renderHandover(handover);
+                await loadReadiness();
+            } catch (retryError) {
+                window.alert(`Handover local retry failed: ${retryError.message}`);
+            }
+            return true;
+        }
+
         generateButton.addEventListener(
             "click",
             async () => {
@@ -1823,7 +1864,8 @@
                         await generateHandover(
                             shiftDate,
                             true,
-                            generationPreview?.evidenceDigest
+                            generationPreview?.evidenceDigest,
+                            handoverProvider.value || null
                         );
                     generationPreview = null;
 
@@ -1840,9 +1882,11 @@
                         error
                     );
 
-                    window.alert(
-                        `Handover generation failed: ${error.message}`
-                    );
+                    if (!(await offerHandoverLocalRetry(error, shiftDate))) {
+                        window.alert(
+                            `Handover generation failed: ${error.message}`
+                        );
+                    }
 
                     await loadHandover();
                     await loadReadiness();
@@ -1913,7 +1957,8 @@
                         await regenerateHandover(
                             shiftDate,
                             true,
-                            generationPreview?.evidenceDigest
+                            generationPreview?.evidenceDigest,
+                            handoverProvider.value || null
                         );
                     generationPreview = null;
 
@@ -1946,9 +1991,11 @@
                         error
                     );
 
-                    window.alert(
-                        `Handover regeneration failed: ${error.message}`
-                    );
+                    if (!(await offerHandoverLocalRetry(error, shiftDate))) {
+                        window.alert(
+                            `Handover regeneration failed: ${error.message}`
+                        );
+                    }
 
                     await loadHandover();
                     await loadReadiness();

@@ -80,12 +80,28 @@ restart.
 | `NOC_WEB_DEEPSEEK_MODEL` | No | `deepseek-flash` | No |
 | `NOC_WEB_DEEPSEEK_BASE_URL` | No | `https://api.deepseek.com` | No |
 | `NOC_WEB_AI_TIMEOUT_SECONDS` | No | `55` | No |
+| `NOC_WEB_OLLAMA_BASE_URL` | When `ollama` is selected/probed | none | No |
+| `NOC_WEB_OLLAMA_MODEL` | No | `qwen3:8b` | No |
+| `NOC_WEB_OLLAMA_TIMEOUT_SECONDS` | No | `120` (max `300`) | No |
+| `NOC_WEB_OLLAMA_CONNECT_TIMEOUT_SECONDS` | No | `5` (max `10`) | No |
 
-`NOC_WEB_AI_PROVIDER` must be exactly `deepseek-api` or `github-copilot-cli`.
+`NOC_WEB_AI_PROVIDER` must be exactly `deepseek-api`, `github-copilot-cli`, or
+`ollama`. Existing installations remain on DeepSeek unless explicitly
+reconfigured; no automatic migration or fallback occurs. `ollama` has no
+authentication secret.
 Selecting `deepseek-api` does not require the GitHub Copilot CLI to be installed
 or authenticated. Selecting `github-copilot-cli` preserves the existing
-authenticated-session behavior. There is no automatic fallback between
-providers.
+authenticated-session behavior. Selecting `ollama` requires an explicit
+`NOC_WEB_OLLAMA_BASE_URL` such as `http://ollama.lan:11434`; the URL must be
+`http` or `https`, contain only a host (no credentials, query, fragment, or
+subpath), and redirects are rejected. The configured model defaults to
+`qwen3:8b`. There is no automatic fallback or automatic retry between providers;
+after a primary failure an operator may explicitly confirm **Retry with Local
+AI**, which reuses the exact bounded failed-request evidence for ten minutes.
+Static readiness never contacts Ollama. Use **Probe local provider** on Status
+for an explicit model-list reachability check; probing performs no inference.
+Ollama metadata, thinking output, and credentials are never persisted or
+returned.
 
 For the managed systemd user service, place provider settings in
 `${XDG_CONFIG_HOME:-$HOME/.config}/noc-web/ai-provider.env`. The generated unit
@@ -103,10 +119,30 @@ NOC_WEB_DEEPSEEK_MODEL=deepseek-flash
 EOF
 ```
 
+For the optional local provider, use a separate operator-managed file at
+`${XDG_CONFIG_HOME:-$HOME/.config}/noc-web/ollama-provider.env`. The generated
+unit loads it with `EnvironmentFile=-`; the template placeholder
+`@OLLAMA_PROVIDER_ENV_FILE@` is resolved to `ollama-provider.env` at install
+time, so a missing file does not prevent NOC Web from starting.
+Do not merge Ollama settings into `ai-provider.env` or
+`datadog-provider.env`. The file contains no authentication secret, but keep it
+mode `0600` with the other provider environment files because it is operator
+configuration.
+
+```bash
+install -m 600 /dev/null ~/.config/noc-web/ollama-provider.env
+cat > ~/.config/noc-web/ollama-provider.env <<'EOF'
+NOC_WEB_OLLAMA_BASE_URL=http://ollama.lan:11434
+NOC_WEB_OLLAMA_MODEL=qwen3:8b
+NOC_WEB_OLLAMA_TIMEOUT_SECONDS=120
+NOC_WEB_OLLAMA_CONNECT_TIMEOUT_SECONDS=5
+EOF
+```
+
 Readiness reports `READY`, `SETUP REQUIRED`, or `NOT CONFIGURED` from static
 configuration and required-material presence only. It never makes a provider
 request and does not assert that credentials were accepted or that the provider
-is reachable. Provider readiness is warning-only in shift health so it does not
+is reachable. Static primary/local provider readiness is warning-only in shift health so it does not
 block End Shift preflight or deterministic handover preview. Confirmed handover
 generation still fails closed if the configured provider is unavailable; it never
 falls back to another provider or to a deterministic-only final record.

@@ -158,6 +158,10 @@ def test_root_health_reports_static_provider_state_without_secrets(monkeypatch):
     assert ai_provider["readiness"] == "ready"
     assert ai_provider["label"] == "DeepSeek API"
     assert ai_provider["model"] == "deepseek-flash"
+    assert ai_provider["primaryProvider"]["configuredProvider"] == "deepseek-api"
+    assert ai_provider["primaryProvider"]["readiness"] == "ready"
+    assert ai_provider["localProvider"]["configuredProvider"] == "ollama"
+    assert ai_provider["localProvider"]["readiness"] == "notConfigured"
     assert sentinel not in response.text
 
     monkeypatch.delenv("NOC_WEB_AI_PROVIDER", raising=False)
@@ -192,6 +196,9 @@ def test_shift_health_ai_provider_section_is_warning_only(tmp_path, monkeypatch)
     ]
     assert len(ready_checks) == 1
     assert ready_checks[0]["state"] == "pass"
+    assert ready["aiProvider"]["primaryProvider"]["configuredProvider"] == "deepseek-api"
+    assert ready["aiProvider"]["primaryProvider"]["readiness"] == "ready"
+    assert ready["aiProvider"]["localProvider"]["readiness"] == "notConfigured"
     assert "test-sentinel-deepseek-key" not in str(ready)
 
     monkeypatch.setenv("NOC_WEB_AI_PROVIDER", "unsupported-provider")

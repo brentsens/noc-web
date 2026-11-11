@@ -211,10 +211,18 @@ sessions, and another operator's authentication are never bundled or copied by
 the installer.
 
 Assistant and AI Action inference additionally report the explicitly configured
-provider (`deepseek-api` or `github-copilot-cli`) and its static readiness. No
+provider (`deepseek-api`, `github-copilot-cli`, or `ollama`) and its static
+readiness. The optional local Ollama provider requires only
+`NOC_WEB_OLLAMA_BASE_URL` (no authentication secret), defaults to the `qwen3:8b`
+model, and is available through explicit per-request selection or an explicitly
+confirmed **Retry with Local AI** action after a primary failure. Static readiness
+never contacts Ollama; the Status page provides an explicit probe that checks the
+model list without inference. There is no automatic fallback or automatic retry. No
 provider is selected by default, provider changes require a restart, and there is
 no automatic fallback. Configure provider settings through the process
-environment or the managed-service `ai-provider.env` file described in
+environment or the managed-service provider environment files
+(`ai-provider.env`, `datadog-provider.env`, and the optional
+`ollama-provider.env`) described in
 [docs/workstation-runtime.md](docs/workstation-runtime.md). Credentials are never
 returned by the API, written to logs, or persisted in reports.
 

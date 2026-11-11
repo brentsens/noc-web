@@ -27,6 +27,13 @@ from backend.services.handover_evidence import (
     build_handover_evidence,
     evidence_summary,
 )
+from backend.services.ollama_provider import OllamaModelMissing
+from backend.services.local_retry import (
+    RetrySnapshotError,
+    capture_local_retry,
+    get_retry_store,
+    resolve_retry_runtime,
+)
 from backend.services.handover_provenance import (
     PROVENANCE_FILENAME,
     build_handover_provenance,
@@ -49,11 +56,19 @@ HANDOVER_SIGNATURE = (
 
 
 class HandoverGenerationError(RuntimeError):
-    def __init__(self, status_code: int, code: str, message: str):
+    def __init__(
+        self,
+        status_code: int,
+        code: str,
+        message: str,
+        *,
+        retry_metadata: dict[str, Any] | None = None,
+    ):
         super().__init__(message)
         self.status_code = status_code
         self.code = code
         self.message = message
+        self.retry_metadata = retry_metadata
 
 
 def _validate_shift_date(shift_date: str) -> str:
@@ -329,6 +344,114 @@ def _resolve_provider():
     return resolve_provider_runtime(system_prompt=HANDOVER_SYSTEM_PROMPT)
 
 
+def _retry_payload(package, envelope, *, replace):
+    return {
+        "shiftDate": package.get("shiftDate"),
+        "package": package,
+        "envelope": envelope,
+        "replace": bool(replace),
+    }
+
+
+def _capture_retry(shift_date, package, envelope, *, replace):
+    return capture_local_retry(
+        workflow="handover",
+        shift_date=shift_date,
+        payload=_retry_payload(package, envelope, replace=replace),
+    )
+
+
+def _provider_error(error, shift_date, package, envelope, *, replace):
+    retry = _capture_retry(shift_date, package, envelope, replace=replace)
+    if isinstance(error, ProviderTimeout):
+        return HandoverGenerationError(
+            504,
+            "provider-timeout",
+            "The AI provider timed out.",
+            retry_metadata=retry,
+        )
+    if isinstance(error, ProviderInvalid):
+        return HandoverGenerationError(
+            502,
+            "provider-invalid-response",
+            "The AI provider returned an invalid response.",
+            retry_metadata=retry,
+        )
+    if isinstance(error, OllamaModelMissing):
+        return HandoverGenerationError(
+            503,
+            "ollama-model-missing",
+            "The configured local model is unavailable.",
+            retry_metadata=retry,
+        )
+    if isinstance(error, ProviderUnavailable):
+        return HandoverGenerationError(
+            503,
+            "provider-unavailable",
+            "The AI provider is unavailable.",
+            retry_metadata=retry,
+        )
+    return HandoverGenerationError(
+        502,
+        "provider-invalid-response",
+        "The AI provider returned an invalid response.",
+        retry_metadata=retry,
+    )
+
+
+def _run_provider(runtime, envelope, *, shift_date=None, package=None, replace=False):
+    try:
+        return runtime.provider(envelope)
+    except (ProviderTimeout, ProviderInvalid, ProviderUnavailable) as error:
+        if shift_date is not None and package is not None:
+            raise _provider_error(
+                error,
+                shift_date,
+                package,
+                envelope,
+                replace=replace,
+            ) from None
+        if isinstance(error, OllamaModelMissing):
+            raise HandoverGenerationError(
+                503,
+                "ollama-model-missing",
+                "The configured local model is unavailable.",
+            ) from None
+        if isinstance(error, ProviderTimeout):
+            raise HandoverGenerationError(504, "provider-timeout", "The AI provider timed out.") from None
+        if isinstance(error, ProviderInvalid):
+            raise HandoverGenerationError(
+                502, "provider-invalid-response", "The AI provider returned an invalid response."
+            ) from None
+        raise HandoverGenerationError(
+            503, "provider-unavailable", "The AI provider is unavailable."
+        ) from None
+    except (OSError, TimeoutError):
+        if shift_date is not None and package is not None:
+            raise _provider_error(
+                ProviderUnavailable("down"),
+                shift_date,
+                package,
+                envelope,
+                replace=replace,
+            ) from None
+        raise HandoverGenerationError(
+            503, "provider-unavailable", "The AI provider is unavailable."
+        ) from None
+    except Exception:
+        if shift_date is not None and package is not None:
+            raise _provider_error(
+                ProviderInvalid("bad"),
+                shift_date,
+                package,
+                envelope,
+                replace=replace,
+            ) from None
+        raise HandoverGenerationError(
+            502, "provider-invalid-response", "The AI provider returned an invalid response."
+        ) from None
+
+
 def _preview_package(
     shift_date: str,
     evidence_loader: Callable[[str], dict[str, Any]] | None,
@@ -446,30 +569,27 @@ def _generate_handover(
     _require_provider(runtime)
     intro, sections, closing = assemble_handover_content(package)
     envelope = build_handover_envelope(package, shift_date=shift_date)
-    try:
-        raw_output = runtime.provider(envelope)
-    except ProviderTimeout:
-        raise HandoverGenerationError(504, "provider-timeout", "The AI provider timed out.") from None
-    except ProviderInvalid:
-        raise HandoverGenerationError(
-            502, "provider-invalid-response", "The AI provider returned an invalid response."
-        ) from None
-    except ProviderUnavailable:
-        raise HandoverGenerationError(
-            503, "provider-unavailable", "The AI provider is unavailable."
-        ) from None
-    except (OSError, TimeoutError):
-        raise HandoverGenerationError(
-            503, "provider-unavailable", "The AI provider is unavailable."
-        ) from None
-    except Exception:
-        raise HandoverGenerationError(
-            502, "provider-invalid-response", "The AI provider returned an invalid response."
-        ) from None
+    raw_output = _run_provider(
+        runtime,
+        envelope,
+        shift_date=shift_date,
+        package=package,
+        replace=replace,
+    )
     try:
         advisory = validate_advisory_output(raw_output, package)
     except HandoverAIError as error:
-        raise HandoverGenerationError(422, error.code, error.message) from None
+        raise HandoverGenerationError(
+            422,
+            error.code,
+            error.message,
+            retry_metadata=_capture_retry(
+                shift_date,
+                package,
+                envelope,
+                replace=replace,
+            ),
+        ) from None
     advisory_citations = sorted({
         citation
         for items in advisory.values()
@@ -561,4 +681,98 @@ def regenerate_handover(
         raise
     result["regenerated"] = True
     result["archivedFile"] = str(archive_file)
+    return result
+
+
+def retry_handover_generation(
+    shift_date: str,
+    retry_token: str,
+    *,
+    store=None,
+) -> dict[str, Any]:
+    _validate_shift_date(shift_date)
+    try:
+        snapshot = (store or get_retry_store()).consume(
+            retry_token,
+            workflow="handover",
+            shift_date=shift_date,
+        )
+    except RetrySnapshotError as error:
+        raise HandoverGenerationError(
+            error.status_code,
+            error.code,
+            error.message,
+        ) from None
+    payload = snapshot.get("payload")
+    package = payload.get("package") if isinstance(payload, dict) else None
+    envelope = payload.get("envelope") if isinstance(payload, dict) else None
+    if not isinstance(package, dict) or not isinstance(envelope, dict):
+        raise HandoverGenerationError(
+            409,
+            "retry-snapshot-unavailable",
+            "The exact failed-request snapshot is unavailable.",
+        )
+    replace = bool(payload.get("replace"))
+    try:
+        runtime = resolve_retry_runtime()
+    except RetrySnapshotError as error:
+        raise HandoverGenerationError(
+            error.status_code,
+            error.code,
+            error.message,
+        ) from None
+    _require_provider(runtime)
+    handover_file, provenance_file = _handover_paths(shift_date)
+    if handover_file.exists() and not replace:
+        raise FileExistsError(f"Handover already exists: {handover_file}")
+    archive_file = None
+    archive_provenance = None
+    if replace and handover_file.is_file() and handover_file.stat().st_size > 0:
+        archive_file, archive_provenance = _archive_existing(
+            handover_file,
+            provenance_file,
+        )
+    try:
+        raw_output = _run_provider(runtime, envelope)
+        try:
+            advisory = validate_advisory_output(raw_output, package)
+        except HandoverAIError as error:
+            raise HandoverGenerationError(422, error.code, error.message) from None
+        advisory_citations = sorted({
+            citation
+            for items in advisory.values()
+            for item in items
+            for citation in extract_citations(item)
+        })
+        intro, sections, closing = assemble_handover_content(package)
+        markdown = render_handover_markdown(intro, sections, closing)
+        provider = _provider_metadata(runtime)
+        provenance = build_handover_provenance(
+            package,
+            provider_identifier=provider.get("configuredProvider"),
+            model=provider.get("model"),
+            advisory_citations=advisory_citations,
+        )
+        _publish_handover(shift_date, markdown, provenance, replace=replace)
+    except Exception:
+        if replace and archive_file is not None:
+            try:
+                shutil.copy2(archive_file, handover_file)
+                if archive_provenance is not None:
+                    shutil.copy2(archive_provenance, provenance_file)
+            except OSError:
+                raise HandoverGenerationError(
+                    500,
+                    "restore-failed",
+                    "The previous handover could not be restored.",
+                ) from None
+        raise
+    result = get_handover(shift_date)
+    result["generationMode"] = "ai-advisory"
+    result["advisoryStatus"] = "completed"
+    result["evidenceDigest"] = package.get("digest")
+    result["evidence"] = _read_provenance(handover_file)
+    if replace:
+        result["regenerated"] = True
+        result["archivedFile"] = str(archive_file) if archive_file else None
     return result

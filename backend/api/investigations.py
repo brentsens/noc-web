@@ -18,11 +18,18 @@ from backend.services.investigations import (
     reject_investigation,
     transition_investigation,
 )
+from backend.services.ai_provider import (
+    PROVIDER_DEEPSEEK,
+    PROVIDER_OLLAMA,
+    resolve_provider_runtime_for,
+)
+from backend.services.investigation_ai import INVESTIGATION_SYSTEM_PROMPT
 from backend.services.investigation_generation import (
     GenerationError,
     InvestigationValidationError,
     create_investigation,
     preview_investigation,
+    retry_investigation_generation,
 )
 
 
@@ -56,6 +63,7 @@ class PreviewInvestigationRequest(BaseModel):
     displayTitle: StrictStr | None = None
     name: StrictStr | None = None
     notebookUrl: StrictStr
+    provider: StrictStr | None = None
 
 
 class CreateInvestigationRequest(BaseModel):
@@ -64,6 +72,14 @@ class CreateInvestigationRequest(BaseModel):
     previewId: StrictStr
     name: StrictStr
     notebookUrl: StrictStr
+    confirmed: StrictBool
+    provider: StrictStr | None = None
+
+
+class LocalRetryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    retryToken: StrictStr
     confirmed: StrictBool
 
 
@@ -104,7 +120,23 @@ def _generation_error_detail(error: GenerationError) -> dict:
     }
     if error.field:
         detail["field"] = error.field
+    if error.retry_metadata:
+        detail["localRetry"] = error.retry_metadata
     return detail
+
+
+def _requested_runtime(provider: str | None):
+    if provider is None:
+        return None
+    if provider not in {PROVIDER_DEEPSEEK, PROVIDER_OLLAMA}:
+        raise HTTPException(
+            status_code=422,
+            detail="provider must be deepseek-api or ollama.",
+        )
+    return resolve_provider_runtime_for(
+        provider,
+        system_prompt=INVESTIGATION_SYSTEM_PROMPT,
+    )
 
 
 @router.post("/{shift_date}/investigations/preview")
@@ -120,6 +152,7 @@ def preview(
             request.notebookUrl,
             request.incidentId,
             display_title=request.displayTitle,
+            provider_runtime=_requested_runtime(request.provider),
         )
     except GenerationError as error:
         raise HTTPException(
@@ -160,6 +193,53 @@ def create(
             request.notebookUrl,
             request.previewId,
             request.confirmed,
+            provider_runtime=_requested_runtime(request.provider),
+        )
+        return result.record
+    except GenerationError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=_generation_error_detail(error),
+        ) from None
+    except InvestigationValidationError as error:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "field": error.field,
+                "code": error.code,
+                "message": error.message,
+            },
+        ) from None
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail="Investigation request is invalid.",
+        ) from None
+    except ConfigurationError:
+        raise HTTPException(
+            status_code=503,
+            detail="Investigation generation is unavailable.",
+        ) from None
+
+
+@router.post("/{shift_date}/investigations/local-retry", status_code=201)
+def retry_local(
+    shift_date: str,
+    request: LocalRetryRequest,
+):
+    _validate_generation_shift(shift_date)
+    if request.confirmed is not True:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "retry-confirmation-required",
+                "message": "Explicit confirmation is required for local retry.",
+            },
+        )
+    try:
+        result = retry_investigation_generation(
+            shift_date,
+            request.retryToken,
         )
         return result.record
     except GenerationError as error:

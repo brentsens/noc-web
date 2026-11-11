@@ -266,6 +266,34 @@
                     <article class="panel">
 
                         <div class="panel-header">
+                            <h2>AI Provider</h2>
+                            <button id="status-probe-local" class="button" type="button">
+                                Probe local provider
+                            </button>
+                        </div>
+
+                        <table>
+                            <tbody>
+                                <tr>
+                                    <th>Primary</th>
+                                    <td id="status-primary-provider">Checking...</td>
+                                </tr>
+                                <tr>
+                                    <th>Local</th>
+                                    <td id="status-local-provider">Checking...</td>
+                                </tr>
+                                <tr>
+                                    <th>Local probe</th>
+                                    <td id="status-local-probe">No explicit probe run.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                    </article>
+
+                    <article class="panel">
+
+                        <div class="panel-header">
                             <h2>Active Local NOC Work</h2>
                             <span id="status-local-work-badge" class="count-badge">0</span>
                         </div>
@@ -351,6 +379,13 @@
         import {
             getStatus
         } from "./js/api.js";
+        import {
+            localEndpointLabel,
+            localProbeLabel,
+            probeLocalProvider,
+            providerIdentityLabel,
+            providerReadinessLabel
+        } from "./js/provider-status.js";
         import { initializeWorkflow, renderStatePanel, renderStatePanels } from "./js/workflow-context.js";
 
 
@@ -442,6 +477,43 @@
 
         const localWorkList =
             document.querySelector("#status-local-work-list");
+
+        const primaryProvider =
+            document.querySelector("#status-primary-provider");
+
+        const localProvider =
+            document.querySelector("#status-local-provider");
+
+        const localProbe =
+            document.querySelector("#status-local-probe");
+
+        const probeLocalButton =
+            document.querySelector("#status-probe-local");
+
+        function renderProviderReadiness(aiProvider) {
+            const primary = aiProvider?.primaryProvider;
+            const local = aiProvider?.localProvider;
+            primaryProvider.textContent =
+                `${providerIdentityLabel(primary)} — ${providerReadinessLabel(primary)}`;
+            localProvider.textContent =
+                `${providerIdentityLabel(local)} — ${providerReadinessLabel(local)}; `
+                + localEndpointLabel(local);
+            localProbe.textContent =
+                localProbeLabel(aiProvider?.localProvider?.probe);
+        }
+
+        probeLocalButton.addEventListener("click", async () => {
+            probeLocalButton.disabled = true;
+            try {
+                localProbe.textContent =
+                    localProbeLabel(await probeLocalProvider());
+            } catch (error) {
+                localProbe.textContent =
+                    `Probe failed: ${error.message}`;
+            } finally {
+                probeLocalButton.disabled = false;
+            }
+        });
 
         function renderLocalWork(localWork) {
             localWorkList.innerHTML = "";
@@ -899,6 +971,8 @@
                 );
 
                 renderLocalWork(status.localWork);
+
+                renderProviderReadiness(status.aiProvider);
 
             } catch (error) {
 

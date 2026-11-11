@@ -478,7 +478,8 @@
             getTickets,
             runAssistantAction as requestAssistantAction,
             getInvestigations,
-            requestErrorMessage
+            requestErrorMessage,
+            retryAssistantAction
         } from "./js/api.js";
 
         import {
@@ -724,7 +725,7 @@
             actionResultContent.append(section);
         }
 
-        function renderAssistantResponse(response, actionLabel) {
+        function renderAssistantResponse(response, actionLabel, actionType = null) {
             const completed =
                 response.providerStatus === "success"
                     && response.status === "complete";
@@ -767,6 +768,51 @@
                 "Limitations",
                 response.limitations.map(text => ({ text }))
             );
+            if (response.localRetry?.available === true && actionType) {
+                const retrySection = document.createElement("section");
+                retrySection.className = "assistant-local-retry";
+                const retryHeading = document.createElement("h2");
+                retryHeading.textContent = "Retry with Local AI";
+                const retryText = document.createElement("p");
+                retryText.textContent =
+                    `The primary provider failed. A confirmed retry can use ${response.localRetry.provider} (${response.localRetry.model}).`;
+                const retryButton = document.createElement("button");
+                retryButton.type = "button";
+                retryButton.className = "button secondary";
+                retryButton.textContent = "Retry with Local AI";
+                retryButton.addEventListener("click", async () => {
+                    if (!window.confirm("Retry this action with the local AI provider?")) {
+                        return;
+                    }
+                    retryButton.disabled = true;
+                    try {
+                        const result = await retryAssistantAction(
+                            workflowContext.shift,
+                            actionType,
+                            response.localRetry.retryToken,
+                            true
+                        );
+                        renderAssistantResponse(result.assistant, actionLabel, actionType);
+                        if (result.reportSaveWarning) {
+                            actionReportSaveWarning.textContent =
+                                result.reportSaveWarning;
+                            actionReportSaveWarning.hidden = false;
+                        } else if (result.report) {
+                            await loadReports(workflowContext.shift);
+                        }
+                    } catch (error) {
+                        renderStatePanel(actionState, {
+                            source: "Assistant",
+                            kind: "error",
+                            message: requestErrorMessage(error)
+                        });
+                    } finally {
+                        retryButton.disabled = false;
+                    }
+                });
+                retrySection.append(retryHeading, retryText, retryButton);
+                actionResultContent.append(retrySection);
+            }
             actionResult.hidden = false;
 
             renderStatePanel(actionState, {
@@ -831,7 +877,8 @@
                 const response = actionResult.assistant;
                 renderAssistantResponse(
                     response,
-                    button.querySelector("strong").textContent.trim()
+                    button.querySelector("strong").textContent.trim(),
+                    action
                 );
                 if (actionResult.reportSaveWarning) {
                     actionReportSaveWarning.textContent =

@@ -261,3 +261,13 @@ def reset_investigation_preview_store():
     reset_preview_store_for_tests()
     yield
     reset_preview_store_for_tests()
+
+
+@pytest.fixture(autouse=True)
+def reset_local_retry_store():
+    """Keep the process-local local-retry store isolated per test."""
+    from backend.services.local_retry import reset_retry_store_for_tests
+
+    reset_retry_store_for_tests()
+    yield
+    reset_retry_store_for_tests()

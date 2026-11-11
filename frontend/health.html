@@ -467,6 +467,76 @@
         }
 
 
+        function renderProviderSummary(
+            element,
+            providerState
+        ) {
+
+            if (
+                !providerState
+                || typeof providerState !== "object"
+            ) {
+                return;
+            }
+
+            const readinessLabels = {
+                ready: "Ready",
+                notReady: "Not ready",
+                notConfigured: "Not configured"
+            };
+
+            const summary =
+                document.createElement(
+                    "div"
+                );
+
+            summary.className =
+                "health-provider-summary";
+
+            [
+                ["Primary", providerState.primaryProvider, false],
+                ["Local", providerState.localProvider, true]
+            ].forEach(
+                ([label, provider, showEndpoint]) => {
+
+                    const row =
+                        document.createElement(
+                            "p"
+                        );
+
+                    const identity =
+                        provider?.label
+                        || provider?.configuredProvider
+                        || "Not configured";
+
+                    const model =
+                        provider?.model
+                        || "model not configured";
+
+                    const readiness =
+                        readinessLabels[provider?.readiness]
+                        || "Unknown";
+
+                    const endpoint =
+                        showEndpoint
+                            ? `; endpoint ${provider?.endpointConfigured ? "configured" : "not configured"}`
+                            : "";
+
+                    row.textContent =
+                        `${label}: ${identity} (${model}) — ${readiness}${endpoint}`;
+
+                    summary.appendChild(
+                        row
+                    );
+                }
+            );
+
+            element.appendChild(
+                summary
+            );
+        }
+
+
         function renderChecks(
             element,
             checks
@@ -674,6 +744,11 @@
                 renderChecks(
                     aiProvider,
                     aiProviderChecks
+                );
+
+                renderProviderSummary(
+                    aiProvider,
+                    health.aiProvider
                 );
 
                 renderChecks(

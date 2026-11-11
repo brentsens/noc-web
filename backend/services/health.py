@@ -380,4 +380,5 @@ def get_health(shift_date: str) -> dict:
             "health": health,
         },
         "checks": checks,
+        "aiProvider": provider,
     }

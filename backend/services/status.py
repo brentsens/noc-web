@@ -10,6 +10,7 @@ from backend.services.jira_ticket_queue import (
 from backend.services.jira_cache import (
     get_jira_cache_health,
 )
+from backend.services.ai_provider import provider_readiness
 from backend.services.datadog_provider import datadog_provider_readiness
 from backend.services.tickets import get_operational_work_summary
 from backend.services.investigations import (
@@ -287,4 +288,5 @@ def get_status(shift_date: str) -> dict:
         "reviewedFindings": get_reviewed_findings(shift_date),
 
         "datadogProvider": datadog_provider_readiness(),
+        "aiProvider": provider_readiness(),
     }

@@ -469,3 +469,22 @@ def test_final_handover_ends_with_exact_system_signature(noc_root):
     assert "[evidence:" not in content[signature_start:]
     assert "[sesami.io](https://www.sesami.io/) | [LinkedIn](https://www.linkedin.com/company/sesami-cash-management-technologies-corporation)" in content[signature_start:]
     assert content[signature_start:].count("Regards,") == 1
+
+
+def test_local_ollama_invalid_citation_fails_closed(noc_root):
+    package = _package()
+    bad_output = valid_advisory(package)
+    bad_output["watchItems"] = ["Local output without a citation."]
+
+    with pytest.raises(HandoverGenerationError) as error:
+        _generate(
+            package,
+            fake_runtime(
+                identifier="ollama",
+                model="qwen3:8b",
+                output=bad_output,
+            ),
+        )
+
+    assert error.value.code in {"ai-output-invalid", "evidence-reference-invalid"}
+    assert not _paths(noc_root)[0].exists()
