@@ -9,6 +9,51 @@ FORMAT_VERSION = "2"
 PROVENANCE_FILENAME = "handover-provenance.json"
 
 
+def _evidence_state(package: dict[str, Any]) -> dict[str, Any]:
+    tickets = package.get("tickets") if isinstance(package.get("tickets"), dict) else {}
+    readiness = package.get("readiness") if isinstance(package.get("readiness"), dict) else {}
+    incidents = package.get("datadogIncidents")
+    incidents = incidents if isinstance(incidents, list) else []
+    references = package.get("references")
+    references = references if isinstance(references, dict) else {}
+    datadog_freshness = None
+    for incident in incidents:
+        if isinstance(incident, dict) and isinstance(incident.get("freshness"), str):
+            datadog_freshness = incident["freshness"]
+            break
+    if datadog_freshness is None:
+        for identifier, reference in references.items():
+            if (
+                isinstance(identifier, str)
+                and identifier.startswith("datadog-context:")
+                and isinstance(reference, dict)
+            ):
+                datadog_freshness = reference.get("freshness")
+                break
+    readiness_summary = readiness.get("summary")
+    readiness_summary = readiness_summary if isinstance(readiness_summary, dict) else {}
+    return {
+        "availability": package.get("availability"),
+        "readiness": {
+            "available": readiness.get("available"),
+            "ready": readiness_summary.get("ready"),
+            "freshness": readiness.get("freshness"),
+            "blockers": readiness.get("blockers", [])[:20],
+            "warnings": readiness.get("warnings", [])[:20],
+        },
+        "tickets": {
+            "count": tickets.get("count"),
+            "freshness": tickets.get("freshness"),
+            "sourcesAvailable": tickets.get("sourcesAvailable"),
+        },
+        "datadog": {
+            "incidentCount": len(incidents),
+            "freshness": datadog_freshness or "unavailable",
+        },
+        "unavailableCount": len(package.get("unavailable", [])),
+    }
+
+
 def build_handover_provenance(
     package: dict[str, Any],
     *,
@@ -61,6 +106,7 @@ def build_handover_provenance(
         "shiftDate": package.get("shiftDate"),
         "evidenceDigest": package.get("digest"),
         "availability": package.get("availability"),
+        "evidenceState": _evidence_state(package),
         "provider": {
             "configuredProvider": provider_identifier,
             "model": model,

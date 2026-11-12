@@ -187,47 +187,308 @@ def get_handover(shift_date: str) -> dict:
     }
 
 
+_JIRA_TICKET_REFERENCE = re.compile(
+    r"\b[A-Z][A-Z0-9]{1,9}-\d+\b",
+    re.IGNORECASE,
+)
+
+
 def _ticket_line(ticket: dict[str, Any]) -> str:
-    status = ticket.get("status") or "State not recorded"
-    priority = ticket.get("priority")
-    status_text = f"{status}, {priority}" if priority else status
-    next_action = ticket.get("nextAction") or "Next action not recorded"
-    summary = ticket.get("summary") or "Summary not recorded"
-    parts = [f"- {ticket.get('jiraKey')} — {summary} ({status_text})"]
-    assignee = ticket.get("assignee")
-    if assignee:
-        parts.append(f"Assignee: {assignee}")
-    environment = ticket.get("environment")
-    if environment:
-        parts.append(f"Environment: {environment}")
-    parts.append(f"Next action: {next_action}")
-    return " — ".join(parts)
+    key = ticket.get("jiraKey") or "Unknown ticket"
+    summary = ticket.get("summary")
+    title = f"**{key} | {summary}**" if summary else f"**{key}**"
+    lines = [f"- {title}"]
+    metadata = []
+    if ticket.get("status"):
+        metadata.append(f"**Status:** {ticket['status']}")
+    if ticket.get("priority"):
+        metadata.append(f"**Priority:** {ticket['priority']}")
+    if ticket.get("assignee"):
+        metadata.append(f"**Assignee:** {ticket['assignee']}")
+    if metadata:
+        lines.append("  " + " | ".join(metadata))
+    if isinstance(ticket.get("nextAction"), str) and ticket["nextAction"].strip():
+        lines.append(f"  **Next:** {ticket['nextAction'].strip()}")
+    return "\n".join(lines)
 
 
-def _salesforce_content(package: dict[str, Any]) -> str:
-    entries = []
+def _shift_note_ticket_ids(package: dict[str, Any]) -> set[str]:
+    identifiers = set()
     for note in package.get("shiftNotes", []):
         if not isinstance(note, dict):
             continue
-        if "salesforce" not in str(note.get("section", "")).casefold():
+        text = note.get("text")
+        if isinstance(text, str):
+            identifiers.update(
+                match.upper()
+                for match in _JIRA_TICKET_REFERENCE.findall(text)
+            )
+    return identifiers
+
+
+def _handover_tickets(package: dict[str, Any]) -> list[dict[str, Any]]:
+    tickets = package.get("tickets") if isinstance(package.get("tickets"), dict) else {}
+    merged = tickets.get("merged") if isinstance(tickets.get("merged"), list) else []
+    shift_date = package.get("shiftDate")
+    referenced_keys = _shift_note_ticket_ids(package)
+    selected = []
+    for ticket in merged:
+        if not isinstance(ticket, dict):
+            continue
+        key = ticket.get("jiraKey")
+        if not isinstance(key, str) or not key:
+            continue
+        active_tracking = (
+            ticket.get("trackingState") == "active"
+            and (
+                ticket.get("tracked") is True
+                or ticket.get("source") in {"local", "merged"}
+            )
+        )
+        created_this_shift = any(
+            isinstance(ticket.get(field), str)
+            and ticket[field].strip().startswith(str(shift_date))
+            for field in (
+                "created",
+                "createdShiftDate",
+                "escalatedShiftDate",
+                "escalationShiftDate",
+            )
+        )
+        actionable = (
+            ticket.get("trackingState") == "active"
+            and isinstance(ticket.get("nextAction"), str)
+            and bool(ticket["nextAction"].strip())
+        )
+        if key in referenced_keys or active_tracking or created_this_shift or actionable:
+            selected.append(ticket)
+    return selected
+
+
+def _shift_note_section_content(
+    package: dict[str, Any],
+    section_name: str,
+    *,
+    contains: bool = False,
+) -> str | None:
+    entries = []
+    normalized_section = section_name.strip().casefold()
+    for note in package.get("shiftNotes", []):
+        if not isinstance(note, dict):
+            continue
+        note_section = str(note.get("section", "")).strip().casefold()
+        if (
+            normalized_section not in note_section
+            if contains
+            else note_section != normalized_section
+        ):
             continue
         time_value = note.get("time")
         text = note.get("text")
         if isinstance(text, str) and text.strip():
-            prefix = f"{time_value} " if isinstance(time_value, str) and time_value else ""
+            prefix = (
+                f"**{time_value}** "
+                if isinstance(time_value, str) and time_value
+                else ""
+            )
             entries.append(f"- {prefix}{text.strip()}")
-    return "\n".join(entries) if entries else "No validated Salesforce ticket source is available."
+    return "\n".join(entries) if entries else None
 
 
-def _availability_lines(package: dict[str, Any]) -> list[str]:
-    availability = str(package.get("availability", "unavailable")).upper()
-    lines = [f"- Evidence availability: {availability}."]
-    if availability != "COMPLETE":
-        lines.append(
-            "- Some source data was stale, partial, or unavailable; "
-            "all validated open tickets remain included to the best available data."
+def _salesforce_content(package: dict[str, Any]) -> str:
+    return (
+        _shift_note_section_content(
+            package,
+            "Salesforce",
+            contains=True,
         )
-    return lines
+        or "No validated Salesforce ticket source is available."
+    )
+
+
+_NUMBER_WORDS = {
+    0: "No",
+    1: "One",
+    2: "Two",
+    3: "Three",
+    4: "Four",
+    5: "Five",
+    6: "Six",
+    7: "Seven",
+    8: "Eight",
+    9: "Nine",
+    10: "Ten",
+    11: "Eleven",
+    12: "Twelve",
+}
+
+
+def _number_label(value: int) -> str:
+    return _NUMBER_WORDS.get(value, str(value))
+
+
+def _summary_excerpt(text: Any, maximum: int = 100) -> str | None:
+    if not isinstance(text, str):
+        return None
+    value = text.strip()
+    if not value:
+        return None
+    sentence_match = re.match(r"^(.+?[.!?])(?:\s|$)", value)
+    if sentence_match:
+        excerpt = sentence_match.group(1)
+        if excerpt != value:
+            return excerpt
+    if len(value) <= maximum:
+        return None
+    clipped = value[:maximum].rsplit(" ", 1)[0].rstrip(" ,;:")
+    return clipped + "…"
+
+
+def _summary_references(text: Any) -> list[str]:
+    if not isinstance(text, str):
+        return []
+    return sorted(set(
+        match.upper()
+        for match in _JIRA_TICKET_REFERENCE.findall(text)
+    ))
+
+
+def _salesforce_case(text: Any) -> str | None:
+    if not isinstance(text, str):
+        return None
+    match = re.search(r"\b\d{8,}\b", text)
+    return match.group(0) if match else None
+
+
+def _shift_note_items(
+    package: dict[str, Any],
+    section_name: str,
+) -> list[dict[str, Any]]:
+    normalized = section_name.strip().casefold()
+    items = []
+    for note in package.get("shiftNotes", []):
+        if not isinstance(note, dict):
+            continue
+        if str(note.get("section", "")).strip().casefold() != normalized:
+            continue
+        text = note.get("text")
+        if isinstance(text, str) and text.strip():
+            items.append(note)
+    return items
+
+
+def _operational_summary(
+    package: dict[str, Any],
+    handover_tickets: list[dict[str, Any]],
+) -> list[str]:
+    count = len(handover_tickets)
+    if count == 0:
+        bullets = ["No Jira tickets are being carried forward to the next shift."]
+    elif count == 1:
+        bullets = ["One Jira ticket is being carried forward to the next shift."]
+    else:
+        bullets = [
+            f"{_number_label(count)} Jira tickets are being carried forward "
+            "to the next shift."
+        ]
+
+    investigations = package.get("investigations")
+    reviewed = [
+        investigation
+        for investigation in investigations
+        if isinstance(investigation, dict)
+        and investigation.get("authoritative") is True
+        and isinstance(investigation.get("reviewedFinding"), dict)
+    ] if isinstance(investigations, list) else []
+    if reviewed:
+        first = reviewed[0]
+        title = first.get("displayTitle") or first.get("name") or "Investigation"
+        state = (
+            first["reviewedFinding"].get("state")
+            or first.get("lifecycleStatus")
+        )
+        if isinstance(state, str) and state.strip():
+            bullets.append(
+                f"The {title} investigation remains {state.strip()}."
+            )
+        else:
+            bullets.append(
+                f"A reviewed investigation update is included for {title}."
+            )
+
+    active_alerts = _shift_note_items(
+        package,
+        "Active Alerts / Investigations",
+    )
+    if active_alerts:
+        text = active_alerts[0].get("text")
+        excerpt = _summary_excerpt(text)
+        references = _summary_references(text)
+        if excerpt:
+            suffix = (
+                " References " + ", ".join(references) + "."
+                if references
+                else ""
+            )
+            bullets.append(f"Active alert/investigation: {excerpt}{suffix}")
+        elif references:
+            bullets.append(
+                "Active alert/investigation references "
+                + ", ".join(references)
+                + "."
+            )
+        else:
+            bullets.append(
+                "Active alert/investigation activity was recorded during the shift."
+            )
+
+    salesforce = _shift_note_items(package, "Salesforce Tickets")
+    if salesforce:
+        text = salesforce[0].get("text")
+        excerpt = _summary_excerpt(text)
+        if excerpt:
+            bullets.append(f"Salesforce: {excerpt}")
+        else:
+            case = _salesforce_case(text)
+            references = _summary_references(text)
+            if case and references:
+                bullets.append(
+                    f"Salesforce case {case} references "
+                    + ", ".join(references)
+                    + "."
+                )
+            elif case:
+                bullets.append(
+                    f"Salesforce case {case} activity was recorded during the shift."
+                )
+            elif references:
+                bullets.append(
+                    "Salesforce activity references "
+                    + ", ".join(references)
+                    + "."
+                )
+            else:
+                bullets.append("Salesforce activity was recorded during the shift.")
+
+    changes = _shift_note_items(package, "Changes / Monitor Updates")
+    if changes:
+        combined = " ".join(
+            str(item.get("text", "")) for item in changes
+        ).casefold()
+        if "monitor" in combined or "coverage" in combined:
+            if "expanded" in combined:
+                bullets.append("Monitoring coverage was expanded.")
+            else:
+                bullets.append(
+                    "A monitoring/coverage update was recorded during the shift."
+                )
+        else:
+            bullets.append(
+                f"{_number_label(len(changes))} change"
+                f"{'s' if len(changes) != 1 else ''}/monitor update"
+                f"{'s' if len(changes) != 1 else ''} recorded during the shift."
+            )
+    return bullets[:5]
 
 
 def _shift_time_label(now: datetime | None = None) -> str:
@@ -236,8 +497,7 @@ def _shift_time_label(now: datetime | None = None) -> str:
 
 
 def assemble_handover_content(package: dict[str, Any]) -> tuple[str, list[dict[str, str]], str]:
-    tickets = package.get("tickets") if isinstance(package.get("tickets"), dict) else {}
-    merged = tickets.get("merged") if isinstance(tickets.get("merged"), list) else []
+    handover_tickets = _handover_tickets(package)
     investigations = package.get("investigations") if isinstance(package.get("investigations"), list) else []
     reviewed = [
         investigation
@@ -246,24 +506,46 @@ def assemble_handover_content(package: dict[str, Any]) -> tuple[str, list[dict[s
         and investigation.get("authoritative") is True
         and isinstance(investigation.get("reviewedFinding"), dict)
     ]
-    incidents = package.get("datadogIncidents") if isinstance(package.get("datadogIncidents"), list) else []
-    readiness = package.get("readiness") if isinstance(package.get("readiness"), dict) else {}
-    readiness_ready = bool(readiness.get("summary", {}).get("ready"))
     summary_lines = [
-        f"- Open tickets: {len(merged)}.",
-        f"- Operator-reviewed investigation findings: {len(reviewed)}.",
-        f"- Datadog incidents in available context: {len(incidents)}.",
-        f"- Handover readiness: {'READY' if readiness_ready else 'BLOCKED'}.",
-        *_availability_lines(package),
+        f"- {line}"
+        for line in _operational_summary(package, handover_tickets)
     ]
     sections = [
         {"name": "Summary", "content": "\n".join(summary_lines)},
-        {"name": "Open Salesforce Tickets", "content": _salesforce_content(package)},
+    ]
+    open_tickets_notes = _shift_note_section_content(package, "Open Tickets")
+    if open_tickets_notes:
+        sections.append({
+            "name": "Open Tickets",
+            "content": open_tickets_notes,
+        })
+    active_alerts = _shift_note_section_content(
+        package,
+        "Active Alerts / Investigations",
+    )
+    if active_alerts:
+        sections.append({
+            "name": "Active Alerts / Investigations",
+            "content": active_alerts,
+        })
+    sections.append({
+        "name": "Open Salesforce Tickets",
+        "content": _salesforce_content(package),
+    })
+    for section_name in (
+        "Escalations",
+        "Changes / Monitor Updates",
+        "Notes for Handover",
+    ):
+        content = _shift_note_section_content(package, section_name)
+        if content:
+            sections.append({"name": section_name, "content": content})
+    sections.extend([
         {
             "name": "Open Jira Tickets",
-            "content": "\n".join(_ticket_line(ticket) for ticket in merged)
-            if merged
-            else "No open tickets.",
+            "content": "\n".join(_ticket_line(ticket) for ticket in handover_tickets)
+            if handover_tickets
+            else "No handover-relevant Jira tickets.",
         },
         {
             "name": "Investigation Updates",
@@ -280,16 +562,16 @@ def assemble_handover_content(package: dict[str, Any]) -> tuple[str, list[dict[s
             "name": "Next Shift Actions",
             "content": "\n".join(
                 f"- {ticket.get('jiraKey')}: {ticket.get('nextAction')}"
-                for ticket in merged
+                for ticket in handover_tickets
                 if isinstance(ticket.get("nextAction"), str) and ticket["nextAction"].strip()
             )
             if any(
                 isinstance(ticket.get("nextAction"), str) and ticket["nextAction"].strip()
-                for ticket in merged
+                for ticket in handover_tickets
             )
             else "No deterministic next actions were identified from open-ticket next actions.",
         },
-    ]
+    ])
     closing = f"{CLOSING_LINE}\n\n{HANDOVER_SIGNATURE}"
     intro = (
         "Hi Team,\n\n"

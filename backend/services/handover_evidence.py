@@ -156,6 +156,26 @@ def _ticket_record(
         "source": source,
         "freshness": freshness,
         "needsReview": bool(ticket.get("needsReview", False)),
+        **(
+            {"created": _bounded_text(ticket.get("created"), 64)}
+            if ticket.get("created")
+            else {}
+        ),
+        **(
+            {"createdShiftDate": _bounded_text(ticket.get("createdShiftDate"), 32)}
+            if ticket.get("createdShiftDate")
+            else {}
+        ),
+        **(
+            {
+                "escalatedShiftDate": _bounded_text(
+                    ticket.get("escalatedShiftDate"),
+                    32,
+                )
+            }
+            if ticket.get("escalatedShiftDate")
+            else {}
+        ),
     }
 
 
